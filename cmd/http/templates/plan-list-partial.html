@@ -1,0 +1,17 @@
+{{range .Plans}}
+<li class="plan-item">
+    <a href="/plan/{{.FileName}}" class="plan-title">{{.Title}}</a>
+    <div class="plan-meta">
+        {{.FileName}} • Modified: {{.ModifiedAt.Format "2006-01-02 15:04"}} • {{.FileSize}} bytes • {{.ReadingTime}} min read
+    </div>
+</li>
+{{end}}
+
+{{if and .Plans .NextPageToken}}
+<li id="load-more-trigger" 
+    hx-get="/api/plans?q={{.Query}}&pageToken={{.NextPageToken}}"
+    hx-trigger="revealed"
+    hx-swap="outerHTML swap:1s"
+    hx-select="li"
+    style="list-style: none; padding: 0; height: 20px;"></li>
+{{end}}

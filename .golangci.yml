@@ -1,0 +1,221 @@
+version: "2"
+run:
+  build-tags:
+    - codeanalysis
+linters:
+  default: none
+  enable:
+    - asciicheck
+    - bodyclose
+    - copyloopvar
+    - depguard
+    - dogsled
+    - errcheck
+    - errorlint
+    - exhaustive
+    - gocritic
+    - godot
+    - goheader
+    - gomodguard
+    - goprintffuncname
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - rowserrcheck
+    - sqlclosecheck
+    - staticcheck
+    - tagliatelle
+    - tparallel
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+  settings:
+    gocritic:
+      disabled-checks:
+        - deprecatedComment
+    copyloopvar:
+      check-alias: false
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: github.com/messagebird-dev/protobufs
+              desc: use github.com/messagebird-dev/commonlib/schemas/protobuf instead
+            - pkg: github.com/messagebird-dev/schemas
+              desc: use github.com/messagebird-dev/commonlib/schemas/protobuf instead
+            - pkg: github.com/samber/lo
+              desc: use github.com/messagebird-dev/commonlib/slices or github.com/messagebird-dev/commonlib/maps instead, other functionality is banned
+            - pkg: golang.org/x/exp/slices
+              desc: use github.com/messagebird-dev/commonlib/slices instead
+            - pkg: golang.org/x/exp/maps
+              desc: use github.com/messagebird-dev/commonlib/maps instead
+            - pkg: github.com/test-go/testify/assert
+              desc: use github.com/stretchr/testify/assert instead
+            - pkg: github.com/test-go/testify/require
+              desc: use github.com/stretchr/testify/require instead
+    errcheck:
+      check-blank: false
+    exhaustive:
+      default-signifies-exhaustive: true
+    gosec:
+      excludes:
+        - G115
+    nakedret:
+      max-func-lines: 70
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+      allow-unused: true
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: dot-imports
+        - name: empty-block
+        - name: error-naming
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: exported
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: package-comments
+        - name: range
+        - name: receiver-naming
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: unused-parameter
+          disabled: true
+        - name: var-declaration
+        - name: var-naming
+    staticcheck:
+      checks:
+        - all
+        - -S1016
+        - -SA1019
+        - -QF1008
+    tagliatelle:
+      case:
+        rules:
+          json: camel
+  exclusions:
+    generated: lax
+    rules:
+      - linters:
+          - errcheck
+          - exhaustivestruct
+          - gocognit
+          - goconst
+          - gosec
+          - unused
+          - ineffassign
+        path: _test\.go
+      - path: ^api/
+        linters:
+          - staticcheck
+        text: 'ST1003' # underscores in package names
+      - linters:
+          - tagliatelle
+        path: platform-workers/(\S+)/internal/(\S+)/
+      - linters:
+          - tagliatelle
+        path: internal/platform-workers/platforms/(\S+)/
+      - linters:
+          - gocritic
+        path: cmd/(\S+)/main\.go
+        text: exitAfterDefer
+      - linters:
+          - goconst
+        path: _accesspatterns\.go
+      - text: 'package-comments: package comment should be of the form'
+        source: '^//nolint:'
+      - path: (.+)\.go$
+        text: Error return value of .((os\.)?std(out|err)\..*|.*Close|.*Flush|os\.Remove(All)?|.*print.*|os\.(Un)?Setenv). is not checked
+      - linters:
+          - unused
+        text: 'field snapshot is unused'
+      - source: 'ctx, span := tracer\.Start\(ctx\)'
+        linters:
+          - ineffassign
+
+      - linters:
+          - staticcheck
+        text: this value of ctx is never used
+      - linters:
+          - unparam
+        text: \(error\) is always nil
+      - linters:
+          - unconvert
+        path: b3/gotypes\.go$
+
+      - text: missing cases in switch of type (.*)_INVALID
+        linters:
+          - exhaustive
+      - linters:
+          - exhaustive
+        path: schemas/converters/.*
+      - linters:
+          - errcheck
+        source: 'defer .*\.Close\('
+      - linters:
+          - noctx
+        text: net\.Listen must not be called
+    paths:
+      - \.gen\.go$
+      - clients/mocks
+      - internal/otelgrpc
+      - internal/sqlite
+      - third_party$
+      - builtin$
+      - examples$
+      - go/encoding/json
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+severity:
+  default: error
+  rules:
+    - text: DoNotCommit
+      severity: error
+    - text: 'SA1019:'
+      severity: warning
+formatters:
+  enable:
+    - gci
+    - gofumpt
+  settings:
+    gci:
+      sections:
+        - standard
+        - localmodule
+        - prefix(github.com/messagebird-dev)
+        - default
+      custom-order: true
+    gofumpt:
+      extra-rules: true
+
+  exclusions:
+    generated: lax
+    paths:
+      - \.gen\.go$
+      - servers/httpserver/middleware/observability(_test)?.go
+      - store/datastore/encoding/attributevalue.go
+      - ^test/integration/fake_.+\.go$
+      - schemas/protobuf/golang/.*
+      - aws/otelaws
+      - clients/mocks
+      - internal/otelgrpc
+      - internal/sqlite
+      - third_party$
+      - builtin$
+      - examples$
+      - go/encoding/json

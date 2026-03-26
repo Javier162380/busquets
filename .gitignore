@@ -1,0 +1,58 @@
+# Go binaries
+/claude-plan-viewer
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+*.test
+*.out
+coverage.txt
+*.coverprofile
+
+# Go workspace
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# Application-specific
+*.db
+*.db-shm
+*.db-wal
+.claude-viewer/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.settings/
+*.sublime-project
+*.sublime-workspace
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+Desktop.ini
+
+# Logs & temp files
+*.log
+tmp/
+temp/
+*.tmp
+
+# Environment variables
+.env
+.env.local
+.env.*.local
