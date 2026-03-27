@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -249,4 +250,3 @@ This is a test plan for version control API testing.`
 		require.Equal(t, http.StatusBadRequest, rec.Code)
 	})
 }
-

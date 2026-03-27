@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
+
 	"github.com/stretchr/testify/require"
 )
 
