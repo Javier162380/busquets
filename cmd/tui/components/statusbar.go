@@ -87,16 +87,16 @@ func (s *StatusBar) IsLoading() bool {
 func (s *StatusBar) View() string {
 	var content string
 
-	if s.isLoading {
+	switch {
+	case s.isLoading:
 		content = styles.LoadingStyle.Render(fmt.Sprintf("⟳ %s", s.loadingMessage))
-	} else if s.errorMessage != "" {
+	case s.errorMessage != "":
 		content = styles.ErrorStyle.Render("✗ " + s.errorMessage)
-	} else if s.successMessage != "" {
+	case s.successMessage != "":
 		content = styles.SuccessStyle.Render("✓ " + s.successMessage)
-	} else {
+	default:
 		content = s.helpText
 	}
-
 	return s.baseStyle.Render(content)
 }
 

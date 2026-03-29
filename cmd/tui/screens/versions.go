@@ -15,9 +15,8 @@ import (
 // VersionsScreen handles version history browsing and viewing.
 type VersionsScreen struct {
 	// Components.
-	list      *components.List
-	viewer    *components.Viewer
-	statusBar *components.StatusBar
+	list   *components.List
+	viewer *components.Viewer
 
 	// State.
 	layout   Layout
@@ -40,14 +39,13 @@ func NewVersionsScreen(planName string, width, height int) *VersionsScreen {
 	contentHeight := height - 4
 
 	return &VersionsScreen{
-		list:      components.NewList(nil, panelWidth, contentHeight),
-		viewer:    components.NewViewer(panelWidth, contentHeight),
-		statusBar: components.NewStatusBar(width),
-		layout:    LayoutSplit,
-		focus:     FocusList,
-		planName:  planName,
-		width:     width,
-		height:    height,
+		list:     components.NewList(nil, panelWidth, contentHeight),
+		viewer:   components.NewViewer(panelWidth, contentHeight),
+		layout:   LayoutSplit,
+		focus:    FocusList,
+		planName: planName,
+		width:    width,
+		height:   height,
 		borderStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(styles.BorderColor),
@@ -72,7 +70,6 @@ func (s *VersionsScreen) Init() tea.Cmd {
 	if len(s.versions) > 0 {
 		return nil
 	}
-	s.statusBar.SetLoading("Loading versions...")
 	return func() tea.Msg {
 		return LoadVersionsMsg{PlanName: s.planName}
 	}
@@ -87,15 +84,10 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case VersionsLoadedMsg:
 		s.versions = msg.Versions
 		s.updateListItems()
-		s.statusBar.Clear()
 		if len(s.versions) > 0 {
 			s.current = &s.versions[0]
 			s.viewer.SetContent(content.NewVersionContent(s.current))
 		}
-		return s, nil
-
-	case VersionErrorMsg:
-		s.statusBar.SetError(msg.Error.Error())
 		return s, nil
 	}
 
@@ -106,7 +98,10 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		cmd = s.list.Update(msg)
 	case FocusContent:
 		cmd = s.viewer.Update(msg)
+	default:
+		return s, cmd
 	}
+
 	return s, cmd
 }
 
@@ -119,20 +114,19 @@ func (s *VersionsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		return s.handleListKey(key, msg)
 	case FocusContent:
 		return s.handleContentKey(key, msg)
+	default:
+		return s, nil
 	}
-	return s, nil
 }
 
 // handleListKey handles keys in list focus mode.
 func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
 	case "esc":
-		// Go back to plans screen (pop).
 		return s, func() tea.Msg {
 			return PopScreenMsg{}
 		}
 	case "v":
-		// Switch to fullscreen view.
 		if s.current != nil {
 			s.layout = LayoutFullscreen
 			s.focus = FocusContent
@@ -155,9 +149,9 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 			}
 		}
 		return s, cmd
+	default:
+		return s, s.list.Update(msg)
 	}
-
-	return s, s.list.Update(msg)
 }
 
 // handleContentKey handles keys in content view mode.
@@ -191,8 +185,6 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 
 // View renders the screen.
 func (s *VersionsScreen) View() string {
-	s.updateStatusBarHelp()
-
 	var mainContent string
 
 	switch s.layout {
@@ -256,7 +248,6 @@ func (s *VersionsScreen) renderDivider(height int) string {
 func (s *VersionsScreen) SetSize(width, height int) {
 	s.width = width
 	s.height = height
-	s.statusBar.SetWidth(width)
 }
 
 // ShortHelp returns key binding help.
@@ -266,13 +257,9 @@ func (s *VersionsScreen) ShortHelp() string {
 		return fmt.Sprintf("j/k: navigate | v: view | r: restore | esc: back | Versions: %d", len(s.versions))
 	case FocusContent:
 		return "j/k: scroll | g/G: top/bottom | r: restore | esc: back"
+	default:
+		return ""
 	}
-	return ""
-}
-
-// updateStatusBarHelp updates the status bar with current help text.
-func (s *VersionsScreen) updateStatusBarHelp() {
-	s.statusBar.SetHelp(s.ShortHelp())
 }
 
 // updateListItems updates the list with current versions.

@@ -27,11 +27,8 @@ func (s *HelpScreen) Init() tea.Cmd {
 
 // Update handles messages.
 func (s *HelpScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "?", "esc", "q":
-			// Close help.
+	if msg, ok := msg.(tea.KeyMsg); ok {
+		if msg.String() == "?" || msg.String() == "esc" || msg.String() == "q" {
 			return s, func() tea.Msg {
 				return CloseHelpMsg{}
 			}

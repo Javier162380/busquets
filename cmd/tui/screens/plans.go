@@ -19,7 +19,6 @@ type PlansScreen struct {
 	list      *components.List
 	viewer    *components.Viewer
 	editor    *components.Editor
-	statusBar *components.StatusBar
 	searchBar *components.SearchBar
 
 	// State.
@@ -46,7 +45,6 @@ func NewPlansScreen(width, height int) *PlansScreen {
 		list:      components.NewList(nil, panelWidth, contentHeight),
 		viewer:    components.NewViewer(panelWidth, contentHeight),
 		editor:    components.NewEditor(width-4, contentHeight),
-		statusBar: components.NewStatusBar(width),
 		searchBar: components.NewSearchBar(panelWidth),
 		layout:    LayoutSplit,
 		focus:     FocusList,
@@ -60,7 +58,6 @@ func NewPlansScreen(width, height int) *PlansScreen {
 
 // Init initializes the screen.
 func (s *PlansScreen) Init() tea.Cmd {
-	s.statusBar.SetLoading("Loading plans...")
 	return nil // Plans loaded via PlansLoadedMsg from App.
 }
 
@@ -73,7 +70,6 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case PlansLoadedMsg:
 		s.plans = msg.Plans
 		s.updateListItems()
-		s.statusBar.Clear()
 		if len(s.plans) > 0 {
 			return s, s.loadPlanDetail(s.plans[0].FileName)
 		}
@@ -83,17 +79,10 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.current = msg.Detail
 		s.viewer.SetContent(content.NewPlanContent(msg.Detail))
 		s.editor.SetContent(msg.Detail.Content)
-		s.statusBar.Clear()
 		return s, nil
 
 	case SaveResultMsg:
-		s.statusBar.Clear()
-		if msg.Error != nil {
-			s.statusBar.SetError(msg.Error.Error())
-		} else if msg.Result.HasConflict {
-			s.statusBar.SetError("Conflict: Plan was modified externally")
-		} else if msg.Result.Success {
-			s.statusBar.SetSuccess("Plan saved successfully")
+		if msg.Error == nil && msg.Result.Success && !msg.Result.HasConflict {
 			s.focus = FocusContent
 			s.editor.Blur()
 			// Reload the plan.
@@ -101,19 +90,6 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				return s, s.loadPlanDetail(s.current.FileName)
 			}
 		}
-		return s, nil
-
-	case SyncResultMsg:
-		s.statusBar.Clear()
-		if msg.Error != nil {
-			s.statusBar.SetError("Sync failed: " + msg.Error.Error())
-		} else {
-			s.statusBar.SetSuccess(fmt.Sprintf("Synced %d plans", msg.Count))
-		}
-		return s, nil
-
-	case ErrorMsg:
-		s.statusBar.SetError(msg.Error.Error())
 		return s, nil
 	}
 
@@ -126,8 +102,9 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		cmd = s.viewer.Update(msg)
 	case FocusEditor:
 		cmd = s.editor.Update(msg)
+	default:
+		return s, cmd
 	}
-
 	return s, cmd
 }
 
@@ -162,7 +139,6 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		if s.searchQuery != "" {
 			s.searchQuery = ""
 			s.searchBar.Reset()
-			s.statusBar.SetLoading("Loading plans...")
 			return s, func() tea.Msg {
 				return ClearSearchMsg{}
 			}
@@ -188,7 +164,6 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 
 	case "s":
 		// Sync plans.
-		s.statusBar.SetLoading("Syncing plans...")
 		return s, s.syncPlans()
 
 	case "j", "down", "k", "up":
@@ -232,7 +207,6 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 	case "v":
 		// View versions - check if versions exist first.
 		if s.current != nil {
-			s.statusBar.SetLoading("Checking versions...")
 			return s, func() tea.Msg {
 				return RequestVersionsScreenMsg{PlanName: s.current.FileName}
 			}
@@ -264,7 +238,6 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 	case "ctrl+s":
 		// Save.
 		if s.current != nil {
-			s.statusBar.SetLoading("Saving...")
 			return s, s.savePlan()
 		}
 		return s, nil
@@ -288,7 +261,6 @@ func (s *PlansScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		s.searchQuery = query
 		s.focus = FocusList
 		s.searchBar.Blur()
-		s.statusBar.SetLoading("Searching...")
 		return s, func() tea.Msg {
 			return SearchPlansMsg{Query: query}
 		}
@@ -300,8 +272,6 @@ func (s *PlansScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, tea.C
 
 // View renders the screen.
 func (s *PlansScreen) View() string {
-	s.updateStatusBarHelp()
-
 	var mainContent string
 
 	switch s.layout {
@@ -393,7 +363,6 @@ func (s *PlansScreen) renderDivider(height int) string {
 func (s *PlansScreen) SetSize(width, height int) {
 	s.width = width
 	s.height = height
-	s.statusBar.SetWidth(width)
 }
 
 // ShortHelp returns key binding help.
@@ -423,11 +392,6 @@ func (s *PlansScreen) ShortHelp() string {
 	return ""
 }
 
-// updateStatusBarHelp updates the status bar with current help text.
-func (s *PlansScreen) updateStatusBarHelp() {
-	s.statusBar.SetHelp(s.ShortHelp())
-}
-
 // updateListItems updates the list with current plans.
 func (s *PlansScreen) updateListItems() {
 	items := make([]components.ListItem, len(s.plans))
@@ -444,7 +408,6 @@ func (s *PlansScreen) updateListItems() {
 // Command helpers.
 
 func (s *PlansScreen) loadPlanDetail(fileName string) tea.Cmd {
-	s.statusBar.SetLoading("Loading plan...")
 	return func() tea.Msg {
 		return LoadPlanDetailMsg{FileName: fileName}
 	}
