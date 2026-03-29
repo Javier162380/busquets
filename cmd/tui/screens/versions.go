@@ -142,6 +142,13 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 		}
 		return s, nil
 
+	case "r":
+		// Restore selected version.
+		if s.current != nil {
+			return s, s.restoreVersion()
+		}
+		return s, nil
+
 	case "j", "down", "k", "up":
 		// Navigate list.
 		cmd := s.list.Update(msg)
@@ -166,6 +173,13 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 		s.layout = LayoutSplit
 		s.focus = FocusList
 		s.viewer.GotoTop()
+		return s, nil
+
+	case "r":
+		// Restore selected version.
+		if s.current != nil {
+			return s, s.restoreVersion()
+		}
 		return s, nil
 
 	case "g":
@@ -254,9 +268,9 @@ func (s *VersionsScreen) SetSize(width, height int) {
 func (s *VersionsScreen) ShortHelp() string {
 	switch s.focus {
 	case FocusList:
-		return fmt.Sprintf("j/k: navigate | v: view | esc: back | Versions: %d", len(s.versions))
+		return fmt.Sprintf("j/k: navigate | v: view | r: restore | esc: back | Versions: %d", len(s.versions))
 	case FocusContent:
-		return "j/k: scroll | g/G: top/bottom | esc: back"
+		return "j/k: scroll | g/G: top/bottom | r: restore | esc: back"
 	}
 	return ""
 }
@@ -279,6 +293,17 @@ func (s *VersionsScreen) updateListItems() {
 	s.list.SetItems(items)
 }
 
+// Command helpers.
+
+func (s *VersionsScreen) restoreVersion() tea.Cmd {
+	return func() tea.Msg {
+		return RestoreVersionMsg{
+			PlanName:      s.planName,
+			VersionNumber: s.current.VersionNumber,
+		}
+	}
+}
+
 // Message types for versions screen.
 
 // LoadVersionsMsg requests loading versions.
@@ -298,3 +323,16 @@ type VersionErrorMsg struct {
 
 // PopScreenMsg requests popping the current screen.
 type PopScreenMsg struct{}
+
+// RestoreVersionMsg requests restoring a version.
+type RestoreVersionMsg struct {
+	PlanName      string
+	VersionNumber int64
+}
+
+// RestoreResultMsg is sent when restore completes.
+type RestoreResultMsg struct {
+	Success  bool
+	PlanName string
+	Error    error
+}

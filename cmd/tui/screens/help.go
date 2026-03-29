@@ -69,12 +69,14 @@ PLAN VIEW (Fullscreen mode):
 VERSION HISTORY (Two-Panel mode):
   j/k, ↑/↓       Navigate versions list
   v              View version fullscreen
+  r              Restore this version
   Esc            Back to plan view
 
 VERSION VIEW (Fullscreen mode):
   j/k, ↑/↓       Scroll up/down
   g              Jump to top
   G              Jump to bottom
+  r              Restore this version
   Esc            Back to versions list
 
 EDITING:

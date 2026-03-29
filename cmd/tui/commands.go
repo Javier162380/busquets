@@ -2,7 +2,6 @@ package tui
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
@@ -21,6 +20,7 @@ type Service interface {
 	GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]claudeviewer.PlanVersionDetail, error)
 	SyncPlans(ctx context.Context) (int, error)
 	RenderMarkdown(content string) (string, error)
+	RestorePlanVersion(ctx context.Context, planName string, versionNumber int64) error
 }
 
 // Command builders.
@@ -133,12 +133,19 @@ func SyncPlansCmd(svc Service) tea.Cmd {
 	}
 }
 
-// Note: PushScreen and PopScreen helpers are defined in screens package.
+// RestoreVersionCmd restores a plan to a previous version.
+func RestoreVersionCmd(svc Service, planName string, versionNumber int64) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
 
-// FormatSyncResult formats a sync result message.
-func FormatSyncResult(count int) string {
-	if count == 1 {
-		return "Synced 1 plan"
+		err := svc.RestorePlanVersion(ctx, planName, versionNumber)
+		if err != nil {
+			return screens.RestoreResultMsg{Error: err}
+		}
+		return screens.RestoreResultMsg{
+			Success:  true,
+			PlanName: planName,
+		}
 	}
-	return fmt.Sprintf("Synced %d plans", count)
 }
