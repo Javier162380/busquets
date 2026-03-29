@@ -24,6 +24,9 @@ var (
 
 // Text styles.
 var (
+	AccentStyle = lipgloss.NewStyle().
+			Foreground(AccentColor)
+
 	ActiveStyle = lipgloss.NewStyle().
 			Foreground(AccentColor).
 			Bold(true)

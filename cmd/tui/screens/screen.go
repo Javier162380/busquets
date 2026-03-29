@@ -38,4 +38,5 @@ const (
 	FocusList    Focus = iota // Navigating a list.
 	FocusContent              // Viewing content.
 	FocusEditor               // Editing content.
+	FocusSearch               // Search input.
 )

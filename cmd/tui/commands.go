@@ -15,6 +15,7 @@ import (
 // This is a subset of UnifiedService that commands need.
 type Service interface {
 	ListAllPlansWithReadingTime(ctx context.Context) ([]claudeviewer.PlanSummary, error)
+	SearchPlansWithReadingTime(ctx context.Context, query string) ([]claudeviewer.PlanSummary, error)
 	GetPlanDetailByFileName(ctx context.Context, fileName string) (*claudeviewer.PlanDetail, error)
 	UpdatePlan(ctx context.Context, req claudeviewer.UpdatePlanRequest) (*claudeviewer.UpdatePlanResult, error)
 	GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]claudeviewer.PlanVersionDetail, error)
@@ -31,6 +32,20 @@ func LoadPlansCmd(svc Service) tea.Cmd {
 		defer cancel()
 
 		plans, err := svc.ListAllPlansWithReadingTime(ctx)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.PlansLoadedMsg{Plans: plans}
+	}
+}
+
+// SearchPlansCmd searches plans by query.
+func SearchPlansCmd(svc Service, query string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		plans, err := svc.SearchPlansWithReadingTime(ctx, query)
 		if err != nil {
 			return screens.ErrorMsg{Error: err}
 		}
