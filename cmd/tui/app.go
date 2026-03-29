@@ -1,30 +1,19 @@
-// Package tui cli utility to interact with the plans
 package tui
 
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// App represents the TUI application state and logic.
-type App struct {
-	service UnifiedService
-	ctx     context.Context
-
-	// State
-	State AppState
-
-	// Dimensions
-	Width  int
-	Height int
-}
+// Ensure UnifiedService satisfies the Service interface used by commands.
+var _ Service = (UnifiedService)(nil)
 
 // UnifiedService is the interface the TUI expects from the service.
 type UnifiedService interface {
@@ -33,7 +22,8 @@ type UnifiedService interface {
 	UpdatePlan(ctx context.Context, req claudeviewer.UpdatePlanRequest) (*claudeviewer.UpdatePlanResult, error)
 	SearchPlansWithReadingTime(ctx context.Context, query string) ([]claudeviewer.PlanSummary, error)
 	SavePlanVersion(ctx context.Context, planName, content string) error
-	GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]repository.PlanVersion, error)
+	GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]claudeviewer.PlanVersionDetail, error)
+	GetPlanVersion(ctx context.Context, planName string, versionNumber int64) (*claudeviewer.PlanVersionDetail, error)
 	RestorePlanVersion(ctx context.Context, planName string, versionNumber int64) error
 	GetStringValue(ctx context.Context, variableName string) (string, bool, error)
 	GetBooleanValue(ctx context.Context, variableName string) (bool, bool, error)
@@ -44,423 +34,200 @@ type UnifiedService interface {
 	RenderMarkdown(content string) (string, error)
 }
 
+// App is the root TUI application model.
+type App struct {
+	// Navigation stack.
+	stack []screens.Screen
+
+	// Help overlay (renders on top when visible).
+	showHelp bool
+	help     *screens.HelpScreen
+
+	// Status bar.
+	statusBar *components.StatusBar
+
+	// Dimensions.
+	width  int
+	height int
+
+	// Service.
+	service UnifiedService
+}
+
 // New creates a new TUI application.
 func New(service UnifiedService) *App {
 	return &App{
-		service: service,
-		ctx:     context.Background(),
-		State:   NewAppState(),
+		service:   service,
+		statusBar: components.NewStatusBar(80),
 	}
 }
 
-// Init initializes the app and loads initial data.
+// Init initializes the application.
 func (a *App) Init() tea.Cmd {
-	return a.loadPlans()
+	// Create initial plans screen.
+	plansScreen := screens.NewPlansScreen(a.width, a.height)
+	a.stack = append(a.stack, plansScreen)
+
+	// Load initial plans.
+	return LoadPlansCmd(a.service)
 }
 
-// Update processes messages and updates state.
+// Update handles all messages.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		return a.handleKeyInput(msg)
+	// Window resize - broadcast to all screens.
 	case tea.WindowSizeMsg:
-		a.Width = msg.Width
-		a.Height = msg.Height
-		return a, nil
-	case PlansLoadedMsg:
-		a.State.IsLoading = false
-		a.State.Plans = msg.Plans
-		a.State.SelectedIndex = 0
-		if len(a.State.Plans) > 0 {
-			return a, a.loadPlanDetail(a.State.Plans[0].FileName)
-		}
-		return a, nil
-	case PlanDetailLoadedMsg:
-		a.State.IsLoading = false
-		a.State.CurrentPlan = msg.Detail
-		a.State.TextArea.SetValue(msg.Detail.Content)
-		a.State.Modified = false
-		return a, nil
-	case SaveResultMsg:
-		// Handle save result (async completion)
-		a.State.IsLoading = false
-		if msg.Error != nil {
-			a.State.ErrorMessage = msg.Error.Error()
-		} else if msg.Result.HasConflict {
-			a.State.ErrorMessage = "Conflict: Plan was modified externally"
-		} else if msg.Result.Success {
-			a.State.Mode = TwoPanelMode
-			a.State.TextArea.Blur()
-			a.State.Modified = false
-			a.State.SuccessMessage = "Plan saved and synced successfully"
-			// Reload the plan to show any server updates
-			return a, a.loadPlanDetail(a.State.CurrentPlan.FileName)
-		}
-		return a, nil
-	case SyncPlansResultMsg:
-		a.State.IsLoading = false
-		if msg.Error != nil {
-			a.State.ErrorMessage = "Failed to sync plans: " + msg.Error.Error()
-		} else {
-			a.State.TextArea.Blur()
-			a.State.Modified = false
-			a.State.SuccessMessage = msg.Message
-			return a, nil
-		}
-		return a, nil
-	case ErrorMsg:
-		a.State.IsLoading = false
-		a.State.ErrorMessage = msg.Error.Error()
-		return a, nil
-	case SuccessMsg:
-		a.State.SuccessMessage = msg.Message
-		return a, nil
-	}
+		a.width = msg.Width
+		a.height = msg.Height
+		a.statusBar.SetWidth(msg.Width)
 
-	return a, nil
-}
-
-// View renders the UI.
-func (a *App) View() string {
-	return renderUI(a)
-}
-
-// handleKeyInput processes keyboard input.
-func (a *App) handleKeyInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch a.State.Mode {
-	case EditMode:
-		// Only intercept special keys in edit mode
-		switch msg.String() {
-		case "ctrl+s":
-			a.State.IsLoading = true
-			a.State.LoadingMessage = "Saving and syncing plan..."
-			return a, a.savePlanAndSync()
-		case "esc":
-			a.State.Mode = TwoPanelMode
-			a.State.TextArea.Blur()
-			return a, nil
-		default:
-			// All other keys go to textarea
-			var cmd tea.Cmd
-			a.State.TextArea, cmd = a.State.TextArea.Update(msg)
-			a.State.Modified = true
-			return a, cmd
+		// Update help screen size.
+		if a.help != nil {
+			a.help.SetSize(msg.Width, msg.Height)
 		}
-	case FullscreenViewMode:
-		switch msg.String() {
-		case "esc":
-			a.State.Mode = TwoPanelMode
-			a.State.ViewportScrollOffset = 0 // Reset scroll on exit
-			return a, nil
-		case "r":
-			// Toggle markdown rendering
-			a.State.ViewportRenderMarkdown = !a.State.ViewportRenderMarkdown
-			a.State.ViewportScrollOffset = 0 // Reset scroll when toggling render
-			return a, nil
-		case "e":
-			// Switch from fullscreen view to edit mode
-			if a.State.CurrentPlan != nil {
-				a.State.Mode = EditMode
-				a.State.TextArea.Focus()
-				a.State.Modified = false
-			}
-			return a, nil
-		case "j", "down":
-			// Scroll down in fullscreen view
-			contentLines := len(a.viewportContentLines())
-			contentHeight := a.Height - 4 // -4 for header and status
-			maxScroll := contentLines - contentHeight
-			if maxScroll > 0 && a.State.ViewportScrollOffset < maxScroll {
-				a.State.ViewportScrollOffset++
-			}
-			return a, nil
-		case "k", "up":
-			// Scroll up in fullscreen view
-			if a.State.ViewportScrollOffset > 0 {
-				a.State.ViewportScrollOffset--
-			}
-			return a, nil
-		case "g":
-			// Jump to top
-			a.State.ViewportScrollOffset = 0
-			return a, nil
-		case "G":
-			// Jump to bottom
-			contentLines := len(a.viewportContentLines())
-			contentHeight := a.Height - 4
-			maxScroll := contentLines - contentHeight
-			if maxScroll > 0 {
-				a.State.ViewportScrollOffset = maxScroll
+
+		// Broadcast to all screens in stack.
+		for _, screen := range a.stack {
+			screen.SetSize(msg.Width, msg.Height)
+		}
+		return a, nil
+
+	// Global key handling.
+	case tea.KeyMsg:
+		// Help toggle (always available).
+		if msg.String() == "?" {
+			a.showHelp = !a.showHelp
+			if a.showHelp && a.help == nil {
+				a.help = screens.NewHelpScreen(a.width, a.height)
 			}
 			return a, nil
 		}
-	case TwoPanelMode:
-		switch msg.String() {
-		case "q", "ctrl+c":
+
+		// Quit (only from root screen).
+		if (msg.String() == "q" || msg.String() == "ctrl+c") && len(a.stack) == 1 && !a.showHelp {
 			return a, tea.Quit
-		case "?":
-			a.State.ShowHelp = !a.State.ShowHelp
-			return a, nil
-		case "e":
-			if a.State.Mode == TwoPanelMode && a.State.CurrentPlan != nil {
-				a.State.Mode = EditMode
-				a.State.TextArea.Focus()
-				a.State.Modified = false
-			}
-			return a, nil
-		case "v":
-			if a.State.Mode == TwoPanelMode && a.State.CurrentPlan != nil {
-				a.State.Mode = FullscreenViewMode
-			}
-			return a, nil
-		case "j", "down":
-			if a.State.SelectedIndex < len(a.State.Plans)-1 {
-				a.State.SelectedIndex++
-				if len(a.State.Plans) > a.State.SelectedIndex {
-					return a, a.loadPlanDetail(a.State.Plans[a.State.SelectedIndex].FileName)
-				}
-			}
-			return a, nil
-		case "k", "up":
-			if a.State.SelectedIndex > 0 {
-				a.State.SelectedIndex--
-				return a, a.loadPlanDetail(a.State.Plans[a.State.SelectedIndex].FileName)
-			}
-			return a, nil
-		case "s":
-			a.State.IsLoading = true
-			a.State.LoadingMessage = "Syncing plans..."
-			return a, a.syncPlans()
 		}
-	default:
+
+		// If help is shown, handle help keys.
+		if a.showHelp {
+			if msg.String() == "esc" || msg.String() == "?" {
+				a.showHelp = false
+			}
+			return a, nil
+		}
+
+	// Screen navigation messages.
+	case screens.PopScreenMsg:
+		return a, a.popScreen()
+
+	case screens.RequestVersionsScreenMsg:
+		// Check if versions exist before navigating.
+		return a, LoadVersionsForNavigationCmd(a.service, msg.PlanName)
+
+	case screens.VersionsNavigationResultMsg:
+		// Check if versions exist.
+		if len(msg.Versions) == 0 {
+			// No versions - show error and stay on current screen.
+			return a.delegateToCurrentScreen(screens.ErrorMsg{
+				Error: fmt.Errorf("no versions available for this plan"),
+			})
+		}
+		// Versions exist - push versions screen with data.
+		return a, a.pushVersionsScreenWithData(msg.PlanName, msg.Versions)
+
+	case screens.CloseHelpMsg:
+		a.showHelp = false
+		return a, nil
+
+	// Service result messages - handle and delegate.
+	case screens.PlansLoadedMsg:
+		// Delegate to current screen.
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.PlanDetailLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.VersionsLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.SaveResultMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.SyncResultMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.ErrorMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	// Internal command messages from screens.
+	case screens.LoadPlanDetailMsg:
+		return a, LoadPlanDetailCmd(a.service, msg.FileName)
+
+	case screens.SavePlanMsg:
+		return a, SavePlanCmd(a.service, msg.FileName, msg.Content, msg.Modified)
+
+	case screens.SyncPlansMsg:
+		return a, SyncPlansCmd(a.service)
+
+	case screens.LoadVersionsMsg:
+		return a, LoadVersionsCmd(a.service, msg.PlanName)
+	}
+
+	// Delegate other messages to current screen.
+	return a.delegateToCurrentScreen(msg)
+}
+
+// delegateToCurrentScreen passes a message to the current screen.
+func (a *App) delegateToCurrentScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if len(a.stack) == 0 {
 		return a, nil
 	}
-	return a, nil
+
+	current := a.stack[len(a.stack)-1]
+	newScreen, cmd := current.Update(msg)
+	a.stack[len(a.stack)-1] = newScreen
+
+	return a, cmd
 }
 
-// loadPlans loads all plans from the service.
-func (a *App) loadPlans() tea.Cmd {
-	a.State.IsLoading = true
-	a.State.LoadingMessage = "Loading plans..."
-	return func() tea.Msg {
-		plans, err := a.service.ListAllPlansWithReadingTime(a.ctx)
-		if err != nil {
-			return ErrorMsg{Error: err}
-		}
-		return PlansLoadedMsg{Plans: plans}
+// View renders the application.
+func (a *App) View() string {
+	if a.width == 0 || a.height == 0 {
+		return "Loading..."
 	}
+
+	// If help is shown, render help overlay.
+	if a.showHelp {
+		return a.help.View()
+	}
+
+	// Get current screen view.
+	var mainContent string
+	if len(a.stack) > 0 {
+		current := a.stack[len(a.stack)-1]
+		mainContent = current.View()
+
+		// Update status bar with screen's help.
+		a.statusBar.SetHelp(current.ShortHelp())
+	}
+
+	// Render status bar (footer).
+	status := a.statusBar.View()
+
+	return fmt.Sprintf("%s\n%s", mainContent, status)
 }
 
-// loadPlanDetail loads a specific plan's details.
-func (a *App) loadPlanDetail(fileName string) tea.Cmd {
-	a.State.IsLoading = true
-	a.State.LoadingMessage = "Loading plan..."
-	return func() tea.Msg {
-		detail, err := a.service.GetPlanDetailByFileName(a.ctx, fileName)
-		if err != nil {
-			return ErrorMsg{Error: err}
-		}
-		return PlanDetailLoadedMsg{Detail: detail}
+// Navigation helpers.
+
+func (a *App) popScreen() tea.Cmd {
+	if len(a.stack) > 1 {
+		a.stack = a.stack[:len(a.stack)-1]
 	}
+	return nil
 }
 
-// savePlanAndSync saves the plan and syncs to source directory.
-func (a *App) savePlanAndSync() tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(a.ctx, 30*time.Second)
-		defer cancel()
-
-		if a.State.CurrentPlan == nil {
-			return ErrorMsg{Error: ErrNoPlanSelected}
-		}
-
-		// Create update request with textarea content
-		req := claudeviewer.UpdatePlanRequest{
-			FileName:         a.State.CurrentPlan.FileName,
-			NewContent:       a.State.TextArea.Value(),
-			LastModifiedTime: a.State.CurrentPlan.ModifiedAt,
-			Force:            true,
-		}
-
-		// Update the plan (syncs automatically)
-		result, err := a.service.UpdatePlan(ctx, req)
-		if err != nil {
-			return SaveResultMsg{Error: err}
-		}
-
-		// Return result as message
-		return SaveResultMsg{Result: result, Error: nil}
-	}
-}
-
-func (a *App) syncPlans() tea.Cmd {
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(a.ctx, 10*time.Second)
-		defer cancel()
-
-		// Update the plan (syncs automatically)
-		result, err := a.service.SyncPlans(ctx)
-		if err != nil {
-			return SyncPlansResultMsg{Message: "Failed to sync plans", Error: err}
-		}
-
-		return SyncPlansResultMsg{Message: fmt.Sprintf("Synced %d plans", result), Error: nil}
-	}
-}
-
-// viewportContentLines returns the split lines of the current plan for scrolling.
-func (a *App) viewportContentLines() []string {
-	if a.State.CurrentPlan == nil {
-		return []string{}
-	}
-
-	// Split the content into lines
-	lines := strings.Split(a.State.CurrentPlan.Content, "\n")
-
-	// Add metadata lines at the top
-	metaLine := fmt.Sprintf("📅 Modified: %s | ⏱️ Reading Time: %d min | Size: %d bytes",
-		a.State.CurrentPlan.ModifiedAt.Format("2006-01-02"),
-		a.State.CurrentPlan.ReadingTime,
-		a.State.CurrentPlan.FileSize)
-
-	allLines := []string{
-		a.State.CurrentPlan.Title,
-		metaLine,
-		"",
-	}
-	allLines = append(allLines, lines...)
-
-	return allLines
-}
-
-// getViewportLines is an alias for viewportContentLines for use in view.go
-func (a *App) getViewportLines() []string {
-	if a.State.ViewportRenderMarkdown {
-		return a.getRenderedMarkdownLines()
-	}
-	return a.viewportContentLines()
-}
-
-// stripHTMLTags removes HTML tags from a string, leaving only the content
-func stripHTMLTags(html string) string {
-	// Remove common HTML tags
-	replacements := map[string]string{
-		"<p>":           "",
-		"</p>":          "\n",
-		"<br>":          "\n",
-		"<br/>":         "\n",
-		"<br />":        "\n",
-		"<strong>":      "",
-		"</strong>":     "",
-		"<b>":           "",
-		"</b>":          "",
-		"<em>":          "",
-		"</em>":         "",
-		"<i>":           "",
-		"</i>":          "",
-		"<u>":           "",
-		"</u>":          "",
-		"<code>":        "",
-		"</code>":       "",
-		"<pre>":         "",
-		"</pre>":        "",
-		"<h1>":          "\n",
-		"</h1>":         "\n",
-		"<h2>":          "\n",
-		"</h2>":         "\n",
-		"<h3>":          "\n",
-		"</h3>":         "\n",
-		"<h4>":          "\n",
-		"</h4>":         "\n",
-		"<h5>":          "\n",
-		"</h5>":         "\n",
-		"<h6>":          "\n",
-		"</h6>":         "\n",
-		"<ul>":          "",
-		"</ul>":         "",
-		"<ol>":          "",
-		"</ol>":         "",
-		"<li>":          "  • ",
-		"</li>":         "\n",
-		"<table>":       "",
-		"</table>":      "",
-		"<tr>":          "",
-		"</tr>":         "\n",
-		"<td>":          "",
-		"</td>":         " | ",
-		"<th>":          "",
-		"</th>":         " | ",
-		"<thead>":       "",
-		"</thead>":      "",
-		"<tbody>":       "",
-		"</tbody>":      "",
-		"<blockquote>":  "> ",
-		"</blockquote>": "\n",
-		"<div>":         "",
-		"</div>":        "\n",
-		"<span>":        "",
-		"</span>":       "",
-		"<a href=\"":    "[",
-		"\">":           "](link)",
-		"</a>":          "",
-		"&lt;":          "<",
-		"&gt;":          ">",
-		"&amp;":         "&",
-		"&quot;":        "\"",
-		"&#39;":         "'",
-		"<hr>":          "─────────────────────────",
-		"<hr/>":         "─────────────────────────",
-		"<hr />":        "─────────────────────────",
-	}
-
-	result := html
-	for tag, replacement := range replacements {
-		result = strings.ReplaceAll(result, tag, replacement)
-	}
-
-	return result
-}
-
-// getRenderedMarkdownLines returns rendered HTML markdown lines for display
-func (a *App) getRenderedMarkdownLines() []string {
-	if a.State.CurrentPlan == nil {
-		return []string{}
-	}
-
-	// Render the markdown to HTML
-	html, err := a.service.RenderMarkdown(a.State.CurrentPlan.Content)
-	if err != nil {
-		// Fall back to plain text if rendering fails
-		return a.viewportContentLines()
-	}
-
-	// Strip HTML tags to make it readable
-	cleanText := stripHTMLTags(html)
-
-	// Split the cleaned text into lines
-	lines := strings.Split(cleanText, "\n")
-
-	// Remove empty lines and clean up spacing
-	var cleanLines []string
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed != "" {
-			cleanLines = append(cleanLines, trimmed)
-		}
-	}
-
-	// Add metadata at the top
-	metaLine := fmt.Sprintf("📅 Modified: %s | ⏱️ Reading Time: %d min | Size: %d bytes",
-		a.State.CurrentPlan.ModifiedAt.Format("2006-01-02"),
-		a.State.CurrentPlan.ReadingTime,
-		a.State.CurrentPlan.FileSize)
-
-	allLines := []string{
-		a.State.CurrentPlan.Title,
-		metaLine,
-		"",
-	}
-	allLines = append(allLines, cleanLines...)
-
-	return allLines
+func (a *App) pushVersionsScreenWithData(planName string, versions []claudeviewer.PlanVersionDetail) tea.Cmd {
+	versionsScreen := screens.NewVersionsScreenWithData(planName, versions, a.width, a.height)
+	a.stack = append(a.stack, versionsScreen)
+	return versionsScreen.Init()
 }

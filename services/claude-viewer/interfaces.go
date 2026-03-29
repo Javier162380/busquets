@@ -3,8 +3,6 @@ package claudeviewer
 import (
 	"context"
 	"time"
-
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
 )
 
 // PlanService defines plan CRUD operations.
@@ -18,7 +16,8 @@ type PlanService interface {
 // VersionService defines version control operations.
 type VersionService interface {
 	SavePlanVersion(ctx context.Context, planName, content string) error
-	GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]repository.PlanVersion, error)
+	GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]PlanVersionDetail, error)
+	GetPlanVersion(ctx context.Context, planName string, versionNumber int64) (*PlanVersionDetail, error)
 	RestorePlanVersion(ctx context.Context, planName string, versionNumber int64) error
 }
 

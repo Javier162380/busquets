@@ -84,7 +84,7 @@ func (s *Service) SavePlanVersion(ctx context.Context, planName, content string)
 }
 
 // GetPlanVersionHistory retrieves version history for a plan with pagination.
-func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]repository.PlanVersion, error) {
+func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]PlanVersionDetail, error) {
 	plan, err := s.db.GetPlanByFileName(ctx, planName)
 	if err != nil {
 		return nil, fmt.Errorf("plan not found: %w", err)
@@ -99,11 +99,39 @@ func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, of
 		return nil, fmt.Errorf("failed to get version history: %w", err)
 	}
 
-	return versions, nil
+	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
+	readingTime := s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
+
+	planVersionsDetail := make([]PlanVersionDetail, len(versions))
+	for i, version := range versions {
+
+		planVersion := PlanVersion{
+			ID:            version.ID,
+			PlanID:        version.PlanID,
+			VersionNumber: version.VersionNumber,
+			FilePath:      version.FilePath,
+			Content:       version.Content,
+			WordCount:     version.WordCount,
+			CreatedAt:     version.CreatedAt,
+		}
+		renderedHTML, err := s.RenderMarkdown(plan.Content)
+		if err != nil {
+			return nil, err
+		}
+
+		planVersionsDetail[i] = PlanVersionDetail{
+			PlanVersion:  planVersion,
+			RenderedHTML: renderedHTML,
+			ReadingTime:  readingTime,
+		}
+
+	}
+
+	return planVersionsDetail, nil
 }
 
 // GetPlanVersion retrieves a specific version of a plan.
-func (s *Service) GetPlanVersion(ctx context.Context, planName string, versionNumber int64) (*repository.PlanVersion, error) {
+func (s *Service) GetPlanVersion(ctx context.Context, planName string, versionNumber int64) (*PlanVersionDetail, error) {
 	plan, err := s.db.GetPlanByFileName(ctx, planName)
 	if err != nil {
 		return nil, fmt.Errorf("plan not found: %w", err)
@@ -117,7 +145,28 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName string, versionNu
 		return nil, fmt.Errorf("version not found: %w", err)
 	}
 
-	return &version, nil
+	renderedHTML, err := s.RenderMarkdown(plan.Content)
+	if err != nil {
+		return nil, err
+	}
+	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
+	readingTime := s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
+
+	planVersion := PlanVersion{
+		ID:            version.ID,
+		PlanID:        version.PlanID,
+		VersionNumber: version.VersionNumber,
+		FilePath:      version.FilePath,
+		Content:       version.Content,
+		WordCount:     version.WordCount,
+		CreatedAt:     version.CreatedAt,
+	}
+
+	return &PlanVersionDetail{
+		PlanVersion:  planVersion,
+		RenderedHTML: renderedHTML,
+		ReadingTime:  readingTime,
+	}, nil
 }
 
 // RestorePlanVersion restores a plan to a previous version.

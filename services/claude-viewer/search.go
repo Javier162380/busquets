@@ -7,20 +7,6 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
 )
 
-// SearchPlans searches for plans by query string.
-// Returns SearchPlansRow or ListAllPlansRow depending on whether query is provided.
-func (s *Service) SearchPlans(ctx context.Context, query string) (interface{}, error) {
-	if query == "" {
-		return s.db.ListAllPlans(ctx)
-	}
-
-	searchPattern := fmt.Sprintf("%%%s%%", query)
-	return s.db.SearchPlans(ctx, repository.SearchPlansParams{
-		Title:   searchPattern,
-		Content: searchPattern,
-	})
-}
-
 func (s *Service) ListAllPlans(ctx context.Context) ([]repository.ListAllPlansRow, error) {
 	return s.db.ListAllPlans(ctx)
 }
