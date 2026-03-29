@@ -107,7 +107,6 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case FocusContent:
 		cmd = s.viewer.Update(msg)
 	}
-
 	return s, cmd
 }
 
@@ -121,7 +120,6 @@ func (s *VersionsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 	case FocusContent:
 		return s.handleContentKey(key, msg)
 	}
-
 	return s, nil
 }
 
@@ -133,7 +131,6 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 		return s, func() tea.Msg {
 			return PopScreenMsg{}
 		}
-
 	case "v":
 		// Switch to fullscreen view.
 		if s.current != nil {
@@ -141,14 +138,12 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 			s.focus = FocusContent
 		}
 		return s, nil
-
 	case "r":
 		// Restore selected version.
 		if s.current != nil {
 			return s, s.restoreVersion()
 		}
 		return s, nil
-
 	case "j", "down", "k", "up":
 		// Navigate list.
 		cmd := s.list.Update(msg)

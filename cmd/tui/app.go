@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
@@ -246,8 +247,7 @@ func (a *App) View() string {
 }
 
 // Navigation helpers.
-
-func (a *App) popScreen() tea.Cmd {
+func (a *App) popScreen() tea.Cmd { // no-lint:
 	if len(a.stack) > 1 {
 		a.stack = a.stack[:len(a.stack)-1]
 	}

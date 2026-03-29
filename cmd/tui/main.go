@@ -1,3 +1,4 @@
+// Package tui main tui application.
 package tui
 
 import (
