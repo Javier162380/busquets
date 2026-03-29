@@ -20,12 +20,14 @@ type PlansScreen struct {
 	viewer    *components.Viewer
 	editor    *components.Editor
 	statusBar *components.StatusBar
+	searchBar *components.SearchBar
 
 	// State.
-	layout  Layout
-	focus   Focus
-	plans   []claudeviewer.PlanSummary
-	current *claudeviewer.PlanDetail
+	layout      Layout
+	focus       Focus
+	plans       []claudeviewer.PlanSummary
+	current     *claudeviewer.PlanDetail
+	searchQuery string // Current active search query (empty = show all).
 
 	// Dimensions.
 	width  int
@@ -45,6 +47,7 @@ func NewPlansScreen(width, height int) *PlansScreen {
 		viewer:    components.NewViewer(panelWidth, contentHeight),
 		editor:    components.NewEditor(width-4, contentHeight),
 		statusBar: components.NewStatusBar(width),
+		searchBar: components.NewSearchBar(panelWidth),
 		layout:    LayoutSplit,
 		focus:     FocusList,
 		width:     width,
@@ -139,6 +142,8 @@ func (s *PlansScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		return s.handleContentKey(key, msg)
 	case FocusEditor:
 		return s.handleEditorKey(key, msg)
+	case FocusSearch:
+		return s.handleSearchKey(key, msg)
 	}
 
 	return s, nil
@@ -147,6 +152,23 @@ func (s *PlansScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 // handleListKey handles keys in list focus mode.
 func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
+	case "/":
+		// Activate search mode.
+		s.focus = FocusSearch
+		return s, s.searchBar.Focus()
+
+	case "c":
+		// Clear search and reload all plans.
+		if s.searchQuery != "" {
+			s.searchQuery = ""
+			s.searchBar.Reset()
+			s.statusBar.SetLoading("Loading plans...")
+			return s, func() tea.Msg {
+				return ClearSearchMsg{}
+			}
+		}
+		return s, nil
+
 	case "v":
 		// Switch to fullscreen view.
 		if s.current != nil {
@@ -251,6 +273,31 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 	return s, s.editor.Update(msg)
 }
 
+// handleSearchKey handles keys in search mode.
+func (s *PlansScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
+	switch key {
+	case "esc":
+		// Cancel search input, back to list.
+		s.focus = FocusList
+		s.searchBar.Blur()
+		return s, nil
+
+	case "enter":
+		// Execute search.
+		query := s.searchBar.Value()
+		s.searchQuery = query
+		s.focus = FocusList
+		s.searchBar.Blur()
+		s.statusBar.SetLoading("Searching...")
+		return s, func() tea.Msg {
+			return SearchPlansMsg{Query: query}
+		}
+	}
+
+	// Pass other keys to search bar for input.
+	return s, s.searchBar.Update(msg)
+}
+
 // View renders the screen.
 func (s *PlansScreen) View() string {
 	s.updateStatusBarHelp()
@@ -276,14 +323,27 @@ func (s *PlansScreen) renderSplitView() string {
 	panelWidth := (s.width - 3) / 2
 	contentHeight := s.height - 4
 
+	// Adjust list height if search bar is active.
+	listHeight := contentHeight - 4
+	if s.searchBar.IsActive() {
+		listHeight -= 3 // Make room for search bar.
+	}
+
 	// Update component sizes.
-	s.list.SetSize(panelWidth-4, contentHeight-4)
+	s.list.SetSize(panelWidth-4, listHeight)
 	s.viewer.SetSize(panelWidth-4, contentHeight-4)
+	s.searchBar.SetWidth(panelWidth - 4)
+
+	// Build left panel content.
+	leftContent := s.list.View()
+	if s.searchBar.IsActive() {
+		leftContent = lipgloss.JoinVertical(lipgloss.Left, leftContent, s.searchBar.View())
+	}
 
 	leftPanel := s.borderStyle.
 		Width(panelWidth).
 		Height(contentHeight).
-		Render(s.list.View())
+		Render(leftContent)
 
 	rightPanel := s.borderStyle.
 		Width(panelWidth).
@@ -340,7 +400,11 @@ func (s *PlansScreen) SetSize(width, height int) {
 func (s *PlansScreen) ShortHelp() string {
 	switch s.focus {
 	case FocusList:
-		return fmt.Sprintf("j/k: navigate | v: view | e: edit | s: sync | ?: help | q: quit | Plans: %d", len(s.plans))
+		searchHelp := "/: search"
+		if s.searchQuery != "" {
+			searchHelp = fmt.Sprintf("/: search | c: clear [%s]", s.searchQuery)
+		}
+		return fmt.Sprintf("j/k: navigate | v: view | e: edit | s: sync | %s | Plans: %d", searchHelp, len(s.plans))
 	case FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeHTML {
@@ -353,6 +417,8 @@ func (s *PlansScreen) ShortHelp() string {
 			modified = " [MODIFIED]"
 		}
 		return fmt.Sprintf("ctrl+s: save | esc: cancel%s", modified)
+	case FocusSearch:
+		return "enter: search | esc: cancel"
 	}
 	return ""
 }
@@ -454,3 +520,11 @@ type VersionsNavigationResultMsg struct {
 	PlanName string
 	Versions []claudeviewer.PlanVersionDetail
 }
+
+// SearchPlansMsg requests searching plans.
+type SearchPlansMsg struct {
+	Query string
+}
+
+// ClearSearchMsg requests clearing search and loading all plans.
+type ClearSearchMsg struct{}

@@ -94,6 +94,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Global key handling.
 	case tea.KeyMsg:
+		// Clear any error/success messages on new key press.
+		a.statusBar.ClearMessages()
+
 		// Help toggle (always available).
 		if msg.String() == "?" {
 			a.showHelp = !a.showHelp
@@ -127,10 +130,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.VersionsNavigationResultMsg:
 		// Check if versions exist.
 		if len(msg.Versions) == 0 {
-			// No versions - show error and stay on current screen.
-			return a.delegateToCurrentScreen(screens.ErrorMsg{
-				Error: fmt.Errorf("no versions available for this plan"),
-			})
+			// No versions - show message in App's status bar and stay on current screen.
+			a.statusBar.SetError("No versions found")
+			return a, nil
 		}
 		// Versions exist - push versions screen with data.
 		return a, a.pushVersionsScreenWithData(msg.PlanName, msg.Versions)
@@ -154,10 +156,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.delegateToCurrentScreen(msg)
 
 	case screens.SyncResultMsg:
-		return a.delegateToCurrentScreen(msg)
+		if msg.Error != nil {
+			a.statusBar.SetError("Sync failed: " + msg.Error.Error())
+			return a, nil
+		}
+		// Show success message and reload plans.
+		a.statusBar.SetSuccess(fmt.Sprintf("Synced %d plans", msg.Count))
+		return a, LoadPlansCmd(a.service)
 
 	case screens.ErrorMsg:
-		return a.delegateToCurrentScreen(msg)
+		// Show error in App's status bar (which is rendered).
+		a.statusBar.SetError(msg.Error.Error())
+		return a, nil
 
 	// Internal command messages from screens.
 	case screens.LoadPlanDetailMsg:
@@ -167,10 +177,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, SavePlanCmd(a.service, msg.FileName, msg.Content, msg.Modified)
 
 	case screens.SyncPlansMsg:
+		a.statusBar.SetLoading("Syncing plans...")
 		return a, SyncPlansCmd(a.service)
 
 	case screens.LoadVersionsMsg:
 		return a, LoadVersionsCmd(a.service, msg.PlanName)
+
+	case screens.SearchPlansMsg:
+		return a, SearchPlansCmd(a.service, msg.Query)
+
+	case screens.ClearSearchMsg:
+		return a, LoadPlansCmd(a.service)
 	}
 
 	// Delegate other messages to current screen.
