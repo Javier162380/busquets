@@ -3,8 +3,6 @@ package tui
 import (
 	"context"
 	"fmt"
-	"time"
-
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
@@ -25,11 +23,6 @@ type UnifiedService interface {
 	GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]claudeviewer.PlanVersionDetail, error)
 	GetPlanVersion(ctx context.Context, planName string, versionNumber int64) (*claudeviewer.PlanVersionDetail, error)
 	RestorePlanVersion(ctx context.Context, planName string, versionNumber int64) error
-	GetStringValue(ctx context.Context, variableName string) (string, bool, error)
-	GetBooleanValue(ctx context.Context, variableName string) (bool, bool, error)
-	GetNumberValue(ctx context.Context, variableName string) (float64, bool, error)
-	GetDateTimeValue(ctx context.Context, variableName string) (time.Time, bool, error)
-	SetSetting(ctx context.Context, varName, varType string, values claudeviewer.SettingValues) error
 	SyncPlans(ctx context.Context) (int, error)
 	RenderMarkdown(content string) (string, error)
 }
@@ -188,6 +181,24 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.ClearSearchMsg:
 		return a, LoadPlansCmd(a.service)
+
+	case screens.RestoreVersionMsg:
+		a.statusBar.SetLoading("Restoring version...")
+		return a, RestoreVersionCmd(a.service, msg.PlanName, msg.VersionNumber)
+
+	case screens.RestoreResultMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError("Restore failed: " + msg.Error.Error())
+			return a, nil
+		}
+		a.statusBar.SetSuccess("Version restored successfully")
+		// Pop versions screen to go back to plans.
+		a.popScreen()
+		// Sync and reload plans to show restored content.
+		return a, tea.Batch(
+			SyncPlansCmd(a.service),
+			LoadPlansCmd(a.service),
+		)
 	}
 
 	// Delegate other messages to current screen.
