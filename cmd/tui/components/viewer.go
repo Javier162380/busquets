@@ -26,7 +26,6 @@ type Viewer struct {
 	renderMode RenderMode
 	width      int
 	height     int
-	ready      bool
 }
 
 // NewViewer creates a new viewer component.
