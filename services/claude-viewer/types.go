@@ -37,6 +37,22 @@ type SettingValues struct {
 	DateTimeValue *time.Time `json:"dateTimeValue,omitempty"`
 }
 
+type PlanVersion struct {
+	ID            int64
+	PlanID        int64
+	VersionNumber int64
+	FilePath      string
+	Content       string
+	WordCount     int64
+	CreatedAt     time.Time
+}
+
+type PlanVersionDetail struct {
+	PlanVersion
+	ReadingTime  int
+	RenderedHTML string
+}
+
 func CalculateReadingTime(wordCount int) int {
 	minutes := float64(wordCount) / float64(AverageReadingSpeed)
 	return max(1, int(math.Ceil(minutes)))
