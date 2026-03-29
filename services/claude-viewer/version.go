@@ -104,7 +104,6 @@ func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, of
 
 	planVersionsDetail := make([]PlanVersionDetail, len(versions))
 	for i, version := range versions {
-
 		planVersion := PlanVersion{
 			ID:            version.ID,
 			PlanID:        version.PlanID,
@@ -124,7 +123,6 @@ func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, of
 			RenderedHTML: renderedHTML,
 			ReadingTime:  readingTime,
 		}
-
 	}
 
 	return planVersionsDetail, nil

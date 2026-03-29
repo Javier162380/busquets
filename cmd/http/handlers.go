@@ -489,7 +489,7 @@ func (s *Server) handleSearchVersions(c echo.Context) error {
 	})
 }
 
-// min returns the minimum of two integers
+// min returns the minimum of two integers.
 func min(a, b int) int {
 	if a < b {
 		return a

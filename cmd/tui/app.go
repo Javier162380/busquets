@@ -247,7 +247,7 @@ func (a *App) View() string {
 }
 
 // Navigation helpers.
-func (a *App) popScreen() tea.Cmd { // no-lint:
+func (a *App) popScreen() tea.Cmd { //nolint:unparam // ok for now.
 	if len(a.stack) > 1 {
 		a.stack = a.stack[:len(a.stack)-1]
 	}
