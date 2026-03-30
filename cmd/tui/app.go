@@ -23,6 +23,7 @@ type UnifiedService interface {
 	SavePlanVersion(ctx context.Context, planName, content string) error
 	GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]claudeviewer.PlanVersionDetail, error)
 	GetPlanVersion(ctx context.Context, planName string, versionNumber int64) (*claudeviewer.PlanVersionDetail, error)
+	SearchVersions(ctx context.Context, planName, query string) ([]claudeviewer.PlanVersionDetail, error)
 	RestorePlanVersion(ctx context.Context, planName string, versionNumber int64) error
 	SyncPlans(ctx context.Context) (int, error)
 	RenderMarkdown(content string) (string, error)
@@ -179,6 +180,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.SearchPlansMsg:
 		return a, SearchPlansCmd(a.service, msg.Query)
+
+	case screens.SearchVersionsMsg:
+		return a, SearchVersionsCmd(a.service, msg.PlanName, msg.Query)
 
 	case screens.ClearSearchMsg:
 		return a, LoadPlansCmd(a.service)

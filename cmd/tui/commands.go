@@ -18,6 +18,7 @@ type Service interface {
 	GetPlanDetailByFileName(ctx context.Context, fileName string) (*claudeviewer.PlanDetail, error)
 	UpdatePlan(ctx context.Context, req claudeviewer.UpdatePlanRequest) (*claudeviewer.UpdatePlanResult, error)
 	GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]claudeviewer.PlanVersionDetail, error)
+	SearchVersions(ctx context.Context, planName, query string) ([]claudeviewer.PlanVersionDetail, error)
 	SyncPlans(ctx context.Context) (int, error)
 	RenderMarkdown(content string) (string, error)
 	RestorePlanVersion(ctx context.Context, planName string, versionNumber int64) error
@@ -130,6 +131,20 @@ func SyncPlansCmd(svc Service) tea.Cmd {
 			return screens.SyncResultMsg{Error: err}
 		}
 		return screens.SyncResultMsg{Count: count}
+	}
+}
+
+// SearchVersionsCmd searches a plan over it's different versions.
+func SearchVersionsCmd(svc Service, currentPlanName, query string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		planVersions, err := svc.SearchVersions(ctx, currentPlanName, query)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+
+		return screens.VersionsLoadedMsg{Versions: planVersions}
 	}
 }
 

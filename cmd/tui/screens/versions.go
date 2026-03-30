@@ -15,15 +15,17 @@ import (
 // VersionsScreen handles version history browsing and viewing.
 type VersionsScreen struct {
 	// Components.
-	list   *components.List
-	viewer *components.Viewer
+	list      *components.List
+	viewer    *components.Viewer
+	searchBar *components.SearchBar
 
 	// State.
-	layout   Layout
-	focus    Focus
-	planName string
-	versions []claudeviewer.PlanVersionDetail
-	current  *claudeviewer.PlanVersionDetail
+	layout      Layout
+	focus       Focus
+	planName    string
+	searchQuery string
+	versions    []claudeviewer.PlanVersionDetail
+	current     *claudeviewer.PlanVersionDetail
 
 	// Dimensions.
 	width  int
@@ -39,13 +41,14 @@ func NewVersionsScreen(planName string, width, height int) *VersionsScreen {
 	contentHeight := height - 4
 
 	return &VersionsScreen{
-		list:     components.NewList(nil, panelWidth, contentHeight),
-		viewer:   components.NewViewer(panelWidth, contentHeight),
-		layout:   LayoutSplit,
-		focus:    FocusList,
-		planName: planName,
-		width:    width,
-		height:   height,
+		list:      components.NewList(nil, panelWidth, contentHeight),
+		viewer:    components.NewViewer(panelWidth, contentHeight),
+		searchBar: components.NewSearchBar(panelWidth),
+		layout:    LayoutSplit,
+		focus:     FocusList,
+		planName:  planName,
+		width:     width,
+		height:    height,
 		borderStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(styles.BorderColor),
@@ -98,6 +101,8 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		cmd = s.list.Update(msg)
 	case FocusContent:
 		cmd = s.viewer.Update(msg)
+	case FocusSearch:
+		cmd = s.searchBar.Update(msg)
 	default:
 		return s, cmd
 	}
@@ -114,6 +119,8 @@ func (s *VersionsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		return s.handleListKey(key, msg)
 	case FocusContent:
 		return s.handleContentKey(key, msg)
+	case FocusSearch:
+		return s.handleSearchKey(key, msg)
 	default:
 		return s, nil
 	}
@@ -122,6 +129,19 @@ func (s *VersionsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 // handleListKey handles keys in list focus mode.
 func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
+	case "/":
+		s.focus = FocusSearch
+		return s, s.searchBar.Focus()
+	case "c":
+		// Clear search and reload all versions.
+		if s.searchQuery != "" {
+			s.searchQuery = ""
+			s.searchBar.Reset()
+			return s, func() tea.Msg {
+				return LoadVersionsMsg{PlanName: s.planName}
+			}
+		}
+		return s, nil
 	case "esc":
 		return s, func() tea.Msg {
 			return PopScreenMsg{}
@@ -183,6 +203,30 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 	return s, s.viewer.Update(msg)
 }
 
+// handleSearchKey handles keys in search mode.
+func (s *VersionsScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
+	switch key {
+	case "esc":
+		// Cancel search input, back to list.
+		s.focus = FocusList
+		s.searchBar.Blur()
+		return s, nil
+
+	case "enter":
+		// Execute search.
+		query := s.searchBar.Value()
+		s.searchQuery = query
+		s.focus = FocusList
+		s.searchBar.Blur()
+		return s, func() tea.Msg {
+			return SearchVersionsMsg{Query: query, PlanName: s.planName}
+		}
+	}
+
+	// Pass other keys to search bar for input.
+	return s, s.searchBar.Update(msg)
+}
+
 // View renders the screen.
 func (s *VersionsScreen) View() string {
 	var mainContent string
@@ -202,14 +246,27 @@ func (s *VersionsScreen) renderSplitView() string {
 	panelWidth := (s.width - 3) / 2
 	contentHeight := s.height - 4
 
+	// Adjust list height if search bar is active.
+	listHeight := contentHeight - 4
+	if s.searchBar.IsActive() {
+		listHeight -= 3 // Make room for search bar.
+	}
+
 	// Update component sizes.
-	s.list.SetSize(panelWidth-4, contentHeight-4)
+	s.list.SetSize(panelWidth-4, listHeight)
 	s.viewer.SetSize(panelWidth-4, contentHeight-4)
+	s.searchBar.SetWidth(panelWidth - 4)
+
+	// Build left panel content.
+	leftContent := s.list.View()
+	if s.searchBar.IsActive() {
+		leftContent = lipgloss.JoinVertical(lipgloss.Left, leftContent, s.searchBar.View())
+	}
 
 	leftPanel := s.borderStyle.
 		Width(panelWidth).
 		Height(contentHeight).
-		Render(s.list.View())
+		Render(leftContent)
 
 	rightPanel := s.borderStyle.
 		Width(panelWidth).
@@ -254,9 +311,15 @@ func (s *VersionsScreen) SetSize(width, height int) {
 func (s *VersionsScreen) ShortHelp() string {
 	switch s.focus {
 	case FocusList:
-		return fmt.Sprintf("j/k: navigate | v: view | r: restore | esc: back | Versions: %d", len(s.versions))
+		searchHelp := "/: search"
+		if s.searchQuery != "" {
+			searchHelp = fmt.Sprintf("/: search | c: clear [%s]", s.searchQuery)
+		}
+		return fmt.Sprintf("j/k: navigate | v: view | r: restore | %s | esc: back | Versions: %d", searchHelp, len(s.versions))
 	case FocusContent:
 		return "j/k: scroll | g/G: top/bottom | r: restore | esc: back"
+	case FocusSearch:
+		return "enter: search | esc: cancel"
 	default:
 		return ""
 	}
@@ -318,3 +381,10 @@ type RestoreResultMsg struct {
 	PlanName string
 	Error    error
 }
+
+type SearchVersionsMsg struct {
+	PlanName string
+	Query    string
+}
+
+type ClearVersionSearchMsg struct{}
