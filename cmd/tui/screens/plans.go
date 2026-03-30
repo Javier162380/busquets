@@ -486,7 +486,8 @@ type VersionsNavigationResultMsg struct {
 
 // SearchPlansMsg requests searching plans.
 type SearchPlansMsg struct {
-	Query string
+	PlanName string
+	Query    string
 }
 
 // ClearSearchMsg requests clearing search and loading all plans.

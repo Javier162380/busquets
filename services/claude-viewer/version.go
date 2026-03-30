@@ -270,7 +270,7 @@ func (s *Service) CleanupOldVersions(ctx context.Context, planName string, maxVe
 
 // SearchVersions searches across all versions of a plan for matching content.
 // Returns all versions that contain the search term (case-insensitive).
-func (s *Service) SearchVersions(ctx context.Context, planName, query string) ([]repository.PlanVersion, error) {
+func (s *Service) SearchVersions(ctx context.Context, planName, query string) ([]PlanVersionDetail, error) {
 	// Get the plan to verify it exists and get its ID
 	plan, err := s.GetPlanByFileName(ctx, planName)
 	if err != nil {
@@ -287,5 +287,31 @@ func (s *Service) SearchVersions(ctx context.Context, planName, query string) ([
 		return nil, fmt.Errorf("search failed: %w", err)
 	}
 
-	return versions, nil
+	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
+	readingTime := s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
+
+	planVersionsDetail := make([]PlanVersionDetail, len(versions))
+	for i, version := range versions {
+		planVersion := PlanVersion{
+			ID:            version.ID,
+			PlanID:        version.PlanID,
+			VersionNumber: version.VersionNumber,
+			FilePath:      version.FilePath,
+			Content:       version.Content,
+			WordCount:     version.WordCount,
+			CreatedAt:     version.CreatedAt,
+		}
+		renderedHTML, err := s.RenderMarkdown(plan.Content)
+		if err != nil {
+			return nil, err
+		}
+
+		planVersionsDetail[i] = PlanVersionDetail{
+			PlanVersion:  planVersion,
+			RenderedHTML: renderedHTML,
+			ReadingTime:  readingTime,
+		}
+	}
+
+	return planVersionsDetail, nil
 }
