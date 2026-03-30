@@ -299,10 +299,10 @@ func (s *Server) handleListPlansWithPagination(c echo.Context) error {
 	}
 
 	data := map[string]interface{}{
-		"Plans":          plans,
-		"Query":          query,
-		"NextPageToken":  nextPageToken,
-		"CurrentOffset":  offset,
+		"Plans":         plans,
+		"Query":         query,
+		"NextPageToken": nextPageToken,
+		"CurrentOffset": offset,
 	}
 
 	c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -489,12 +489,10 @@ func (s *Server) handleSearchVersions(c echo.Context) error {
 	})
 }
 
-// min returns the minimum of two integers
+// min returns the minimum of two integers.
 func min(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
 }
-
-

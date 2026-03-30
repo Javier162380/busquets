@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	httpserver "github.com/Javier162380/claude-plan-viewer/cmd/http"
+	tuiapp "github.com/Javier162380/claude-plan-viewer/cmd/tui"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 )
 
@@ -28,6 +29,10 @@ func main() {
 	case "serve":
 		if err := runServe(); err != nil {
 			log.Fatalf("Server failed: %v", err)
+		}
+	case "tui":
+		if err := runTUI(); err != nil {
+			log.Fatalf("TUI failed: %v", err)
 		}
 	default:
 		fmt.Printf("Unknown command: %s\n", command)
@@ -115,15 +120,39 @@ func getPaths() (dbPath, viewerDir, plansDir string, err error) {
 	return dbPath, viewerDir, plansDir, nil
 }
 
+func runTUI() error {
+	ctx := context.Background()
+
+	dbPath, viewerDir, plansDir, err := getPaths()
+	if err != nil {
+		return err
+	}
+
+	repo, err := claudeviewer.NewRepository(ctx, dbPath)
+	if err != nil {
+		return fmt.Errorf("failed to initialize repository: %w", err)
+	}
+
+	service, err := claudeviewer.New(repo, viewerDir, plansDir, true) // true = index full content
+	if err != nil {
+		return fmt.Errorf("failed to initialize service: %w", err)
+	}
+
+	// Type assertion: Service implements UnifiedService
+	return tuiapp.Start(service)
+}
+
 func printUsage() {
 	fmt.Println(`Usage: plan-viewer <command>
 
 Commands:
   sync               Copy and index plans from ~/.claude/plans/
-  serve [-addr :port] Start web server (default: :8080)
+  serve [-addr :port] Start web server (default: :8081)
+  tui                Start terminal user interface
 
 Examples:
   plan-viewer sync
   plan-viewer serve
-  plan-viewer serve -addr :3000`)
+  plan-viewer serve -addr :3000
+  plan-viewer tui`)
 }

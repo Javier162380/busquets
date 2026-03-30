@@ -15,7 +15,7 @@ type UpdatePlanRequest struct {
 	FileName         string
 	NewContent       string
 	LastModifiedTime time.Time // Client's version timestamp
-	Force            bool       // If true, skip conflict check
+	Force            bool      // If true, skip conflict check
 }
 
 // UpdatePlanResult contains the result of an update operation.

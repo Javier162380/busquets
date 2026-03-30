@@ -14,7 +14,7 @@ import (
 // SavePlanVersion creates a new version of a plan.
 // It writes the version file to disk first, then saves to database.
 // If database save fails, it deletes the file to maintain consistency.
-func (s *Service) SavePlanVersion(ctx context.Context, planName string, content string) error {
+func (s *Service) SavePlanVersion(ctx context.Context, planName, content string) error {
 	// Get the plan from database to ensure it exists
 	plan, err := s.db.GetPlanByFileName(ctx, planName)
 	if err != nil {
@@ -69,7 +69,6 @@ func (s *Service) SavePlanVersion(ctx context.Context, planName string, content 
 		WordCount:     int64(wordCount),
 		CreatedAt:     now,
 	})
-
 	// Step 3: If database save fails, delete the file to maintain consistency
 	if err != nil {
 		deleteErr := os.Remove(versionFilePath)
@@ -85,7 +84,7 @@ func (s *Service) SavePlanVersion(ctx context.Context, planName string, content 
 }
 
 // GetPlanVersionHistory retrieves version history for a plan with pagination.
-func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]repository.PlanVersion, error) {
+func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]PlanVersionDetail, error) {
 	plan, err := s.db.GetPlanByFileName(ctx, planName)
 	if err != nil {
 		return nil, fmt.Errorf("plan not found: %w", err)
@@ -100,11 +99,37 @@ func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, of
 		return nil, fmt.Errorf("failed to get version history: %w", err)
 	}
 
-	return versions, nil
+	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
+	readingTime := s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
+
+	planVersionsDetail := make([]PlanVersionDetail, len(versions))
+	for i, version := range versions {
+		planVersion := PlanVersion{
+			ID:            version.ID,
+			PlanID:        version.PlanID,
+			VersionNumber: version.VersionNumber,
+			FilePath:      version.FilePath,
+			Content:       version.Content,
+			WordCount:     version.WordCount,
+			CreatedAt:     version.CreatedAt,
+		}
+		renderedHTML, err := s.RenderMarkdown(plan.Content)
+		if err != nil {
+			return nil, err
+		}
+
+		planVersionsDetail[i] = PlanVersionDetail{
+			PlanVersion:  planVersion,
+			RenderedHTML: renderedHTML,
+			ReadingTime:  readingTime,
+		}
+	}
+
+	return planVersionsDetail, nil
 }
 
 // GetPlanVersion retrieves a specific version of a plan.
-func (s *Service) GetPlanVersion(ctx context.Context, planName string, versionNumber int64) (*repository.PlanVersion, error) {
+func (s *Service) GetPlanVersion(ctx context.Context, planName string, versionNumber int64) (*PlanVersionDetail, error) {
 	plan, err := s.db.GetPlanByFileName(ctx, planName)
 	if err != nil {
 		return nil, fmt.Errorf("plan not found: %w", err)
@@ -118,7 +143,28 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName string, versionNu
 		return nil, fmt.Errorf("version not found: %w", err)
 	}
 
-	return &version, nil
+	renderedHTML, err := s.RenderMarkdown(plan.Content)
+	if err != nil {
+		return nil, err
+	}
+	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
+	readingTime := s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
+
+	planVersion := PlanVersion{
+		ID:            version.ID,
+		PlanID:        version.PlanID,
+		VersionNumber: version.VersionNumber,
+		FilePath:      version.FilePath,
+		Content:       version.Content,
+		WordCount:     version.WordCount,
+		CreatedAt:     version.CreatedAt,
+	}
+
+	return &PlanVersionDetail{
+		PlanVersion:  planVersion,
+		RenderedHTML: renderedHTML,
+		ReadingTime:  readingTime,
+	}, nil
 }
 
 // RestorePlanVersion restores a plan to a previous version.
@@ -135,7 +181,7 @@ func (s *Service) RestorePlanVersion(ctx context.Context, planName string, versi
 		FileName:         planName,
 		NewContent:       version.Content,
 		LastModifiedTime: time.Now(), // Don't check for conflicts when restoring
-		Force:            true,        // Force override
+		Force:            true,       // Force override
 	}
 
 	result, err := s.UpdatePlan(ctx, updateReq)
@@ -196,7 +242,7 @@ func (s *Service) CleanupOldVersions(ctx context.Context, planName string, maxVe
 	// If we have more than maxVersions, delete the oldest ones
 	if int64(len(versions)) > maxVersions {
 		versionsToDelete := versions[maxVersions:] // Oldest versions come after (since sorted DESC)
-		
+
 		// Delete files
 		for _, version := range versionsToDelete {
 			if err := os.Remove(version.FilePath); err != nil && !os.IsNotExist(err) {
@@ -224,7 +270,7 @@ func (s *Service) CleanupOldVersions(ctx context.Context, planName string, maxVe
 
 // SearchVersions searches across all versions of a plan for matching content.
 // Returns all versions that contain the search term (case-insensitive).
-func (s *Service) SearchVersions(ctx context.Context, planName string, query string) ([]repository.PlanVersion, error) {
+func (s *Service) SearchVersions(ctx context.Context, planName, query string) ([]PlanVersionDetail, error) {
 	// Get the plan to verify it exists and get its ID
 	plan, err := s.GetPlanByFileName(ctx, planName)
 	if err != nil {
@@ -234,12 +280,38 @@ func (s *Service) SearchVersions(ctx context.Context, planName string, query str
 	// Search versions with LIKE query (case-insensitive in SQLite)
 	searchPattern := fmt.Sprintf("%%%s%%", query)
 	versions, err := s.db.SearchVersionsByContent(ctx, repository.SearchVersionsByContentParams{
-		PlanID: plan.ID,
+		PlanID:  plan.ID,
 		Content: searchPattern,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("search failed: %w", err)
 	}
 
-	return versions, nil
+	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
+	readingTime := s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
+
+	planVersionsDetail := make([]PlanVersionDetail, len(versions))
+	for i, version := range versions {
+		planVersion := PlanVersion{
+			ID:            version.ID,
+			PlanID:        version.PlanID,
+			VersionNumber: version.VersionNumber,
+			FilePath:      version.FilePath,
+			Content:       version.Content,
+			WordCount:     version.WordCount,
+			CreatedAt:     version.CreatedAt,
+		}
+		renderedHTML, err := s.RenderMarkdown(plan.Content)
+		if err != nil {
+			return nil, err
+		}
+
+		planVersionsDetail[i] = PlanVersionDetail{
+			PlanVersion:  planVersion,
+			RenderedHTML: renderedHTML,
+			ReadingTime:  readingTime,
+		}
+	}
+
+	return planVersionsDetail, nil
 }
