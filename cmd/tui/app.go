@@ -6,6 +6,7 @@ import (
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,6 +28,8 @@ type UnifiedService interface {
 	RestorePlanVersion(ctx context.Context, planName string, versionNumber int64) error
 	SyncPlans(ctx context.Context) (int, error)
 	RenderMarkdown(content string) (string, error)
+	GetSetting(ctx context.Context, variableName string) (claudeviewer.Setting, bool, error)
+	SetSetting(ctx context.Context, varName string, values claudeviewer.SettingValues) error
 }
 
 // App is the root TUI application model.
@@ -59,6 +62,14 @@ func New(service UnifiedService) *App {
 
 // Init initializes the application.
 func (a *App) Init() tea.Cmd {
+	// Initialize theme from settings.
+	setting, exists, _ := a.service.GetSetting(context.Background(), claudeviewer.SettingDarkModeEnabled)
+	darkMode := true // default
+	if exists && setting.IsBoolean() {
+		darkMode = setting.GetBooleanValue()
+	}
+	styles.SetDarkMode(darkMode)
+
 	// Create initial plans screen.
 	plansScreen := screens.NewPlansScreen(a.width, a.height)
 	a.stack = append(a.stack, plansScreen)
@@ -204,6 +215,37 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			SyncPlansCmd(a.service),
 			LoadPlansCmd(a.service),
 		)
+
+	// Settings messages.
+	case screens.OpenSettingsMsg:
+		return a, a.pushSettingsScreen()
+
+	case screens.LoadSettingsMsg:
+		return a, LoadSettingsCmd(a.service, msg.SettingNames)
+
+	case screens.SaveSettingMsg:
+		return a, SetSettingCmd(a.service, msg.Name, msg.Values)
+
+	case screens.SettingsLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.SettingUpdateResultMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError("Failed to save setting: " + msg.Error.Error())
+		} else {
+			a.statusBar.SetSuccess("Setting saved")
+		}
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.ThemeChangedMsg:
+		// Get current dark mode setting and apply theme.
+		setting, exists, _ := a.service.GetSetting(context.Background(), claudeviewer.SettingDarkModeEnabled)
+		darkMode := true // default
+		if exists && setting.IsBoolean() {
+			darkMode = setting.GetBooleanValue()
+		}
+		styles.SetDarkMode(darkMode)
+		return a, nil
 	}
 
 	// Delegate other messages to current screen.
@@ -262,4 +304,10 @@ func (a *App) pushVersionsScreenWithData(planName string, versions []claudeviewe
 	versionsScreen := screens.NewVersionsScreenWithData(planName, versions, a.width, a.height)
 	a.stack = append(a.stack, versionsScreen)
 	return versionsScreen.Init()
+}
+
+func (a *App) pushSettingsScreen() tea.Cmd {
+	settingsScreen := screens.NewSettingsScreen(a.width, a.height)
+	a.stack = append(a.stack, settingsScreen)
+	return settingsScreen.Init()
 }

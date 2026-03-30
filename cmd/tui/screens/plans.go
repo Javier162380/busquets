@@ -166,6 +166,12 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		// Sync plans.
 		return s, s.syncPlans()
 
+	case "S":
+		// Open settings screen.
+		return s, func() tea.Msg {
+			return OpenSettingsMsg{}
+		}
+
 	case "j", "down", "k", "up":
 		// Navigate list.
 		cmd := s.list.Update(msg)
@@ -373,7 +379,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.searchQuery != "" {
 			searchHelp = fmt.Sprintf("/: search | c: clear [%s]", s.searchQuery)
 		}
-		return fmt.Sprintf("j/k: navigate | v: view | e: edit | s: sync | %s | Plans: %d", searchHelp, len(s.plans))
+		return fmt.Sprintf("j/k: navigate | v: view | e: edit | s: sync | S: settings | %s | Plans: %d", searchHelp, len(s.plans))
 	case FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeHTML {

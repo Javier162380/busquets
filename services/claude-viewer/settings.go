@@ -16,6 +16,20 @@ var (
 	ErrInvalidNumberValue = errors.New("invalid number value")
 )
 
+// Setting type constants.
+const (
+	SettingTypeNumber   = "number"
+	SettingTypeBoolean  = "boolean"
+	SettingTypeString   = "string"
+	SettingTypeDatetime = "datetime"
+)
+
+// Known setting name constants.
+const (
+	SettingReadingSpeedWPM = "reading_speed_wpm"
+	SettingDarkModeEnabled = "dark_mode_enabled"
+)
+
 type Setting struct {
 	SettingName string
 	StringValue *string
@@ -98,86 +112,24 @@ func (s *Service) GetSetting(ctx context.Context, variableName string) (Setting,
 	return setting, true, nil
 }
 
-func (s *Service) GetStringValue(ctx context.Context, variableName string) (string, bool, error) {
-	setting, err := s.db.GetSettingByName(ctx, variableName)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", false, ErrSettingNotFound
+// SetSetting stores or updates a setting. Type is inferred from which field in values is set.
+func (s *Service) SetSetting(ctx context.Context, varName string, values SettingValues) error {
+	// Infer type from values.
+	var varType string
+	switch {
+	case values.NumberValue != nil:
+		varType = SettingTypeNumber
+		if err := validateNumberValue(*values.NumberValue); err != nil {
+			return err
 		}
-		return "", false, fmt.Errorf("failed to get setting: %w", err)
-	}
-
-	if !setting.StringValue.Valid {
-		return "", true, nil
-	}
-	return setting.StringValue.String, true, nil
-}
-
-// GetNumberValue returns a numeric setting value by name.
-// Returns (value, exists, error).
-func (s *Service) GetNumberValue(ctx context.Context, variableName string) (float64, bool, error) {
-	setting, err := s.db.GetSettingByName(ctx, variableName)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return 0, false, nil
-		}
-		return 0, false, fmt.Errorf("failed to get setting: %w", err)
-	}
-
-	if !setting.NumberValue.Valid {
-		return 0, true, nil
-	}
-	return setting.NumberValue.Float64, true, nil
-}
-
-// GetBooleanValue returns a boolean setting value by name.
-// Returns (value, exists, error).
-func (s *Service) GetBooleanValue(ctx context.Context, variableName string) (bool, bool, error) {
-	setting, err := s.db.GetSettingByName(ctx, variableName)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, false, nil
-		}
-		return false, false, fmt.Errorf("failed to get setting: %w", err)
-	}
-
-	if !setting.BooleanValue.Valid {
-		return false, true, nil
-	}
-	return setting.BooleanValue.Bool, true, nil
-}
-
-// GetDateTimeValue returns a datetime setting value by name.
-// Returns (value, exists, error).
-func (s *Service) GetDateTimeValue(ctx context.Context, variableName string) (time.Time, bool, error) {
-	setting, err := s.db.GetSettingByName(ctx, variableName)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return time.Time{}, false, nil
-		}
-		return time.Time{}, false, fmt.Errorf("failed to get setting: %w", err)
-	}
-
-	if !setting.DatetimeValue.Valid {
-		return time.Time{}, true, nil
-	}
-	return setting.DatetimeValue.Time, true, nil
-}
-
-// SetSetting stores or updates a setting with validation based on variable type.
-func (s *Service) SetSetting(ctx context.Context, varName, varType string, values SettingValues) error {
-	switch varType {
-	case "datetime":
-	case "number":
-		if values.NumberValue != nil {
-			if err := validateNumberValue(*values.NumberValue); err != nil {
-				return err
-			}
-		}
-	case "string":
-	case "boolean":
+	case values.BooleanValue != nil:
+		varType = SettingTypeBoolean
+	case values.StringValue != nil:
+		varType = SettingTypeString
+	case values.DateTimeValue != nil:
+		varType = SettingTypeDatetime
 	default:
-		return fmt.Errorf("unknown variable type: %s", varType)
+		return fmt.Errorf("no value provided in SettingValues")
 	}
 
 	params := repository.UpsertSettingParams{
@@ -224,21 +176,21 @@ func (s *Service) SetSetting(ctx context.Context, varName, varType string, value
 // GetReadingSpeedForDisplay returns the current reading speed WPM setting
 // from the database, with fallback to default if not set.
 func (s *Service) GetReadingSpeedForDisplay(ctx context.Context) int {
-	wpm, exists, err := s.GetNumberValue(ctx, "reading_speed_wpm")
-	if err != nil || !exists {
+	setting, exists, err := s.GetSetting(ctx, SettingReadingSpeedWPM)
+	if err != nil || !exists || !setting.IsNumber() {
 		return DefaultReadingSpeedWPM
 	}
-	return int(wpm)
+	return int(setting.GetNumberValue())
 }
 
 // IsDarkModeEnabled returns whether dark mode is enabled.
-// Returns false if not set or on error.
+// Returns true (default) if not set or on error.
 func (s *Service) IsDarkModeEnabled(ctx context.Context) bool {
-	enabled, exists, err := s.GetBooleanValue(ctx, "dark_mode_enabled")
-	if err != nil || !exists {
-		return false
+	setting, exists, err := s.GetSetting(ctx, SettingDarkModeEnabled)
+	if err != nil || !exists || !setting.IsBoolean() {
+		return true // Default to dark mode
 	}
-	return enabled
+	return setting.GetBooleanValue()
 }
 
 // ValidateDateTimeValue validates ISO 8601 format datetime strings.

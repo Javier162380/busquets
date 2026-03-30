@@ -1,9 +1,6 @@
 package claudeviewer
 
-import (
-	"context"
-	"time"
-)
+import "context"
 
 // PlanService defines plan CRUD operations.
 type PlanService interface {
@@ -23,11 +20,8 @@ type VersionService interface {
 
 // SettingsService defines settings operations.
 type SettingsService interface {
-	GetStringValue(ctx context.Context, variableName string) (string, bool, error)
-	GetBooleanValue(ctx context.Context, variableName string) (bool, bool, error)
-	GetNumberValue(ctx context.Context, variableName string) (float64, bool, error)
-	GetDateTimeValue(ctx context.Context, variableName string) (time.Time, bool, error)
-	SetSetting(ctx context.Context, varName, varType string, values SettingValues) error
+	GetSetting(ctx context.Context, variableName string) (Setting, bool, error)
+	SetSetting(ctx context.Context, varName string, values SettingValues) error
 }
 
 // SyncService defines synchronization operations.
