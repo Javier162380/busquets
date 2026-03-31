@@ -37,11 +37,9 @@ type App struct {
 	// Navigation stack.
 	stack []screens.Screen
 
-	// Help overlay (renders on top when visible).
 	showHelp bool
 	help     *screens.HelpScreen
 
-	// Status bar.
 	statusBar *components.StatusBar
 
 	// Dimensions.
@@ -98,12 +96,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 
-	// Global key handling.
 	case tea.KeyMsg:
-		// Clear any error/success messages on new key press.
 		a.statusBar.ClearMessages()
 
-		// Help toggle (always available).
 		if msg.String() == "?" {
 			a.showHelp = !a.showHelp
 			if a.showHelp && a.help == nil {
@@ -112,12 +107,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 
-		// Quit (only from root screen).
-		if (msg.String() == "q" || msg.String() == "ctrl+c") && len(a.stack) == 1 && !a.showHelp {
+		if (msg.String() == "q" || msg.String() == "ctrl+c") && !a.showHelp && len(a.stack) > 0 && !a.stack[len(a.stack)-1].IsInputMode() {
 			return a, tea.Quit
 		}
 
-		// If help is shown, handle help keys.
 		if a.showHelp {
 			if msg.String() == "esc" || msg.String() == "?" {
 				a.showHelp = false
@@ -125,7 +118,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 
-	// Screen navigation messages.
 	case screens.PopScreenMsg:
 		return a, a.popScreen()
 

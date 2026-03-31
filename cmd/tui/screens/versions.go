@@ -325,6 +325,11 @@ func (s *VersionsScreen) ShortHelp() string {
 	}
 }
 
+// IsInputMode returns true when capturing text input.
+func (s *VersionsScreen) IsInputMode() bool {
+	return s.focus == FocusSearch
+}
+
 // updateListItems updates the list with current versions.
 func (s *VersionsScreen) updateListItems() {
 	items := make([]components.ListItem, len(s.versions))

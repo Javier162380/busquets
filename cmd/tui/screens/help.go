@@ -83,7 +83,10 @@ EDITING:
 
 SETTINGS:
   j/k, ↑/↓       Navigate settings
-  Enter/Space    Edit setting / Toggle boolean
+  Enter/Space    Toggle boolean / Edit number
+  0-9            Type digits (in edit mode)
+  Backspace      Delete digit (in edit mode)
+  Enter          Save (in edit mode)
   Esc            Cancel edit / Go back
 
 GENERAL:
@@ -106,6 +109,11 @@ func (s *HelpScreen) SetSize(width, height int) {
 // ShortHelp returns key binding help.
 func (s *HelpScreen) ShortHelp() string {
 	return "Press '?' or 'Esc' to close help"
+}
+
+// IsInputMode returns true when capturing text input.
+func (s *HelpScreen) IsInputMode() bool {
+	return false
 }
 
 // CloseHelpMsg requests closing the help screen.
