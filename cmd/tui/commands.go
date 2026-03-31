@@ -22,6 +22,8 @@ type Service interface {
 	SyncPlans(ctx context.Context) (int, error)
 	RenderMarkdown(content string) (string, error)
 	RestorePlanVersion(ctx context.Context, planName string, versionNumber int64) error
+	GetSetting(ctx context.Context, variableName string) (claudeviewer.Setting, bool, error)
+	SetSetting(ctx context.Context, varName string, values claudeviewer.SettingValues) error
 }
 
 // Command builders.
@@ -161,6 +163,40 @@ func RestoreVersionCmd(svc Service, planName string, versionNumber int64) tea.Cm
 		return screens.RestoreResultMsg{
 			Success:  true,
 			PlanName: planName,
+		}
+	}
+}
+
+// LoadSettingsCmd loads settings by name.
+func LoadSettingsCmd(svc Service, settingNames []string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		settings := make(map[string]claudeviewer.Setting)
+		for _, name := range settingNames {
+			setting, exists, err := svc.GetSetting(ctx, name)
+			if err == nil && exists {
+				settings[name] = setting
+			}
+		}
+		return screens.SettingsLoadedMsg{Settings: settings}
+	}
+}
+
+// SetSettingCmd updates a setting.
+func SetSettingCmd(svc Service, name string, values claudeviewer.SettingValues) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		err := svc.SetSetting(ctx, name, values)
+		if err != nil {
+			return screens.SettingUpdateResultMsg{Error: err}
+		}
+		return screens.SettingUpdateResultMsg{
+			Success:     true,
+			SettingName: name,
 		}
 	}
 }

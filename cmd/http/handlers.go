@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
@@ -166,34 +167,37 @@ func (s *Server) handleGetSetting(c echo.Context, variableName string) error {
 	var defaultValue interface{}
 	values := claudeviewer.SettingValues{}
 
+	// Get the setting using the generic method.
+	setting, exists, err := s.service.GetSetting(ctx, variableName)
+	switch {
+	case errors.Is(err, claudeviewer.ErrSettingNotFound):
+		return c.JSON(http.StatusNotFound, ErrorResponse{
+			Error:   "Setting not found",
+			Details: err.Error(),
+		})
+	case err != nil:
+		return c.JSON(http.StatusInternalServerError, ErrorResponse{
+			Error:   "Failed to fetch setting",
+			Details: err.Error(),
+		})
+	}
+
 	switch variableName {
-	case "reading_speed_wpm":
-		varType = "number"
-		wpm, exists, err := s.service.GetNumberValue(ctx, variableName)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Error:   "Failed to fetch setting",
-				Details: err.Error(),
-			})
-		}
-		if exists && wpm > 0 {
-			values.NumberValue = &wpm
+	case claudeviewer.SettingReadingSpeedWPM:
+		varType = claudeviewer.SettingTypeNumber
+		if exists && setting.IsNumber() {
+			v := setting.GetNumberValue()
+			values.NumberValue = &v
 		}
 		defaultValue = claudeviewer.DefaultReadingSpeedWPM
 
-	case "dark_mode_enabled":
-		varType = "boolean"
-		darkMode, exists, err := s.service.GetBooleanValue(ctx, variableName)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, ErrorResponse{
-				Error:   "Failed to fetch setting",
-				Details: err.Error(),
-			})
+	case claudeviewer.SettingDarkModeEnabled:
+		varType = claudeviewer.SettingTypeBoolean
+		if exists && setting.IsBoolean() {
+			v := setting.GetBooleanValue()
+			values.BooleanValue = &v
 		}
-		if exists {
-			values.BooleanValue = &darkMode
-		}
-		defaultValue = false
+		defaultValue = true // Default to dark mode
 
 	default:
 		return c.JSON(http.StatusNotFound, ErrorResponse{
@@ -221,18 +225,15 @@ func (s *Server) handlePostSetting(c echo.Context, ctx any, variableName string)
 		})
 	}
 
-	var varType string
 	var values claudeviewer.SettingValues
 
 	switch variableName {
-	case "reading_speed_wpm":
-		varType = "number"
+	case claudeviewer.SettingReadingSpeedWPM:
 		values = claudeviewer.SettingValues{
 			NumberValue: req.NumberValue,
 		}
 
-	case "dark_mode_enabled":
-		varType = "boolean"
+	case claudeviewer.SettingDarkModeEnabled:
 		values = claudeviewer.SettingValues{
 			BooleanValue: req.BooleanValue,
 		}
@@ -254,7 +255,7 @@ func (s *Server) handlePostSetting(c echo.Context, ctx any, variableName string)
 		values.DateTimeValue = &parsedTime
 	}
 
-	if err := s.service.SetSetting(reqCtx, variableName, varType, values); err != nil {
+	if err := s.service.SetSetting(reqCtx, variableName, values); err != nil {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "Failed to update setting",
 			Details: err.Error(),

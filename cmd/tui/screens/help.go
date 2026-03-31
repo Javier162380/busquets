@@ -81,7 +81,13 @@ EDITING:
   Ctrl+S         Save and sync changes
   Esc            Cancel without saving
 
+SETTINGS:
+  j/k, ↑/↓       Navigate settings
+  Enter/Space    Edit setting / Toggle boolean
+  Esc            Cancel edit / Go back
+
 GENERAL:
+  S              Open settings
   ?              Toggle this help screen
   q, Ctrl+C      Quit application
 
