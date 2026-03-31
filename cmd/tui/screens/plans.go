@@ -398,6 +398,11 @@ func (s *PlansScreen) ShortHelp() string {
 	return ""
 }
 
+// IsInputMode returns true when capturing text input.
+func (s *PlansScreen) IsInputMode() bool {
+	return s.focus == FocusEditor || s.focus == FocusSearch
+}
+
 // updateListItems updates the list with current plans.
 func (s *PlansScreen) updateListItems() {
 	items := make([]components.ListItem, len(s.plans))

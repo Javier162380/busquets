@@ -21,6 +21,9 @@ type Screen interface {
 
 	// ShortHelp returns key binding help text for the status bar.
 	ShortHelp() string
+
+	// IsInputMode returns true when the screen is capturing text input.
+	IsInputMode() bool
 }
 
 // Layout determines how content is displayed.
