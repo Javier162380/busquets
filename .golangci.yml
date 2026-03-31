@@ -44,16 +44,6 @@ linters:
       rules:
         main:
           deny:
-            - pkg: github.com/messagebird-dev/protobufs
-              desc: use github.com/messagebird-dev/commonlib/schemas/protobuf instead
-            - pkg: github.com/messagebird-dev/schemas
-              desc: use github.com/messagebird-dev/commonlib/schemas/protobuf instead
-            - pkg: github.com/samber/lo
-              desc: use github.com/messagebird-dev/commonlib/slices or github.com/messagebird-dev/commonlib/maps instead, other functionality is banned
-            - pkg: golang.org/x/exp/slices
-              desc: use github.com/messagebird-dev/commonlib/slices instead
-            - pkg: golang.org/x/exp/maps
-              desc: use github.com/messagebird-dev/commonlib/maps instead
             - pkg: github.com/test-go/testify/assert
               desc: use github.com/stretchr/testify/assert instead
             - pkg: github.com/test-go/testify/require
@@ -197,7 +187,6 @@ formatters:
       sections:
         - standard
         - localmodule
-        - prefix(github.com/messagebird-dev)
         - default
       custom-order: true
     gofumpt:
