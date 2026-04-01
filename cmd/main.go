@@ -10,6 +10,9 @@ import (
 
 	httpserver "github.com/Javier162380/claude-plan-viewer/cmd/http"
 	tuiapp "github.com/Javier162380/claude-plan-viewer/cmd/tui"
+	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
+	"github.com/Javier162380/claude-plan-viewer/internal/connectors/telegram"
+	"github.com/Javier162380/claude-plan-viewer/internal/secrets"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 )
 
@@ -139,6 +142,14 @@ func runTUI() error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
+
+	// Initialize connectors
+	registry := connectors.NewRegistry()
+	_ = registry.Register(telegram.New())
+
+	secretsStore := secrets.NewDBStore(repo)
+	connectorManager := connectors.NewManager(registry, repo, secretsStore)
+	service.SetConnectorManager(connectorManager)
 
 	return tuiapp.StartWithOptions(service, debug)
 }

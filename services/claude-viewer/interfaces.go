@@ -29,12 +29,31 @@ type SyncService interface {
 	SyncPlans(ctx context.Context) (int, error)
 }
 
+// ConnectorService defines connector operations.
+type ConnectorService interface {
+	SendToConnector(ctx context.Context, planFileName string) error
+	GetEnabledConnector(ctx context.Context) (*ConnectorInfo, error)
+	ListConnectors(ctx context.Context) ([]ConnectorInfo, error)
+	EnableConnector(ctx context.Context, name string) error
+	DisableConnector(ctx context.Context) error
+	ConfigureConnector(ctx context.Context, connectorName, key, value string, isSecret bool) error
+}
+
+// ConnectorInfo represents connector status.
+type ConnectorInfo struct {
+	Name        string
+	DisplayName string
+	Enabled     bool
+	Configured  bool
+}
+
 // UnifiedService combines all service interfaces for use by HTTP and TUI.
 type UnifiedService interface {
 	PlanService
 	VersionService
 	SettingsService
 	SyncService
+	ConnectorService
 }
 
 // Verify that *Service implements UnifiedService at compile time.

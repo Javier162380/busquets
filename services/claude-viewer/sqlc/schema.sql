@@ -35,3 +35,21 @@ CREATE TABLE IF NOT EXISTS plan_versions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_plan_versions_plan_id ON plan_versions(plan_id);
+
+CREATE TABLE IF NOT EXISTS connectors (
+    name TEXT PRIMARY KEY,
+    display_name TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS connector_settings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    connector_name TEXT NOT NULL,
+    setting_key TEXT NOT NULL,
+    setting_value TEXT NOT NULL,
+    is_secret BOOLEAN NOT NULL DEFAULT 0,
+    UNIQUE(connector_name, setting_key),
+    FOREIGN KEY (connector_name) REFERENCES connectors(name) ON DELETE CASCADE
+);

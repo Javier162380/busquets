@@ -219,6 +219,15 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		}
 		return s, nil
 
+	case "t":
+		// Transmit to connector.
+		if s.current != nil {
+			return s, func() tea.Msg {
+				return SendToConnectorMsg{PlanFileName: s.current.FileName}
+			}
+		}
+		return s, nil
+
 	case "g":
 		s.viewer.GotoTop()
 		return s, nil
@@ -385,7 +394,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.viewer.RenderMode() == components.RenderModeHTML {
 			mode = "HTML"
 		}
-		return fmt.Sprintf("j/k: scroll | g/G: top/bottom | r: render (%s) | e: edit | v: versions | esc: back", mode)
+		return fmt.Sprintf("j/k: scroll | g/G: top/bottom | r: render (%s) | e: edit | v: versions | t: transmit | esc: back", mode)
 	case FocusEditor:
 		modified := ""
 		if s.editor.IsModified() {
@@ -503,3 +512,14 @@ type SearchPlansMsg struct {
 
 // ClearSearchMsg requests clearing search and loading all plans.
 type ClearSearchMsg struct{}
+
+// SendToConnectorMsg requests sending current plan to connector.
+type SendToConnectorMsg struct {
+	PlanFileName string
+}
+
+// SendToConnectorResultMsg is the result of sending to connector.
+type SendToConnectorResultMsg struct {
+	Success bool
+	Error   error
+}

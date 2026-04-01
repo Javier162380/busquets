@@ -22,6 +22,38 @@ func (q *Queries) CountPlans(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const deleteAllConnectorSettings = `-- name: DeleteAllConnectorSettings :exec
+DELETE FROM connector_settings WHERE connector_name = ?
+`
+
+func (q *Queries) DeleteAllConnectorSettings(ctx context.Context, connectorName string) error {
+	_, err := q.db.ExecContext(ctx, deleteAllConnectorSettings, connectorName)
+	return err
+}
+
+const deleteConnector = `-- name: DeleteConnector :exec
+DELETE FROM connectors WHERE name = ?
+`
+
+func (q *Queries) DeleteConnector(ctx context.Context, name string) error {
+	_, err := q.db.ExecContext(ctx, deleteConnector, name)
+	return err
+}
+
+const deleteConnectorSetting = `-- name: DeleteConnectorSetting :exec
+DELETE FROM connector_settings WHERE connector_name = ? AND setting_key = ?
+`
+
+type DeleteConnectorSettingParams struct {
+	ConnectorName string `json:"connector_name"`
+	SettingKey    string `json:"setting_key"`
+}
+
+func (q *Queries) DeleteConnectorSetting(ctx context.Context, arg DeleteConnectorSettingParams) error {
+	_, err := q.db.ExecContext(ctx, deleteConnectorSetting, arg.ConnectorName, arg.SettingKey)
+	return err
+}
+
 const deletePlan = `-- name: DeletePlan :exec
 DELETE FROM plans WHERE file_name = ?
 `
@@ -53,6 +85,75 @@ type DeleteVersionsOlderThanParams struct {
 func (q *Queries) DeleteVersionsOlderThan(ctx context.Context, arg DeleteVersionsOlderThanParams) error {
 	_, err := q.db.ExecContext(ctx, deleteVersionsOlderThan, arg.PlanID, arg.VersionNumber)
 	return err
+}
+
+const disableAllConnectors = `-- name: DisableAllConnectors :exec
+UPDATE connectors SET enabled = 0, updated_at = CURRENT_TIMESTAMP
+`
+
+func (q *Queries) DisableAllConnectors(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, disableAllConnectors)
+	return err
+}
+
+const getConnectorByName = `-- name: GetConnectorByName :one
+
+SELECT name, display_name, enabled, created_at, updated_at FROM connectors WHERE name = ?
+`
+
+// Connector queries
+func (q *Queries) GetConnectorByName(ctx context.Context, name string) (Connector, error) {
+	row := q.db.QueryRowContext(ctx, getConnectorByName, name)
+	var i Connector
+	err := row.Scan(
+		&i.Name,
+		&i.DisplayName,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getConnectorSetting = `-- name: GetConnectorSetting :one
+
+SELECT id, connector_name, setting_key, setting_value, is_secret FROM connector_settings WHERE connector_name = ? AND setting_key = ?
+`
+
+type GetConnectorSettingParams struct {
+	ConnectorName string `json:"connector_name"`
+	SettingKey    string `json:"setting_key"`
+}
+
+// Connector settings queries
+func (q *Queries) GetConnectorSetting(ctx context.Context, arg GetConnectorSettingParams) (ConnectorSetting, error) {
+	row := q.db.QueryRowContext(ctx, getConnectorSetting, arg.ConnectorName, arg.SettingKey)
+	var i ConnectorSetting
+	err := row.Scan(
+		&i.ID,
+		&i.ConnectorName,
+		&i.SettingKey,
+		&i.SettingValue,
+		&i.IsSecret,
+	)
+	return i, err
+}
+
+const getEnabledConnector = `-- name: GetEnabledConnector :one
+SELECT name, display_name, enabled, created_at, updated_at FROM connectors WHERE enabled = 1 LIMIT 1
+`
+
+func (q *Queries) GetEnabledConnector(ctx context.Context) (Connector, error) {
+	row := q.db.QueryRowContext(ctx, getEnabledConnector)
+	var i Connector
+	err := row.Scan(
+		&i.Name,
+		&i.DisplayName,
+		&i.Enabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getLatestVersionNumber = `-- name: GetLatestVersionNumber :one
@@ -347,6 +448,72 @@ func (q *Queries) ListAllPlansWithPagination(ctx context.Context, arg ListAllPla
 	return items, nil
 }
 
+const listConnectorSettings = `-- name: ListConnectorSettings :many
+SELECT id, connector_name, setting_key, setting_value, is_secret FROM connector_settings WHERE connector_name = ?
+`
+
+func (q *Queries) ListConnectorSettings(ctx context.Context, connectorName string) ([]ConnectorSetting, error) {
+	rows, err := q.db.QueryContext(ctx, listConnectorSettings, connectorName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ConnectorSetting{}
+	for rows.Next() {
+		var i ConnectorSetting
+		if err := rows.Scan(
+			&i.ID,
+			&i.ConnectorName,
+			&i.SettingKey,
+			&i.SettingValue,
+			&i.IsSecret,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listConnectors = `-- name: ListConnectors :many
+SELECT name, display_name, enabled, created_at, updated_at FROM connectors ORDER BY name
+`
+
+func (q *Queries) ListConnectors(ctx context.Context) ([]Connector, error) {
+	rows, err := q.db.QueryContext(ctx, listConnectors)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Connector{}
+	for rows.Next() {
+		var i Connector
+		if err := rows.Scan(
+			&i.Name,
+			&i.DisplayName,
+			&i.Enabled,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchPlans = `-- name: SearchPlans :many
 SELECT id, file_name, title, created_at, modified_at, file_size, word_count
 FROM plans
@@ -504,6 +671,15 @@ func (q *Queries) SearchVersionsByContent(ctx context.Context, arg SearchVersion
 	return items, nil
 }
 
+const setConnectorEnabled = `-- name: SetConnectorEnabled :exec
+UPDATE connectors SET enabled = 1, updated_at = CURRENT_TIMESTAMP WHERE name = ?
+`
+
+func (q *Queries) SetConnectorEnabled(ctx context.Context, name string) error {
+	_, err := q.db.ExecContext(ctx, setConnectorEnabled, name)
+	return err
+}
+
 const updatePlan = `-- name: UpdatePlan :exec
 UPDATE plans
 SET title = ?, content = ?, modified_at = ?, indexed_at = ?, file_size = ?, word_count = ?
@@ -529,6 +705,50 @@ func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) error {
 		arg.FileSize,
 		arg.WordCount,
 		arg.FileName,
+	)
+	return err
+}
+
+const upsertConnector = `-- name: UpsertConnector :exec
+INSERT INTO connectors (name, display_name, enabled)
+VALUES (?, ?, ?)
+ON CONFLICT(name) DO UPDATE SET
+    display_name = excluded.display_name,
+    updated_at = CURRENT_TIMESTAMP
+`
+
+type UpsertConnectorParams struct {
+	Name        string `json:"name"`
+	DisplayName string `json:"display_name"`
+	Enabled     bool   `json:"enabled"`
+}
+
+func (q *Queries) UpsertConnector(ctx context.Context, arg UpsertConnectorParams) error {
+	_, err := q.db.ExecContext(ctx, upsertConnector, arg.Name, arg.DisplayName, arg.Enabled)
+	return err
+}
+
+const upsertConnectorSetting = `-- name: UpsertConnectorSetting :exec
+INSERT INTO connector_settings (connector_name, setting_key, setting_value, is_secret)
+VALUES (?, ?, ?, ?)
+ON CONFLICT(connector_name, setting_key) DO UPDATE SET
+    setting_value = excluded.setting_value,
+    is_secret = excluded.is_secret
+`
+
+type UpsertConnectorSettingParams struct {
+	ConnectorName string `json:"connector_name"`
+	SettingKey    string `json:"setting_key"`
+	SettingValue  string `json:"setting_value"`
+	IsSecret      bool   `json:"is_secret"`
+}
+
+func (q *Queries) UpsertConnectorSetting(ctx context.Context, arg UpsertConnectorSettingParams) error {
+	_, err := q.db.ExecContext(ctx, upsertConnectorSetting,
+		arg.ConnectorName,
+		arg.SettingKey,
+		arg.SettingValue,
+		arg.IsSecret,
 	)
 	return err
 }

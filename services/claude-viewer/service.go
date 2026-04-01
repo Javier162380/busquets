@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"time"
 
+	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
 
@@ -35,6 +36,17 @@ type Service struct {
 	indexFullContent bool
 	markdown         goldmark.Markdown
 	nowProvider      NowProvider
+	connectorManager *connectors.Manager
+}
+
+// SetConnectorManager sets the connector manager for the service.
+func (s *Service) SetConnectorManager(manager *connectors.Manager) {
+	s.connectorManager = manager
+}
+
+// DB returns the database queries instance for external use.
+func (s *Service) DB() *repository.Queries {
+	return s.db
 }
 
 // NewRepository creates a new repository with database initialization.

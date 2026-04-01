@@ -88,3 +88,51 @@ SELECT id, plan_id, version_number, file_path, content, word_count, created_at
 FROM plan_versions
 WHERE plan_id = ? AND content LIKE ?
 ORDER BY version_number DESC;
+
+-- Connector queries
+
+-- name: GetConnectorByName :one
+SELECT * FROM connectors WHERE name = ?;
+
+-- name: ListConnectors :many
+SELECT * FROM connectors ORDER BY name;
+
+-- name: GetEnabledConnector :one
+SELECT * FROM connectors WHERE enabled = 1 LIMIT 1;
+
+-- name: UpsertConnector :exec
+INSERT INTO connectors (name, display_name, enabled)
+VALUES (?, ?, ?)
+ON CONFLICT(name) DO UPDATE SET
+    display_name = excluded.display_name,
+    updated_at = CURRENT_TIMESTAMP;
+
+-- name: SetConnectorEnabled :exec
+UPDATE connectors SET enabled = 1, updated_at = CURRENT_TIMESTAMP WHERE name = ?;
+
+-- name: DisableAllConnectors :exec
+UPDATE connectors SET enabled = 0, updated_at = CURRENT_TIMESTAMP;
+
+-- name: DeleteConnector :exec
+DELETE FROM connectors WHERE name = ?;
+
+-- Connector settings queries
+
+-- name: GetConnectorSetting :one
+SELECT * FROM connector_settings WHERE connector_name = ? AND setting_key = ?;
+
+-- name: ListConnectorSettings :many
+SELECT * FROM connector_settings WHERE connector_name = ?;
+
+-- name: UpsertConnectorSetting :exec
+INSERT INTO connector_settings (connector_name, setting_key, setting_value, is_secret)
+VALUES (?, ?, ?, ?)
+ON CONFLICT(connector_name, setting_key) DO UPDATE SET
+    setting_value = excluded.setting_value,
+    is_secret = excluded.is_secret;
+
+-- name: DeleteConnectorSetting :exec
+DELETE FROM connector_settings WHERE connector_name = ? AND setting_key = ?;
+
+-- name: DeleteAllConnectorSettings :exec
+DELETE FROM connector_settings WHERE connector_name = ?;

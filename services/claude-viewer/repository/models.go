@@ -9,6 +9,22 @@ import (
 	"time"
 )
 
+type Connector struct {
+	Name        string    `json:"name"`
+	DisplayName string    `json:"display_name"`
+	Enabled     bool      `json:"enabled"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type ConnectorSetting struct {
+	ID            int64  `json:"id"`
+	ConnectorName string `json:"connector_name"`
+	SettingKey    string `json:"setting_key"`
+	SettingValue  string `json:"setting_value"`
+	IsSecret      bool   `json:"is_secret"`
+}
+
 type Plan struct {
 	ID         int64     `json:"id"`
 	FileName   string    `json:"file_name"`

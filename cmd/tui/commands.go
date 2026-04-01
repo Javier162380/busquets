@@ -24,6 +24,7 @@ type Service interface {
 	RestorePlanVersion(ctx context.Context, planName string, versionNumber int64) error
 	GetSetting(ctx context.Context, variableName string) (claudeviewer.Setting, bool, error)
 	SetSetting(ctx context.Context, varName string, values claudeviewer.SettingValues) error
+	SendToConnector(ctx context.Context, planFileName string) error
 }
 
 // Command builders.
@@ -198,5 +199,19 @@ func SetSettingCmd(svc Service, name string, values claudeviewer.SettingValues) 
 			Success:     true,
 			SettingName: name,
 		}
+	}
+}
+
+// SendToConnectorCmd sends a plan to the enabled connector.
+func SendToConnectorCmd(svc Service, planFileName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		err := svc.SendToConnector(ctx, planFileName)
+		if err != nil {
+			return screens.SendToConnectorResultMsg{Success: false, Error: err}
+		}
+		return screens.SendToConnectorResultMsg{Success: true}
 	}
 }

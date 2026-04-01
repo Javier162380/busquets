@@ -10,9 +10,18 @@ import (
 
 type Querier interface {
 	CountPlans(ctx context.Context) (int64, error)
+	DeleteAllConnectorSettings(ctx context.Context, connectorName string) error
+	DeleteConnector(ctx context.Context, name string) error
+	DeleteConnectorSetting(ctx context.Context, arg DeleteConnectorSettingParams) error
 	DeletePlan(ctx context.Context, fileName string) error
 	DeleteSetting(ctx context.Context, variableName string) error
 	DeleteVersionsOlderThan(ctx context.Context, arg DeleteVersionsOlderThanParams) error
+	DisableAllConnectors(ctx context.Context) error
+	// Connector queries
+	GetConnectorByName(ctx context.Context, name string) (Connector, error)
+	// Connector settings queries
+	GetConnectorSetting(ctx context.Context, arg GetConnectorSettingParams) (ConnectorSetting, error)
+	GetEnabledConnector(ctx context.Context) (Connector, error)
 	GetLatestVersionNumber(ctx context.Context, planID int64) (interface{}, error)
 	GetPlanByFileName(ctx context.Context, fileName string) (Plan, error)
 	GetPlanVersionByNumber(ctx context.Context, arg GetPlanVersionByNumberParams) (PlanVersion, error)
@@ -23,10 +32,15 @@ type Querier interface {
 	InsertPlanVersion(ctx context.Context, arg InsertPlanVersionParams) error
 	ListAllPlans(ctx context.Context) ([]ListAllPlansRow, error)
 	ListAllPlansWithPagination(ctx context.Context, arg ListAllPlansWithPaginationParams) ([]ListAllPlansWithPaginationRow, error)
+	ListConnectorSettings(ctx context.Context, connectorName string) ([]ConnectorSetting, error)
+	ListConnectors(ctx context.Context) ([]Connector, error)
 	SearchPlans(ctx context.Context, arg SearchPlansParams) ([]SearchPlansRow, error)
 	SearchPlansWithPagination(ctx context.Context, arg SearchPlansWithPaginationParams) ([]SearchPlansWithPaginationRow, error)
 	SearchVersionsByContent(ctx context.Context, arg SearchVersionsByContentParams) ([]PlanVersion, error)
+	SetConnectorEnabled(ctx context.Context, name string) error
 	UpdatePlan(ctx context.Context, arg UpdatePlanParams) error
+	UpsertConnector(ctx context.Context, arg UpsertConnectorParams) error
+	UpsertConnectorSetting(ctx context.Context, arg UpsertConnectorSettingParams) error
 	UpsertSetting(ctx context.Context, arg UpsertSettingParams) error
 }
 

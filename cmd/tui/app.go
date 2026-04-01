@@ -32,6 +32,7 @@ type UnifiedService interface {
 	RenderMarkdown(content string) (string, error)
 	GetSetting(ctx context.Context, variableName string) (claudeviewer.Setting, bool, error)
 	SetSetting(ctx context.Context, varName string, values claudeviewer.SettingValues) error
+	SendToConnector(ctx context.Context, planFileName string) error
 }
 
 // App is the root TUI application model.
@@ -238,6 +239,19 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.statusBar.SetSuccess("Setting saved")
 		}
 		return a.delegateToCurrentScreen(msg)
+
+	// Connector messages.
+	case screens.SendToConnectorMsg:
+		a.statusBar.SetLoading("Sending to connector...")
+		return a, SendToConnectorCmd(a.service, msg.PlanFileName)
+
+	case screens.SendToConnectorResultMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError("Send failed: " + msg.Error.Error())
+		} else {
+			a.statusBar.SetSuccess("Sent successfully!")
+		}
+		return a, nil
 
 	case screens.ThemeChangedMsg:
 		// Get current dark mode setting and apply theme.

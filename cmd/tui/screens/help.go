@@ -61,6 +61,7 @@ PLAN VIEW (Fullscreen mode):
   r              Toggle markdown rendering (raw vs HTML)
   e              Enter edit mode
   v              View version history
+  t              Transmit to connector (e.g., Telegram)
   Esc            Back to plans list
 
 VERSION HISTORY (Two-Panel mode):
