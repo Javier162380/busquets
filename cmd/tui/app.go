@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
@@ -10,6 +11,7 @@ import (
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/davecgh/go-spew/spew"
 )
 
 // Ensure UnifiedService satisfies the Service interface used by commands.
@@ -34,7 +36,6 @@ type UnifiedService interface {
 
 // App is the root TUI application model.
 type App struct {
-	// Navigation stack.
 	stack []screens.Screen
 
 	showHelp bool
@@ -42,12 +43,12 @@ type App struct {
 
 	statusBar *components.StatusBar
 
-	// Dimensions.
 	width  int
 	height int
 
-	// Service.
 	service UnifiedService
+
+	dump io.Writer
 }
 
 // New creates a new TUI application.
@@ -56,6 +57,11 @@ func New(service UnifiedService) *App {
 		service:   service,
 		statusBar: components.NewStatusBar(80),
 	}
+}
+
+// SetDump sets the debug dump writer.
+func (a *App) SetDump(w io.Writer) {
+	a.dump = w
 }
 
 // Init initializes the application.
@@ -78,6 +84,10 @@ func (a *App) Init() tea.Cmd {
 
 // Update handles all messages.
 func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if a.dump != nil {
+		spew.Fdump(a.dump, msg)
+	}
+
 	switch msg := msg.(type) {
 	// Window resize - broadcast to all screens.
 	case tea.WindowSizeMsg:

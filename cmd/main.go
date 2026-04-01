@@ -123,6 +123,8 @@ func getPaths() (dbPath, viewerDir, plansDir string, err error) {
 func runTUI() error {
 	ctx := context.Background()
 
+	debug := os.Getenv("DEBUG") == "1"
+
 	dbPath, viewerDir, plansDir, err := getPaths()
 	if err != nil {
 		return err
@@ -133,26 +135,29 @@ func runTUI() error {
 		return fmt.Errorf("failed to initialize repository: %w", err)
 	}
 
-	service, err := claudeviewer.New(repo, viewerDir, plansDir, true) // true = index full content
+	service, err := claudeviewer.New(repo, viewerDir, plansDir, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
 
-	// Type assertion: Service implements UnifiedService
-	return tuiapp.Start(service)
+	return tuiapp.StartWithOptions(service, debug)
 }
 
 func printUsage() {
 	fmt.Println(`Usage: plan-viewer <command>
 
 Commands:
-  sync               Copy and index plans from ~/.claude/plans/
+  sync                Copy and index plans from ~/.claude/plans/
   serve [-addr :port] Start web server (default: :8081)
-  tui                Start terminal user interface
+  tui                 Start terminal user interface
+
+Environment:
+  DEBUG=1             Enable debug mode (logs messages to ~/.claude-viewer/tui-debug.log)
 
 Examples:
   plan-viewer sync
   plan-viewer serve
   plan-viewer serve -addr :3000
-  plan-viewer tui`)
+  plan-viewer tui
+  DEBUG=1 plan-viewer tui`)
 }
