@@ -1,4 +1,4 @@
-.PHONY: help build run sync serve tui test generate clean
+.PHONY: help build run sync serve tui tui-debug test generate clean
 
 help: ## Show this help
 	@echo 'Usage: make [target]'
@@ -23,6 +23,9 @@ serve: build ## Build and run web server
 
 tui: build ## Build and run TUI
 	./bin/plan-viewer tui
+
+tui-debug: build ## Build and run TUI in debug mode (logs to ~/.claude-viewer/tui-debug.log)
+	DEBUG=1 ./bin/plan-viewer tui
 
 test: ## Run tests
 	@echo "Running tests..."
