@@ -178,6 +178,13 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 			return OpenConnectorsMsg{}
 		}
 
+	case "tab":
+		// Switch to content panel (right side) in split view.
+		if s.current != nil {
+			s.focus = FocusContent
+		}
+		return s, nil
+
 	case "j", "down", "k", "up":
 		// Navigate list.
 		cmd := s.list.Update(msg)
@@ -196,11 +203,23 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 // handleContentKey handles keys in content view mode.
 func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
+	case "tab":
+		// Switch back to list panel (left side) in split view.
+		if s.layout == LayoutSplit {
+			s.focus = FocusList
+			return s, nil
+		}
+		return s, nil
+
 	case "esc":
-		// Back to split view.
-		s.layout = LayoutSplit
-		s.focus = FocusList
-		s.viewer.GotoTop()
+		// Back to list (split view) or back to split view (fullscreen).
+		if s.layout == LayoutFullscreen {
+			s.layout = LayoutSplit
+			s.focus = FocusList
+			s.viewer.GotoTop()
+		} else {
+			s.focus = FocusList
+		}
 		return s, nil
 
 	case "e":
@@ -394,11 +413,14 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.searchQuery != "" {
 			searchHelp = fmt.Sprintf("/: search | c: clear [%s]", s.searchQuery)
 		}
-		return fmt.Sprintf("j/k: navigate | v: view | e: edit | s: sync | S: settings | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
+		return fmt.Sprintf("j/k: navigate | tab: content | v: fullscreen | e: edit | s: sync | S: settings | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
 	case FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeHTML {
 			mode = "HTML"
+		}
+		if s.layout == LayoutSplit {
+			return fmt.Sprintf("j/k: scroll | g/G: top/bottom | r: render (%s) | tab: list | esc: back", mode)
 		}
 		return fmt.Sprintf("j/k: scroll | g/G: top/bottom | r: render (%s) | e: edit | v: versions | t: transmit | esc: back", mode)
 	case FocusEditor:

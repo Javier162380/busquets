@@ -44,11 +44,20 @@ Claude Plan Viewer - Keyboard Shortcuts
 
 PLANS LIST (Two-Panel mode):
   j/k, ↑/↓       Navigate plans list
+  Tab            Switch to content panel (right)
   /              Open search bar
   c              Clear search (when search is active)
   v              Enter fullscreen view mode
   e              Enter edit mode
   s              Sync plans from source directory
+
+PLAN CONTENT (Two-Panel mode, right panel):
+  j/k, ↑/↓       Scroll up/down
+  g              Jump to top
+  G              Jump to bottom
+  r              Toggle markdown rendering (raw vs HTML)
+  Tab            Switch to plans list (left)
+  Esc            Back to plans list
 
 SEARCH:
   Enter          Execute search
@@ -62,7 +71,7 @@ PLAN VIEW (Fullscreen mode):
   e              Enter edit mode
   v              View version history
   t              Transmit to connector (e.g., Telegram)
-  Esc            Back to plans list
+  Esc            Back to split view
 
 VERSION HISTORY (Two-Panel mode):
   j/k, ↑/↓       Navigate versions list
