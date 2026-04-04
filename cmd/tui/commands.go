@@ -25,6 +25,11 @@ type Service interface {
 	GetSetting(ctx context.Context, variableName string) (claudeviewer.Setting, bool, error)
 	SetSetting(ctx context.Context, varName string, values claudeviewer.SettingValues) error
 	SendToConnector(ctx context.Context, planFileName string) error
+	ListConnectors(ctx context.Context) ([]claudeviewer.ConnectorInfo, error)
+	EnableConnector(ctx context.Context, name string) error
+	DisableConnector(ctx context.Context) error
+	ConfigureConnector(ctx context.Context, connectorName, key, value string, isSecret bool) error
+	GetConnectorSettings(ctx context.Context, connectorName string) ([]claudeviewer.ConnectorSettingInfo, error)
 }
 
 // Command builders.
@@ -213,5 +218,102 @@ func SendToConnectorCmd(svc Service, planFileName string) tea.Cmd {
 			return screens.SendToConnectorResultMsg{Success: false, Error: err}
 		}
 		return screens.SendToConnectorResultMsg{Success: true}
+	}
+}
+
+// LoadConnectorsCmd loads all available connectors with their status.
+func LoadConnectorsCmd(svc Service) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		connectors, err := svc.ListConnectors(ctx)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+
+		// Convert to screen types
+		statuses := make([]screens.ConnectorStatus, len(connectors))
+		for i, c := range connectors {
+			statuses[i] = screens.ConnectorStatus{
+				Name:        c.Name,
+				DisplayName: c.DisplayName,
+				Enabled:     c.Enabled,
+				Configured:  c.Configured,
+			}
+		}
+		return screens.ConnectorsLoadedMsg{Connectors: statuses}
+	}
+}
+
+// LoadConnectorSettingsCmd loads settings for a specific connector.
+func LoadConnectorSettingsCmd(svc Service, connectorName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		settings, err := svc.GetConnectorSettings(ctx, connectorName)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+
+		// Convert to screen types
+		values := make([]screens.ConnectorSettingValue, len(settings))
+		for i, s := range settings {
+			values[i] = screens.ConnectorSettingValue{
+				Key:         s.Key,
+				DisplayName: s.DisplayName,
+				Description: s.Description,
+				Value:       s.Value,
+				Required:    s.Required,
+				Sensitive:   s.Sensitive,
+			}
+		}
+		return screens.ConnectorSettingsLoadedMsg{
+			ConnectorName: connectorName,
+			Settings:      values,
+		}
+	}
+}
+
+// EnableConnectorCmd enables a specific connector.
+func EnableConnectorCmd(svc Service, name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		err := svc.EnableConnector(ctx, name)
+		if err != nil {
+			return screens.ConnectorUpdateResultMsg{Success: false, Error: err}
+		}
+		return screens.ConnectorUpdateResultMsg{Success: true}
+	}
+}
+
+// DisableConnectorCmd disables all connectors.
+func DisableConnectorCmd(svc Service) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		err := svc.DisableConnector(ctx)
+		if err != nil {
+			return screens.ConnectorUpdateResultMsg{Success: false, Error: err}
+		}
+		return screens.ConnectorUpdateResultMsg{Success: true}
+	}
+}
+
+// SaveConnectorSettingCmd saves a connector setting.
+func SaveConnectorSettingCmd(svc Service, connectorName, key, value string, isSecret bool) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		err := svc.ConfigureConnector(ctx, connectorName, key, value, isSecret)
+		if err != nil {
+			return screens.ConnectorUpdateResultMsg{Success: false, Error: err}
+		}
+		return screens.ConnectorUpdateResultMsg{Success: true}
 	}
 }

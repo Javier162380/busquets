@@ -97,3 +97,39 @@ func (s *Service) ConfigureConnector(ctx context.Context, connectorName, key, va
 	}
 	return s.connectorManager.SetConnectorSetting(ctx, connectorName, key, value, isSecret)
 }
+
+// GetConnectorSettings returns the settings for a connector with their current values.
+func (s *Service) GetConnectorSettings(ctx context.Context, connectorName string) ([]ConnectorSettingInfo, error) {
+	if s.connectorManager == nil {
+		return nil, fmt.Errorf("connector manager not initialized")
+	}
+
+	// Get required settings definitions from the connector
+	definitions, err := s.connectorManager.GetConnectorRequiredSettings(connectorName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build result with current values
+	result := make([]ConnectorSettingInfo, len(definitions))
+	for i, def := range definitions {
+		value, _, _ := s.connectorManager.GetConnectorSetting(ctx, connectorName, def.Key)
+
+		// Mask sensitive values - show empty if not set, masked indicator if set
+		displayValue := value
+		if def.Sensitive && value != "" {
+			displayValue = "••••••••"
+		}
+
+		result[i] = ConnectorSettingInfo{
+			Key:         def.Key,
+			DisplayName: def.DisplayName,
+			Description: def.Description,
+			Value:       displayValue,
+			Required:    def.Required,
+			Sensitive:   def.Sensitive,
+		}
+	}
+
+	return result, nil
+}

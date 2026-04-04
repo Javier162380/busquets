@@ -78,6 +78,14 @@ VERSION VIEW (Fullscreen mode):
   r              Restore this version
   Esc            Back to versions list
 
+CONNECTORS (Two-Panel mode):
+  j/k, ↑/↓       Navigate list / settings
+  Tab            Switch between panels
+  Enter          Enable connector (left panel)
+  e              Edit setting (right panel)
+  d              Disable connector
+  Esc            Back to plans / Cancel edit
+
 EDITING:
   Ctrl+S         Save and sync changes
   Esc            Cancel without saving

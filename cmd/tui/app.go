@@ -33,6 +33,11 @@ type UnifiedService interface {
 	GetSetting(ctx context.Context, variableName string) (claudeviewer.Setting, bool, error)
 	SetSetting(ctx context.Context, varName string, values claudeviewer.SettingValues) error
 	SendToConnector(ctx context.Context, planFileName string) error
+	ListConnectors(ctx context.Context) ([]claudeviewer.ConnectorInfo, error)
+	EnableConnector(ctx context.Context, name string) error
+	DisableConnector(ctx context.Context) error
+	ConfigureConnector(ctx context.Context, connectorName, key, value string, isSecret bool) error
+	GetConnectorSettings(ctx context.Context, connectorName string) ([]claudeviewer.ConnectorSettingInfo, error)
 }
 
 // App is the root TUI application model.
@@ -253,6 +258,42 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 
+	// Connector configuration messages.
+	case screens.OpenConnectorsMsg:
+		return a, a.pushConnectorsScreen()
+
+	case screens.LoadConnectorsMsg:
+		return a, LoadConnectorsCmd(a.service)
+
+	case screens.ConnectorsLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.LoadConnectorSettingsMsg:
+		return a, LoadConnectorSettingsCmd(a.service, msg.ConnectorName)
+
+	case screens.ConnectorSettingsLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.EnableConnectorMsg:
+		a.statusBar.SetLoading("Enabling connector...")
+		return a, EnableConnectorCmd(a.service, msg.Name)
+
+	case screens.DisableConnectorMsg:
+		a.statusBar.SetLoading("Disabling connector...")
+		return a, DisableConnectorCmd(a.service)
+
+	case screens.SaveConnectorSettingMsg:
+		a.statusBar.SetLoading("Saving...")
+		return a, SaveConnectorSettingCmd(a.service, msg.ConnectorName, msg.Key, msg.Value, msg.IsSecret)
+
+	case screens.ConnectorUpdateResultMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError(msg.Error.Error())
+		} else {
+			a.statusBar.SetSuccess("Connector updated")
+		}
+		return a.delegateToCurrentScreen(msg)
+
 	case screens.ThemeChangedMsg:
 		// Get current dark mode setting and apply theme.
 		setting, exists, _ := a.service.GetSetting(context.Background(), claudeviewer.SettingDarkModeEnabled)
@@ -326,4 +367,10 @@ func (a *App) pushSettingsScreen() tea.Cmd {
 	settingsScreen := screens.NewSettingsScreen(a.width, a.height)
 	a.stack = append(a.stack, settingsScreen)
 	return settingsScreen.Init()
+}
+
+func (a *App) pushConnectorsScreen() tea.Cmd {
+	connectorsScreen := screens.NewConnectorsScreen(a.width, a.height)
+	a.stack = append(a.stack, connectorsScreen)
+	return connectorsScreen.Init()
 }

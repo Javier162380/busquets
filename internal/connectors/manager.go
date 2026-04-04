@@ -175,3 +175,12 @@ func (m *Manager) EnsureConnectorExists(ctx context.Context, name string) error 
 		Enabled:     false,
 	})
 }
+
+// GetConnectorRequiredSettings returns the required settings for a connector.
+func (m *Manager) GetConnectorRequiredSettings(connectorName string) ([]SettingDefinition, error) {
+	connector, ok := m.registry.Get(connectorName)
+	if !ok {
+		return nil, fmt.Errorf("connector %q not found", connectorName)
+	}
+	return connector.RequiredSettings(), nil
+}

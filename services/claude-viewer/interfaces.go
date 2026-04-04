@@ -37,6 +37,7 @@ type ConnectorService interface {
 	EnableConnector(ctx context.Context, name string) error
 	DisableConnector(ctx context.Context) error
 	ConfigureConnector(ctx context.Context, connectorName, key, value string, isSecret bool) error
+	GetConnectorSettings(ctx context.Context, connectorName string) ([]ConnectorSettingInfo, error)
 }
 
 // ConnectorInfo represents connector status.
@@ -45,6 +46,16 @@ type ConnectorInfo struct {
 	DisplayName string
 	Enabled     bool
 	Configured  bool
+}
+
+// ConnectorSettingInfo represents a connector setting with its current value.
+type ConnectorSettingInfo struct {
+	Key         string
+	DisplayName string
+	Description string
+	Value       string
+	Required    bool
+	Sensitive   bool
 }
 
 // UnifiedService combines all service interfaces for use by HTTP and TUI.
