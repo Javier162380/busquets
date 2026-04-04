@@ -151,7 +151,7 @@ func runTUI() error {
 	connectorManager := connectors.NewManager(registry, repo, secretsStore)
 	service.SetConnectorManager(connectorManager)
 
-	return tuiapp.StartWithOptions(service, debug)
+	return tuiapp.StartWithOptions(ctx, service, debug)
 }
 
 func printUsage() {

@@ -133,3 +133,11 @@ func (s *Service) GetConnectorSettings(ctx context.Context, connectorName string
 
 	return result, nil
 }
+
+// ValidateConnector validates a connector's configuration.
+func (s *Service) ValidateConnector(ctx context.Context, connectorName string) error {
+	if s.connectorManager == nil {
+		return fmt.Errorf("connector manager not initialized")
+	}
+	return s.connectorManager.ValidateConnector(ctx, connectorName)
+}

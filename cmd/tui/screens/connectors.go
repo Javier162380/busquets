@@ -212,6 +212,15 @@ func (s *ConnectorsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 			}
 		}
 		return s, nil
+
+	case "V":
+		// Validate current connector settings
+		if s.currentConnName != "" {
+			return s, func() tea.Msg {
+				return ValidateConnectorMsg{Name: s.currentConnName}
+			}
+		}
+		return s, nil
 	}
 
 	return s, nil
@@ -409,9 +418,9 @@ func (s *ConnectorsScreen) ShortHelp() string {
 		return "enter: save | esc: cancel"
 	}
 	if s.focusRight {
-		return "j/k: navigate | e: edit | tab: switch | esc: back"
+		return "j/k: navigate | e: edit | V: validate | tab: switch | esc: back"
 	}
-	return "j/k: navigate | enter: enable | d: disable | tab: switch | esc: back"
+	return "j/k: navigate | enter: enable | d: disable | V: validate | tab: switch | esc: back"
 }
 
 // IsInputMode returns true when capturing text input.
@@ -461,6 +470,17 @@ type SaveConnectorSettingMsg struct {
 
 // ConnectorUpdateResultMsg carries result of connector operations.
 type ConnectorUpdateResultMsg struct {
+	Success bool
+	Error   error
+}
+
+// ValidateConnectorMsg requests validating a connector's settings.
+type ValidateConnectorMsg struct {
+	Name string
+}
+
+// ValidateConnectorResultMsg carries the validation result.
+type ValidateConnectorResultMsg struct {
 	Success bool
 	Error   error
 }

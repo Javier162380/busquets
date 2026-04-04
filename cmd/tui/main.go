@@ -2,6 +2,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,8 +12,8 @@ import (
 )
 
 // StartWithOptions launches the TUI application with optional debug mode.
-func StartWithOptions(service UnifiedService, debug bool) error {
-	app := New(service)
+func StartWithOptions(ctx context.Context, service UnifiedService, debug bool) error {
+	app := New(ctx, service)
 
 	if debug {
 		homeDir, err := os.UserHomeDir()

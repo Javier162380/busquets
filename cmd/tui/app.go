@@ -38,10 +38,13 @@ type UnifiedService interface {
 	DisableConnector(ctx context.Context) error
 	ConfigureConnector(ctx context.Context, connectorName, key, value string, isSecret bool) error
 	GetConnectorSettings(ctx context.Context, connectorName string) ([]claudeviewer.ConnectorSettingInfo, error)
+	ValidateConnector(ctx context.Context, connectorName string) error
 }
 
 // App is the root TUI application model.
 type App struct {
+	ctx context.Context
+
 	stack []screens.Screen
 
 	showHelp bool
@@ -58,8 +61,9 @@ type App struct {
 }
 
 // New creates a new TUI application.
-func New(service UnifiedService) *App {
+func New(ctx context.Context, service UnifiedService) *App {
 	return &App{
+		ctx:       ctx,
 		service:   service,
 		statusBar: components.NewStatusBar(80),
 	}
@@ -73,7 +77,7 @@ func (a *App) SetDump(w io.Writer) {
 // Init initializes the application.
 func (a *App) Init() tea.Cmd {
 	// Initialize theme from settings.
-	setting, exists, _ := a.service.GetSetting(context.Background(), claudeviewer.SettingDarkModeEnabled)
+	setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingDarkModeEnabled)
 	darkMode := true // default
 	if exists && setting.IsBoolean() {
 		darkMode = setting.GetBooleanValue()
@@ -85,7 +89,7 @@ func (a *App) Init() tea.Cmd {
 	a.stack = append(a.stack, plansScreen)
 
 	// Load initial plans.
-	return LoadPlansCmd(a.service)
+	return LoadPlansCmd(a.ctx, a.service)
 }
 
 // Update handles all messages.
@@ -139,7 +143,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.RequestVersionsScreenMsg:
 		// Check if versions exist before navigating.
-		return a, LoadVersionsForNavigationCmd(a.service, msg.PlanName)
+		return a, LoadVersionsForNavigationCmd(a.ctx, a.service, msg.PlanName)
 
 	case screens.VersionsNavigationResultMsg:
 		// Check if versions exist.
@@ -176,7 +180,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Show success message and reload plans.
 		a.statusBar.SetSuccess(fmt.Sprintf("Synced %d plans", msg.Count))
-		return a, LoadPlansCmd(a.service)
+		return a, LoadPlansCmd(a.ctx, a.service)
 
 	case screens.ErrorMsg:
 		// Show error in App's status bar (which is rendered).
@@ -185,30 +189,30 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Internal command messages from screens.
 	case screens.LoadPlanDetailMsg:
-		return a, LoadPlanDetailCmd(a.service, msg.FileName)
+		return a, LoadPlanDetailCmd(a.ctx, a.service, msg.FileName)
 
 	case screens.SavePlanMsg:
-		return a, SavePlanCmd(a.service, msg.FileName, msg.Content, msg.Modified)
+		return a, SavePlanCmd(a.ctx, a.service, msg.FileName, msg.Content, msg.Modified)
 
 	case screens.SyncPlansMsg:
 		a.statusBar.SetLoading("Syncing plans...")
-		return a, SyncPlansCmd(a.service)
+		return a, SyncPlansCmd(a.ctx, a.service)
 
 	case screens.LoadVersionsMsg:
-		return a, LoadVersionsCmd(a.service, msg.PlanName)
+		return a, LoadVersionsCmd(a.ctx, a.service, msg.PlanName)
 
 	case screens.SearchPlansMsg:
-		return a, SearchPlansCmd(a.service, msg.Query)
+		return a, SearchPlansCmd(a.ctx, a.service, msg.Query)
 
 	case screens.SearchVersionsMsg:
-		return a, SearchVersionsCmd(a.service, msg.PlanName, msg.Query)
+		return a, SearchVersionsCmd(a.ctx, a.service, msg.PlanName, msg.Query)
 
 	case screens.ClearSearchMsg:
-		return a, LoadPlansCmd(a.service)
+		return a, LoadPlansCmd(a.ctx, a.service)
 
 	case screens.RestoreVersionMsg:
 		a.statusBar.SetLoading("Restoring version...")
-		return a, RestoreVersionCmd(a.service, msg.PlanName, msg.VersionNumber)
+		return a, RestoreVersionCmd(a.ctx, a.service, msg.PlanName, msg.VersionNumber)
 
 	case screens.RestoreResultMsg:
 		if msg.Error != nil {
@@ -220,8 +224,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.popScreen()
 		// Sync and reload plans to show restored content.
 		return a, tea.Batch(
-			SyncPlansCmd(a.service),
-			LoadPlansCmd(a.service),
+			SyncPlansCmd(a.ctx, a.service),
+			LoadPlansCmd(a.ctx, a.service),
 		)
 
 	// Settings messages.
@@ -229,10 +233,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.pushSettingsScreen()
 
 	case screens.LoadSettingsMsg:
-		return a, LoadSettingsCmd(a.service, msg.SettingNames)
+		return a, LoadSettingsCmd(a.ctx, a.service, msg.SettingNames)
 
 	case screens.SaveSettingMsg:
-		return a, SetSettingCmd(a.service, msg.Name, msg.Values)
+		return a, SetSettingCmd(a.ctx, a.service, msg.Name, msg.Values)
 
 	case screens.SettingsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
@@ -248,7 +252,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Connector messages.
 	case screens.SendToConnectorMsg:
 		a.statusBar.SetLoading("Sending to connector...")
-		return a, SendToConnectorCmd(a.service, msg.PlanFileName)
+		return a, SendToConnectorCmd(a.ctx, a.service, msg.PlanFileName)
 
 	case screens.SendToConnectorResultMsg:
 		if msg.Error != nil {
@@ -263,28 +267,28 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.pushConnectorsScreen()
 
 	case screens.LoadConnectorsMsg:
-		return a, LoadConnectorsCmd(a.service)
+		return a, LoadConnectorsCmd(a.ctx, a.service)
 
 	case screens.ConnectorsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
 	case screens.LoadConnectorSettingsMsg:
-		return a, LoadConnectorSettingsCmd(a.service, msg.ConnectorName)
+		return a, LoadConnectorSettingsCmd(a.ctx, a.service, msg.ConnectorName)
 
 	case screens.ConnectorSettingsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
 	case screens.EnableConnectorMsg:
 		a.statusBar.SetLoading("Enabling connector...")
-		return a, EnableConnectorCmd(a.service, msg.Name)
+		return a, EnableConnectorCmd(a.ctx, a.service, msg.Name)
 
 	case screens.DisableConnectorMsg:
 		a.statusBar.SetLoading("Disabling connector...")
-		return a, DisableConnectorCmd(a.service)
+		return a, DisableConnectorCmd(a.ctx, a.service)
 
 	case screens.SaveConnectorSettingMsg:
 		a.statusBar.SetLoading("Saving...")
-		return a, SaveConnectorSettingCmd(a.service, msg.ConnectorName, msg.Key, msg.Value, msg.IsSecret)
+		return a, SaveConnectorSettingCmd(a.ctx, a.service, msg.ConnectorName, msg.Key, msg.Value, msg.IsSecret)
 
 	case screens.ConnectorUpdateResultMsg:
 		if msg.Error != nil {
@@ -294,9 +298,21 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a.delegateToCurrentScreen(msg)
 
+	case screens.ValidateConnectorMsg:
+		a.statusBar.SetLoading("Validating...")
+		return a, ValidateConnectorCmd(a.ctx, a.service, msg.Name)
+
+	case screens.ValidateConnectorResultMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError("Validation failed: " + msg.Error.Error())
+		} else {
+			a.statusBar.SetSuccess("Connector validated successfully!")
+		}
+		return a, nil
+
 	case screens.ThemeChangedMsg:
 		// Get current dark mode setting and apply theme.
-		setting, exists, _ := a.service.GetSetting(context.Background(), claudeviewer.SettingDarkModeEnabled)
+		setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingDarkModeEnabled)
 		darkMode := true // default
 		if exists && setting.IsBoolean() {
 			darkMode = setting.GetBooleanValue()

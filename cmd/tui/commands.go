@@ -30,14 +30,15 @@ type Service interface {
 	DisableConnector(ctx context.Context) error
 	ConfigureConnector(ctx context.Context, connectorName, key, value string, isSecret bool) error
 	GetConnectorSettings(ctx context.Context, connectorName string) ([]claudeviewer.ConnectorSettingInfo, error)
+	ValidateConnector(ctx context.Context, connectorName string) error
 }
 
 // Command builders.
 
 // LoadPlansCmd loads all plans from the service.
-func LoadPlansCmd(svc Service) tea.Cmd {
+func LoadPlansCmd(ctx context.Context, svc Service) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
 		plans, err := svc.ListAllPlansWithReadingTime(ctx)
@@ -49,9 +50,9 @@ func LoadPlansCmd(svc Service) tea.Cmd {
 }
 
 // SearchPlansCmd searches plans by query.
-func SearchPlansCmd(svc Service, query string) tea.Cmd {
+func SearchPlansCmd(ctx context.Context, svc Service, query string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
 		plans, err := svc.SearchPlansWithReadingTime(ctx, query)
@@ -63,9 +64,9 @@ func SearchPlansCmd(svc Service, query string) tea.Cmd {
 }
 
 // LoadPlanDetailCmd loads a specific plan's details.
-func LoadPlanDetailCmd(svc Service, fileName string) tea.Cmd {
+func LoadPlanDetailCmd(ctx context.Context, svc Service, fileName string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
 		detail, err := svc.GetPlanDetailByFileName(ctx, fileName)
@@ -77,9 +78,9 @@ func LoadPlanDetailCmd(svc Service, fileName string) tea.Cmd {
 }
 
 // LoadVersionsCmd loads version history for a plan.
-func LoadVersionsCmd(svc Service, planName string) tea.Cmd {
+func LoadVersionsCmd(ctx context.Context, svc Service, planName string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
 		versions, err := svc.GetPlanVersionHistory(ctx, planName, 0, 100)
@@ -91,9 +92,9 @@ func LoadVersionsCmd(svc Service, planName string) tea.Cmd {
 }
 
 // LoadVersionsForNavigationCmd checks versions before navigating to versions screen.
-func LoadVersionsForNavigationCmd(svc Service, planName string) tea.Cmd {
+func LoadVersionsForNavigationCmd(ctx context.Context, svc Service, planName string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
 		versions, err := svc.GetPlanVersionHistory(ctx, planName, 0, 100)
@@ -108,9 +109,9 @@ func LoadVersionsForNavigationCmd(svc Service, planName string) tea.Cmd {
 }
 
 // SavePlanCmd saves a plan and syncs to source directory.
-func SavePlanCmd(svc Service, fileName, content string, lastModified time.Time) tea.Cmd {
+func SavePlanCmd(ctx context.Context, svc Service, fileName, content string, lastModified time.Time) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
 		req := claudeviewer.UpdatePlanRequest{
@@ -129,9 +130,9 @@ func SavePlanCmd(svc Service, fileName, content string, lastModified time.Time) 
 }
 
 // SyncPlansCmd syncs plans from the source directory.
-func SyncPlansCmd(svc Service) tea.Cmd {
+func SyncPlansCmd(ctx context.Context, svc Service) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
 		count, err := svc.SyncPlans(ctx)
@@ -143,9 +144,9 @@ func SyncPlansCmd(svc Service) tea.Cmd {
 }
 
 // SearchVersionsCmd searches a plan over it's different versions.
-func SearchVersionsCmd(svc Service, currentPlanName, query string) tea.Cmd {
+func SearchVersionsCmd(ctx context.Context, svc Service, currentPlanName, query string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		planVersions, err := svc.SearchVersions(ctx, currentPlanName, query)
 		if err != nil {
@@ -157,9 +158,9 @@ func SearchVersionsCmd(svc Service, currentPlanName, query string) tea.Cmd {
 }
 
 // RestoreVersionCmd restores a plan to a previous version.
-func RestoreVersionCmd(svc Service, planName string, versionNumber int64) tea.Cmd {
+func RestoreVersionCmd(ctx context.Context, svc Service, planName string, versionNumber int64) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
 		err := svc.RestorePlanVersion(ctx, planName, versionNumber)
@@ -174,9 +175,9 @@ func RestoreVersionCmd(svc Service, planName string, versionNumber int64) tea.Cm
 }
 
 // LoadSettingsCmd loads settings by name.
-func LoadSettingsCmd(svc Service, settingNames []string) tea.Cmd {
+func LoadSettingsCmd(ctx context.Context, svc Service, settingNames []string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
 		settings := make(map[string]claudeviewer.Setting)
@@ -191,9 +192,9 @@ func LoadSettingsCmd(svc Service, settingNames []string) tea.Cmd {
 }
 
 // SetSettingCmd updates a setting.
-func SetSettingCmd(svc Service, name string, values claudeviewer.SettingValues) tea.Cmd {
+func SetSettingCmd(ctx context.Context, svc Service, name string, values claudeviewer.SettingValues) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
 		err := svc.SetSetting(ctx, name, values)
@@ -208,9 +209,9 @@ func SetSettingCmd(svc Service, name string, values claudeviewer.SettingValues) 
 }
 
 // SendToConnectorCmd sends a plan to the enabled connector.
-func SendToConnectorCmd(svc Service, planFileName string) tea.Cmd {
+func SendToConnectorCmd(ctx context.Context, svc Service, planFileName string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
 		err := svc.SendToConnector(ctx, planFileName)
@@ -222,9 +223,9 @@ func SendToConnectorCmd(svc Service, planFileName string) tea.Cmd {
 }
 
 // LoadConnectorsCmd loads all available connectors with their status.
-func LoadConnectorsCmd(svc Service) tea.Cmd {
+func LoadConnectorsCmd(ctx context.Context, svc Service) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
 		connectors, err := svc.ListConnectors(ctx)
@@ -247,9 +248,9 @@ func LoadConnectorsCmd(svc Service) tea.Cmd {
 }
 
 // LoadConnectorSettingsCmd loads settings for a specific connector.
-func LoadConnectorSettingsCmd(svc Service, connectorName string) tea.Cmd {
+func LoadConnectorSettingsCmd(ctx context.Context, svc Service, connectorName string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
 		settings, err := svc.GetConnectorSettings(ctx, connectorName)
@@ -277,9 +278,9 @@ func LoadConnectorSettingsCmd(svc Service, connectorName string) tea.Cmd {
 }
 
 // EnableConnectorCmd enables a specific connector.
-func EnableConnectorCmd(svc Service, name string) tea.Cmd {
+func EnableConnectorCmd(ctx context.Context, svc Service, name string) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
 		err := svc.EnableConnector(ctx, name)
@@ -291,9 +292,9 @@ func EnableConnectorCmd(svc Service, name string) tea.Cmd {
 }
 
 // DisableConnectorCmd disables all connectors.
-func DisableConnectorCmd(svc Service) tea.Cmd {
+func DisableConnectorCmd(ctx context.Context, svc Service) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
 		err := svc.DisableConnector(ctx)
@@ -305,9 +306,9 @@ func DisableConnectorCmd(svc Service) tea.Cmd {
 }
 
 // SaveConnectorSettingCmd saves a connector setting.
-func SaveConnectorSettingCmd(svc Service, connectorName, key, value string, isSecret bool) tea.Cmd {
+func SaveConnectorSettingCmd(ctx context.Context, svc Service, connectorName, key, value string, isSecret bool) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
 		err := svc.ConfigureConnector(ctx, connectorName, key, value, isSecret)
@@ -315,5 +316,19 @@ func SaveConnectorSettingCmd(svc Service, connectorName, key, value string, isSe
 			return screens.ConnectorUpdateResultMsg{Success: false, Error: err}
 		}
 		return screens.ConnectorUpdateResultMsg{Success: true}
+	}
+}
+
+// ValidateConnectorCmd validates a connector's settings.
+func ValidateConnectorCmd(ctx context.Context, svc Service, connectorName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		err := svc.ValidateConnector(ctx, connectorName)
+		if err != nil {
+			return screens.ValidateConnectorResultMsg{Success: false, Error: err}
+		}
+		return screens.ValidateConnectorResultMsg{Success: true}
 	}
 }

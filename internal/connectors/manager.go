@@ -184,3 +184,20 @@ func (m *Manager) GetConnectorRequiredSettings(connectorName string) ([]SettingD
 	}
 	return connector.RequiredSettings(), nil
 }
+
+// ValidateConnector validates a connector's configuration.
+func (m *Manager) ValidateConnector(ctx context.Context, connectorName string) error {
+	connector, ok := m.registry.Get(connectorName)
+	if !ok {
+		return fmt.Errorf("connector %q not found", connectorName)
+	}
+
+	// Load config if configurable
+	if cfg, ok := connector.(ConfigurableConnector); ok {
+		if err := cfg.LoadConfig(ctx, m.secrets); err != nil {
+			return fmt.Errorf("failed to load config: %w", err)
+		}
+	}
+
+	return connector.Validate()
+}
