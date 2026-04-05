@@ -142,6 +142,12 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 			}
 		}
 		return s, nil
+	case "tab":
+		// Switch to content panel (right side) in split view.
+		if s.current != nil {
+			s.focus = FocusContent
+		}
+		return s, nil
 	case "esc":
 		return s, func() tea.Msg {
 			return PopScreenMsg{}
@@ -193,6 +199,14 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 
 	case "g":
 		s.viewer.GotoTop()
+		return s, nil
+
+	case "tab":
+		// Switch back to list panel (left side) in split view.
+		if s.layout == LayoutSplit {
+			s.focus = FocusList
+			return s, nil
+		}
 		return s, nil
 
 	case "G":
@@ -315,7 +329,7 @@ func (s *VersionsScreen) ShortHelp() string {
 		if s.searchQuery != "" {
 			searchHelp = fmt.Sprintf("/: search | c: clear [%s]", s.searchQuery)
 		}
-		return fmt.Sprintf("j/k: navigate | v: view | r: restore | %s | esc: back | Versions: %d", searchHelp, len(s.versions))
+		return fmt.Sprintf("j/k: navigate | v: view | r: restore | %s | tab: switch | esc: back | Versions: %d", searchHelp, len(s.versions))
 	case FocusContent:
 		return "j/k: scroll | g/G: top/bottom | r: restore | esc: back"
 	case FocusSearch:
