@@ -1,4 +1,4 @@
-// Package storage provides a context-aware SQLite database client.
+// Package storage provides database clients for SQLite and PostgreSQL.
 package storage
 
 import (
@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	_ "github.com/mattn/go-sqlite3" //nolint:revive,stylecheck // SQLite driver needed.
 )
 
@@ -14,20 +15,32 @@ type DB struct {
 	db *sql.DB
 }
 
-// NewSQLiteClient creates a new DB instance with the given data source name.
-func NewSQLiteClient(ctx context.Context, dataSourceName string, withSchema *string) (*DB, error) {
-	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?cache=shared&mode=rwc", dataSourceName))
+// NewSQLiteClientWithMigrations creates a new DB instance and runs migrations.
+func NewSQLiteClientWithMigrations(_ context.Context, dataSourceName string) (*DB, error) {
+	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?cache=shared&mode=rwc&_busy_timeout=5000&_journal_mode=WAL", dataSourceName))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	if withSchema != nil {
-		if _, err = db.ExecContext(ctx, *withSchema); err != nil {
-			return nil, fmt.Errorf("failed to execute schema: %w", err)
-		}
+	// Limit to single connection to avoid SQLite locking issues
+	db.SetMaxOpenConns(1)
+
+	if err := RunMigrations(db, config.BackendSQLite); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
 	return &DB{db: db}, nil
+}
+
+// Close closes the database connection.
+func (c *DB) Close() error {
+	return c.db.Close()
+}
+
+// DB returns the underlying sql.DB for use with goose.
+func (c *DB) DB() *sql.DB {
+	return c.db
 }
 
 // ExecContext executes a query with the given context and arguments.

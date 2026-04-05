@@ -10,10 +10,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
 
 	"github.com/stretchr/testify/require"
 )
+
+// newTestRepository creates a new SQLite repository with migrations for testing.
+func newTestRepository(ctx context.Context, dbPath string) (*repository.Queries, error) {
+	db, err := storage.NewSQLiteClientWithMigrations(ctx, dbPath)
+	if err != nil {
+		return nil, err
+	}
+	return repository.New(db), nil
+}
 
 type mockNowProvider struct {
 	currentTime time.Time
@@ -90,7 +100,7 @@ func setupTestService(t *testing.T) (*Service, string, string, func()) {
 	require.NoError(t, os.MkdirAll(sourcePlansDir, 0o755))
 
 	ctx := context.Background()
-	db, err := NewRepository(ctx, dbPath)
+	db, err := newTestRepository(ctx, dbPath)
 	require.NoError(t, err)
 
 	service, err := New(db, viewerDir, sourcePlansDir, true)

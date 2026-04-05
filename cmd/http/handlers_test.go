@@ -9,10 +9,21 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
 
 	"github.com/stretchr/testify/require"
 )
+
+// newTestRepository creates a new SQLite repository with migrations for testing.
+func newTestRepository(ctx context.Context, dbPath string) (*repository.Queries, error) {
+	db, err := storage.NewSQLiteClientWithMigrations(ctx, dbPath)
+	if err != nil {
+		return nil, err
+	}
+	return repository.New(db), nil
+}
 
 func setupTestServer(t *testing.T) (*Server, string, func()) {
 	t.Helper()
@@ -28,7 +39,7 @@ func setupTestServer(t *testing.T) (*Server, string, func()) {
 	require.NoError(t, os.MkdirAll(sourcePlansDir, 0o755))
 
 	ctx := context.Background()
-	db, err := claudeviewer.NewRepository(ctx, dbPath)
+	db, err := newTestRepository(ctx, dbPath)
 	require.NoError(t, err)
 
 	service, err := claudeviewer.New(db, viewerDir, sourcePlansDir, true)

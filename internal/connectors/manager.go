@@ -13,12 +13,12 @@ import (
 // Manager orchestrates connector operations.
 type Manager struct {
 	registry *Registry
-	db       *repository.Queries
+	db       repository.Querier
 	secrets  secrets.Store
 }
 
 // NewManager creates a new connector manager.
-func NewManager(registry *Registry, db *repository.Queries, secrets secrets.Store) *Manager {
+func NewManager(registry *Registry, db repository.Querier, secrets secrets.Store) *Manager {
 	return &Manager{
 		registry: registry,
 		db:       db,

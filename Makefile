@@ -1,4 +1,4 @@
-.PHONY: help build run sync serve tui tui-debug test generate clean
+.PHONY: help build run sync serve tui tui-debug test generate clean migrate
 
 help: ## Show this help
 	@echo 'Usage: make [target]'
@@ -26,6 +26,9 @@ tui: build ## Build and run TUI
 
 tui-debug: build ## Build and run TUI in debug mode (logs to ~/.claude-viewer/tui-debug.log)
 	DEBUG=1 ./bin/plan-viewer tui
+
+migrate: build ## Run database migrations
+	./bin/plan-viewer migrate
 
 test: ## Run tests
 	@echo "Running tests..."

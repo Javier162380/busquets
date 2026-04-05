@@ -19,11 +19,12 @@ type Store interface {
 
 // DBStore implements Store using the connector_settings table.
 type DBStore struct {
-	db *repository.Queries
+	db repository.Querier
 }
 
 // NewDBStore creates a new DBStore.
-func NewDBStore(db *repository.Queries) *DBStore {
+// The db parameter can be any type implementing repository.Querier.
+func NewDBStore(db repository.Querier) *DBStore {
 	return &DBStore{db: db}
 }
 
