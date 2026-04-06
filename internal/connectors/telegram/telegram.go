@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
-	"github.com/Javier162380/claude-plan-viewer/internal/secrets"
 )
 
 const (
@@ -70,14 +69,14 @@ func (c *Connector) RequiredSettings() []connectors.SettingDefinition {
 	}
 }
 
-// LoadConfig loads configuration from the secrets store.
-func (c *Connector) LoadConfig(ctx context.Context, store secrets.Store) error {
-	token, _, err := store.Get(ctx, c.Name(), settingBotToken)
+// LoadConfig loads configuration from the setting getter.
+func (c *Connector) LoadConfig(ctx context.Context, getter connectors.SettingGetter) error {
+	token, _, err := getter.GetConnectorSetting(ctx, c.Name(), settingBotToken)
 	if err != nil {
 		return fmt.Errorf("failed to get bot token: %w", err)
 	}
 
-	chatID, _, err := store.Get(ctx, c.Name(), settingChatID)
+	chatID, _, err := getter.GetConnectorSetting(ctx, c.Name(), settingChatID)
 	if err != nil {
 		return fmt.Errorf("failed to get chat ID: %w", err)
 	}
