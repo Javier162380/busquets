@@ -1,16 +1,16 @@
 version: "2"
 sql:
-  # SQLite backend (canonical - types used by service)
+  # SQLite backend
   - engine: "sqlite"
     queries: "services/claude-viewer/sqlc/sqlite/queries.sql"
     schema: "services/claude-viewer/sqlc/sqlite/schema.sql"
     gen:
       go:
-        package: "repository"
-        out: "services/claude-viewer/repository"
+        package: "sqlite"
+        out: "services/claude-viewer/repository/sqlite"
         sql_package: "database/sql"
         emit_json_tags: true
-        emit_interface: true
+        emit_interface: false
         emit_empty_slices: true
 
   # PostgreSQL backend
@@ -23,5 +23,5 @@ sql:
         out: "services/claude-viewer/repository/postgres"
         sql_package: "pgx/v5"
         emit_json_tags: true
-        emit_interface: true
+        emit_interface: false
         emit_empty_slices: true

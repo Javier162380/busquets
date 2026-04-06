@@ -11,18 +11,18 @@ import (
 
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
 
 	"github.com/stretchr/testify/require"
 )
 
 // newTestRepository creates a new SQLite repository with migrations for testing.
-func newTestRepository(ctx context.Context, dbPath string) (*repository.Queries, error) {
+func newTestRepository(ctx context.Context, dbPath string) (*sqlite.Repository, error) {
 	db, err := storage.NewSQLiteClientWithMigrations(ctx, dbPath)
 	if err != nil {
 		return nil, err
 	}
-	return repository.New(db), nil
+	return sqlite.NewRepository(db), nil
 }
 
 func setupTestServer(t *testing.T) (*Server, string, func()) {

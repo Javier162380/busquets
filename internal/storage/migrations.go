@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+
 	"github.com/Javier162380/claude-plan-viewer/internal/config"
 
 	"github.com/pressly/goose/v3"

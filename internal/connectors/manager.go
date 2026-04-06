@@ -7,18 +7,18 @@ import (
 	"fmt"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/secrets"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
 // Manager orchestrates connector operations.
 type Manager struct {
 	registry *Registry
-	db       repository.Querier
+	db       dto.Repository
 	secrets  secrets.Store
 }
 
 // NewManager creates a new connector manager.
-func NewManager(registry *Registry, db repository.Querier, secrets secrets.Store) *Manager {
+func NewManager(registry *Registry, db dto.Repository, secrets secrets.Store) *Manager {
 	return &Manager{
 		registry: registry,
 		db:       db,
@@ -59,7 +59,7 @@ func (m *Manager) EnableConnector(ctx context.Context, name string) error {
 
 	// First ensure the connector exists in DB
 	connector, _ := m.registry.Get(name)
-	err := m.db.UpsertConnector(ctx, repository.UpsertConnectorParams{
+	err := m.db.UpsertConnector(ctx, dto.UpsertConnectorParams{
 		Name:        name,
 		DisplayName: connector.DisplayName(),
 		Enabled:     false,
@@ -88,7 +88,7 @@ func (m *Manager) DisableConnector(ctx context.Context) error {
 
 // SetConnectorSetting saves a setting for a specific connector.
 func (m *Manager) SetConnectorSetting(ctx context.Context, connectorName, key, value string, isSecret bool) error {
-	return m.db.UpsertConnectorSetting(ctx, repository.UpsertConnectorSettingParams{
+	return m.db.UpsertConnectorSetting(ctx, dto.UpsertConnectorSettingParams{
 		ConnectorName: connectorName,
 		SettingKey:    key,
 		SettingValue:  value,
@@ -98,10 +98,7 @@ func (m *Manager) SetConnectorSetting(ctx context.Context, connectorName, key, v
 
 // GetConnectorSetting retrieves a setting for a specific connector.
 func (m *Manager) GetConnectorSetting(ctx context.Context, connectorName, key string) (string, bool, error) {
-	setting, err := m.db.GetConnectorSetting(ctx, repository.GetConnectorSettingParams{
-		ConnectorName: connectorName,
-		SettingKey:    key,
-	})
+	setting, err := m.db.GetConnectorSetting(ctx, connectorName, key)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
@@ -169,7 +166,7 @@ func (m *Manager) EnsureConnectorExists(ctx context.Context, name string) error 
 		return fmt.Errorf("connector %q not registered", name)
 	}
 
-	return m.db.UpsertConnector(ctx, repository.UpsertConnectorParams{
+	return m.db.UpsertConnector(ctx, dto.UpsertConnectorParams{
 		Name:        name,
 		DisplayName: connector.DisplayName(),
 		Enabled:     false,

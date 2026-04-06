@@ -5,11 +5,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
 // GetPlanByFileName retrieves a plan by its file name.
-func (s *Service) GetPlanByFileName(ctx context.Context, fileName string) (*repository.Plan, error) {
+func (s *Service) GetPlanByFileName(ctx context.Context, fileName string) (*dto.Plan, error) {
 	plan, err := s.db.GetPlanByFileName(ctx, fileName)
 	if err != nil {
 		return nil, fmt.Errorf("plan not found: %w", err)

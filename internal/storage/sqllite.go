@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/config"
+
 	_ "github.com/mattn/go-sqlite3" //nolint:revive,stylecheck // SQLite driver needed.
 )
 
@@ -26,7 +27,6 @@ func NewSQLiteClientWithMigrations(_ context.Context, dataSourceName string) (*D
 	db.SetMaxOpenConns(1)
 
 	if err := RunMigrations(db, config.BackendSQLite); err != nil {
-		db.Close()
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 

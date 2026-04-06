@@ -16,8 +16,9 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/internal/secrets"
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/postgres"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
 )
 
 func main() {
@@ -60,7 +61,7 @@ func main() {
 
 // initRepository creates a repository based on the configuration.
 // Returns the repository and a cleanup function.
-func initRepository(ctx context.Context, cfg *config.Config) (repository.Querier, func(), error) {
+func initRepository(ctx context.Context, cfg *config.Config) (dto.Repository, func(), error) {
 	// Ensure viewer directory exists
 	//nolint:gosec // G301: Standard directory permissions for user application directory
 	if err := os.MkdirAll(cfg.Paths.ViewerDir, 0o755); err != nil {
@@ -73,9 +74,9 @@ func initRepository(ctx context.Context, cfg *config.Config) (repository.Querier
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to initialize SQLite: %w", err)
 		}
-		queries := repository.New(db)
+		repo := sqlite.NewRepository(db)
 		cleanup := func() { _ = db.Close() }
-		return queries, cleanup, nil
+		return repo, cleanup, nil
 
 	case config.BackendPostgres:
 		// Run migrations first
@@ -95,10 +96,9 @@ func initRepository(ctx context.Context, cfg *config.Config) (repository.Querier
 			return nil, nil, fmt.Errorf("failed to initialize Postgres: %w", err)
 		}
 
-		queries := postgres.New(pool.Pool())
-		adapter := postgres.NewAdapter(queries)
+		repo := postgres.NewRepository(pool.Pool())
 		cleanup := func() { pool.Close() }
-		return adapter, cleanup, nil
+		return repo, cleanup, nil
 
 	default:
 		return nil, nil, fmt.Errorf("unsupported database backend: %s", cfg.Database.Backend)

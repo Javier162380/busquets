@@ -1,0 +1,505 @@
+// Package postgres represents the postgres repository.
+package postgres
+
+import (
+	"context"
+	"time"
+
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+// Repository implements dto.Repository for PostgreSQL.
+type Repository struct {
+	q *Queries
+}
+
+// NewRepository creates a new PostgreSQL repository.
+func NewRepository(db DBTX) *Repository {
+	return &Repository{q: New(db)}
+}
+
+// Verify interface compliance at compile time.
+var _ dto.Repository = (*Repository)(nil)
+
+// Type conversion helpers: pgtype.* -> Go types
+
+func timestamptzToTime(ts pgtype.Timestamptz) time.Time {
+	if !ts.Valid {
+		return time.Time{}
+	}
+	return ts.Time
+}
+
+func timeToTimestamptz(t time.Time) pgtype.Timestamptz {
+	return pgtype.Timestamptz{Time: t, Valid: true}
+}
+
+func textToPtr(t pgtype.Text) *string {
+	if !t.Valid {
+		return nil
+	}
+	return &t.String
+}
+
+func ptrToText(s *string) pgtype.Text {
+	if s == nil {
+		return pgtype.Text{}
+	}
+	return pgtype.Text{String: *s, Valid: true}
+}
+
+func float8ToPtr(f pgtype.Float8) *float64 {
+	if !f.Valid {
+		return nil
+	}
+	return &f.Float64
+}
+
+func ptrToFloat8(f *float64) pgtype.Float8 {
+	if f == nil {
+		return pgtype.Float8{}
+	}
+	return pgtype.Float8{Float64: *f, Valid: true}
+}
+
+func pgBoolToPtr(b pgtype.Bool) *bool {
+	if !b.Valid {
+		return nil
+	}
+	return &b.Bool
+}
+
+func ptrToPgBool(b *bool) pgtype.Bool {
+	if b == nil {
+		return pgtype.Bool{}
+	}
+	return pgtype.Bool{Bool: *b, Valid: true}
+}
+
+func timestamptzToPtr(ts pgtype.Timestamptz) *time.Time {
+	if !ts.Valid {
+		return nil
+	}
+	return &ts.Time
+}
+
+func ptrToTimestamptz(t *time.Time) pgtype.Timestamptz {
+	if t == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *t, Valid: true}
+}
+
+// Model conversions: SQLC types -> domain types
+
+func planToDomain(p Plan) dto.Plan {
+	return dto.Plan{
+		ID:         int64(p.ID),
+		FileName:   p.FileName,
+		FilePath:   p.FilePath,
+		Title:      p.Title,
+		Content:    p.Content,
+		CreatedAt:  timestamptzToTime(p.CreatedAt),
+		ModifiedAt: timestamptzToTime(p.ModifiedAt),
+		IndexedAt:  timestamptzToTime(p.IndexedAt),
+		FileSize:   p.FileSize,
+		WordCount:  p.WordCount,
+	}
+}
+
+func planSummaryFromListRow(r ListAllPlansRow) dto.PlanSummary {
+	return dto.PlanSummary{
+		ID:         int64(r.ID),
+		FileName:   r.FileName,
+		Title:      r.Title,
+		CreatedAt:  timestamptzToTime(r.CreatedAt),
+		ModifiedAt: timestamptzToTime(r.ModifiedAt),
+		FileSize:   r.FileSize,
+		WordCount:  r.WordCount,
+	}
+}
+
+func planSummaryFromPaginationRow(r ListAllPlansWithPaginationRow) dto.PlanSummary {
+	return dto.PlanSummary{
+		ID:         int64(r.ID),
+		FileName:   r.FileName,
+		Title:      r.Title,
+		CreatedAt:  timestamptzToTime(r.CreatedAt),
+		ModifiedAt: timestamptzToTime(r.ModifiedAt),
+		FileSize:   r.FileSize,
+		WordCount:  r.WordCount,
+	}
+}
+
+func planSummaryFromSearchRow(r SearchPlansRow) dto.PlanSummary {
+	return dto.PlanSummary{
+		ID:         int64(r.ID),
+		FileName:   r.FileName,
+		Title:      r.Title,
+		CreatedAt:  timestamptzToTime(r.CreatedAt),
+		ModifiedAt: timestamptzToTime(r.ModifiedAt),
+		FileSize:   r.FileSize,
+		WordCount:  r.WordCount,
+	}
+}
+
+func planSummaryFromSearchPaginationRow(r SearchPlansWithPaginationRow) dto.PlanSummary {
+	return dto.PlanSummary{
+		ID:         int64(r.ID),
+		FileName:   r.FileName,
+		Title:      r.Title,
+		CreatedAt:  timestamptzToTime(r.CreatedAt),
+		ModifiedAt: timestamptzToTime(r.ModifiedAt),
+		FileSize:   r.FileSize,
+		WordCount:  r.WordCount,
+	}
+}
+
+func planVersionToDomain(pv PlanVersion) dto.PlanVersion {
+	return dto.PlanVersion{
+		ID:            int64(pv.ID),
+		PlanID:        pv.PlanID,
+		VersionNumber: pv.VersionNumber,
+		FilePath:      pv.FilePath,
+		Content:       pv.Content,
+		WordCount:     pv.WordCount,
+		CreatedAt:     timestamptzToTime(pv.CreatedAt),
+	}
+}
+
+func connectorToDomain(c Connector) dto.Connector {
+	return dto.Connector{
+		Name:        c.Name,
+		DisplayName: c.DisplayName,
+		Enabled:     c.Enabled,
+		CreatedAt:   timestamptzToTime(c.CreatedAt),
+		UpdatedAt:   timestamptzToTime(c.UpdatedAt),
+	}
+}
+
+func connectorSettingToDomain(cs ConnectorSetting) dto.ConnectorSetting {
+	return dto.ConnectorSetting{
+		ID:            int64(cs.ID),
+		ConnectorName: cs.ConnectorName,
+		SettingKey:    cs.SettingKey,
+		SettingValue:  cs.SettingValue,
+		IsSecret:      cs.IsSecret,
+	}
+}
+
+func settingToDomain(s Setting) dto.Setting {
+	return dto.Setting{
+		VariableName:  s.VariableName,
+		VariableType:  s.VariableType,
+		StringValue:   textToPtr(s.StringValue),
+		NumberValue:   float8ToPtr(s.NumberValue),
+		BooleanValue:  pgBoolToPtr(s.BooleanValue),
+		DatetimeValue: timestamptzToPtr(s.DatetimeValue),
+	}
+}
+
+// Plan operations
+
+func (r *Repository) CountPlans(ctx context.Context) (int64, error) {
+	return r.q.CountPlans(ctx)
+}
+
+func (r *Repository) GetPlanByFileName(ctx context.Context, fileName string) (dto.Plan, error) {
+	p, err := r.q.GetPlanByFileName(ctx, fileName)
+	if err != nil {
+		return dto.Plan{}, err
+	}
+	return planToDomain(p), nil
+}
+
+func (r *Repository) InsertPlan(ctx context.Context, params dto.InsertPlanParams) error {
+	return r.q.InsertPlan(ctx, InsertPlanParams{
+		FileName:   params.FileName,
+		FilePath:   params.FilePath,
+		Title:      params.Title,
+		Content:    params.Content,
+		CreatedAt:  timeToTimestamptz(params.CreatedAt),
+		ModifiedAt: timeToTimestamptz(params.ModifiedAt),
+		IndexedAt:  timeToTimestamptz(params.IndexedAt),
+		FileSize:   params.FileSize,
+		WordCount:  params.WordCount,
+	})
+}
+
+func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams) error {
+	return r.q.UpdatePlan(ctx, UpdatePlanParams{
+		FileName:   params.FileName,
+		Title:      params.Title,
+		Content:    params.Content,
+		ModifiedAt: timeToTimestamptz(params.ModifiedAt),
+		IndexedAt:  timeToTimestamptz(params.IndexedAt),
+		FileSize:   params.FileSize,
+		WordCount:  params.WordCount,
+	})
+}
+
+func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
+	return r.q.DeletePlan(ctx, fileName)
+}
+
+func (r *Repository) ListAllPlans(ctx context.Context) ([]dto.PlanSummary, error) {
+	rows, err := r.q.ListAllPlans(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.PlanSummary, len(rows))
+	for i, row := range rows {
+		result[i] = planSummaryFromListRow(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) ListAllPlansWithPagination(ctx context.Context, params dto.PaginationParams) ([]dto.PlanSummary, error) {
+	rows, err := r.q.ListAllPlansWithPagination(ctx, ListAllPlansWithPaginationParams{
+		Limit:  int32(params.Limit),
+		Offset: int32(params.Offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.PlanSummary, len(rows))
+	for i, row := range rows {
+		result[i] = planSummaryFromPaginationRow(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) SearchPlans(ctx context.Context, params dto.SearchParams) ([]dto.PlanSummary, error) {
+	searchPattern := "%" + params.Query + "%"
+	rows, err := r.q.SearchPlans(ctx, SearchPlansParams{
+		Title:   searchPattern,
+		Content: searchPattern,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.PlanSummary, len(rows))
+	for i, row := range rows {
+		result[i] = planSummaryFromSearchRow(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) SearchPlansWithPagination(ctx context.Context, params dto.SearchPaginationParams) ([]dto.PlanSummary, error) {
+	searchPattern := "%" + params.Query + "%"
+	rows, err := r.q.SearchPlansWithPagination(ctx, SearchPlansWithPaginationParams{
+		Title:   searchPattern,
+		Content: searchPattern,
+		Limit:   int32(params.Limit),
+		Offset:  int32(params.Offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.PlanSummary, len(rows))
+	for i, row := range rows {
+		result[i] = planSummaryFromSearchPaginationRow(row)
+	}
+	return result, nil
+}
+
+// Plan version operations
+
+func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPlanVersionParams) error {
+	return r.q.InsertPlanVersion(ctx, InsertPlanVersionParams{
+		PlanID:        params.PlanID,
+		VersionNumber: params.VersionNumber,
+		FilePath:      params.FilePath,
+		Content:       params.Content,
+		WordCount:     params.WordCount,
+		CreatedAt:     timeToTimestamptz(params.CreatedAt),
+	})
+}
+
+func (r *Repository) GetPlanVersionHistory(ctx context.Context, params dto.VersionHistoryParams) ([]dto.PlanVersion, error) {
+	rows, err := r.q.GetPlanVersionHistory(ctx, GetPlanVersionHistoryParams{
+		PlanID: params.PlanID,
+		Limit:  int32(params.Limit),
+		Offset: int32(params.Offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.PlanVersion, len(rows))
+	for i, row := range rows {
+		result[i] = planVersionToDomain(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) GetPlanVersionByNumber(ctx context.Context, planID, versionNumber int64) (dto.PlanVersion, error) {
+	pv, err := r.q.GetPlanVersionByNumber(ctx, GetPlanVersionByNumberParams{
+		PlanID:        planID,
+		VersionNumber: versionNumber,
+	})
+	if err != nil {
+		return dto.PlanVersion{}, err
+	}
+	return planVersionToDomain(pv), nil
+}
+
+func (r *Repository) GetLatestVersionNumber(ctx context.Context, planID int64) (int64, error) {
+	result, err := r.q.GetLatestVersionNumber(ctx, planID)
+	if err != nil {
+		return 0, err
+	}
+	// Handle the COALESCE result
+	if result == nil {
+		return 0, nil
+	}
+	return result.(int64), nil
+}
+
+func (r *Repository) GetVersionCount(ctx context.Context, planID int64) (int64, error) {
+	return r.q.GetVersionCount(ctx, planID)
+}
+
+func (r *Repository) DeleteVersionsOlderThan(ctx context.Context, params dto.DeleteVersionsParams) error {
+	return r.q.DeleteVersionsOlderThan(ctx, DeleteVersionsOlderThanParams{
+		PlanID:        params.PlanID,
+		VersionNumber: params.VersionNumber,
+	})
+}
+
+func (r *Repository) SearchVersionsByContent(ctx context.Context, params dto.SearchVersionsParams) ([]dto.PlanVersion, error) {
+	searchPattern := "%" + params.Query + "%"
+	rows, err := r.q.SearchVersionsByContent(ctx, SearchVersionsByContentParams{
+		PlanID:  params.PlanID,
+		Content: searchPattern,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.PlanVersion, len(rows))
+	for i, row := range rows {
+		result[i] = planVersionToDomain(row)
+	}
+	return result, nil
+}
+
+// Setting operations
+
+func (r *Repository) GetSettingByName(ctx context.Context, name string) (dto.Setting, error) {
+	s, err := r.q.GetSettingByName(ctx, name)
+	if err != nil {
+		return dto.Setting{}, err
+	}
+	return settingToDomain(s), nil
+}
+
+func (r *Repository) UpsertSetting(ctx context.Context, params dto.UpsertSettingParams) error {
+	return r.q.UpsertSetting(ctx, UpsertSettingParams{
+		VariableName:  params.VariableName,
+		VariableType:  params.VariableType,
+		StringValue:   ptrToText(params.StringValue),
+		NumberValue:   ptrToFloat8(params.NumberValue),
+		BooleanValue:  ptrToPgBool(params.BooleanValue),
+		DatetimeValue: ptrToTimestamptz(params.DatetimeValue),
+	})
+}
+
+func (r *Repository) DeleteSetting(ctx context.Context, name string) error {
+	return r.q.DeleteSetting(ctx, name)
+}
+
+// Connector operations
+
+func (r *Repository) GetConnectorByName(ctx context.Context, name string) (dto.Connector, error) {
+	c, err := r.q.GetConnectorByName(ctx, name)
+	if err != nil {
+		return dto.Connector{}, err
+	}
+	return connectorToDomain(c), nil
+}
+
+func (r *Repository) ListConnectors(ctx context.Context) ([]dto.Connector, error) {
+	rows, err := r.q.ListConnectors(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.Connector, len(rows))
+	for i, row := range rows {
+		result[i] = connectorToDomain(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) GetEnabledConnector(ctx context.Context) (dto.Connector, error) {
+	c, err := r.q.GetEnabledConnector(ctx)
+	if err != nil {
+		return dto.Connector{}, err
+	}
+	return connectorToDomain(c), nil
+}
+
+func (r *Repository) UpsertConnector(ctx context.Context, params dto.UpsertConnectorParams) error {
+	return r.q.UpsertConnector(ctx, UpsertConnectorParams{
+		Name:        params.Name,
+		DisplayName: params.DisplayName,
+		Enabled:     params.Enabled,
+	})
+}
+
+func (r *Repository) SetConnectorEnabled(ctx context.Context, name string) error {
+	return r.q.SetConnectorEnabled(ctx, name)
+}
+
+func (r *Repository) DisableAllConnectors(ctx context.Context) error {
+	return r.q.DisableAllConnectors(ctx)
+}
+
+func (r *Repository) DeleteConnector(ctx context.Context, name string) error {
+	return r.q.DeleteConnector(ctx, name)
+}
+
+// Connector setting operations
+
+func (r *Repository) GetConnectorSetting(ctx context.Context, connectorName, key string) (dto.ConnectorSetting, error) {
+	cs, err := r.q.GetConnectorSetting(ctx, GetConnectorSettingParams{
+		ConnectorName: connectorName,
+		SettingKey:    key,
+	})
+	if err != nil {
+		return dto.ConnectorSetting{}, err
+	}
+	return connectorSettingToDomain(cs), nil
+}
+
+func (r *Repository) ListConnectorSettings(ctx context.Context, connectorName string) ([]dto.ConnectorSetting, error) {
+	rows, err := r.q.ListConnectorSettings(ctx, connectorName)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.ConnectorSetting, len(rows))
+	for i, row := range rows {
+		result[i] = connectorSettingToDomain(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) UpsertConnectorSetting(ctx context.Context, params dto.UpsertConnectorSettingParams) error {
+	return r.q.UpsertConnectorSetting(ctx, UpsertConnectorSettingParams{
+		ConnectorName: params.ConnectorName,
+		SettingKey:    params.SettingKey,
+		SettingValue:  params.SettingValue,
+		IsSecret:      params.IsSecret,
+	})
+}
+
+func (r *Repository) DeleteConnectorSetting(ctx context.Context, connectorName, key string) error {
+	return r.q.DeleteConnectorSetting(ctx, DeleteConnectorSettingParams{
+		ConnectorName: connectorName,
+		SettingKey:    key,
+	})
+}
+
+func (r *Repository) DeleteAllConnectorSettings(ctx context.Context, connectorName string) error {
+	return r.q.DeleteAllConnectorSettings(ctx, connectorName)
+}

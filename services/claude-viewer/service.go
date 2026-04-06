@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
@@ -24,7 +24,7 @@ func (s systemTimeProvider) Now() time.Time {
 
 // Service represents the Claude Plan Viewer service.
 type Service struct {
-	db               repository.Querier
+	db               dto.Repository
 	viewerDir        string
 	sourcePlansDir   string
 	indexFullContent bool
@@ -38,16 +38,14 @@ func (s *Service) SetConnectorManager(manager *connectors.Manager) {
 	s.connectorManager = manager
 }
 
-// DB returns the database queries instance for external use.
-// Returns the Querier interface which both SQLite and Postgres implement.
-func (s *Service) DB() repository.Querier {
+// DB returns the database repository for external use.
+func (s *Service) DB() dto.Repository {
 	return s.db
 }
 
 // New creates a new Claude Plan Viewer service instance.
-// The db parameter can be either *repository.Queries (SQLite) or
-// *postgres.Adapter (PostgreSQL) - both implement repository.Querier.
-func New(db repository.Querier, viewerDir, sourcePlansDir string, indexFullContent bool) (*Service, error) {
+// The db parameter must implement dto.Repository (sqlite.Repository or postgres.Repository).
+func New(db dto.Repository, viewerDir, sourcePlansDir string, indexFullContent bool) (*Service, error) {
 	md := goldmark.New(
 		goldmark.WithExtensions(extension.GFM),
 		goldmark.WithRendererOptions(html.WithUnsafe()),

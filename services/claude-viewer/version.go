@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
 // SavePlanVersion creates a new version of a plan.
@@ -35,19 +35,9 @@ func (s *Service) SavePlanVersion(ctx context.Context, planName, content string)
 	timestamp := strconv.FormatInt(now.Unix(), 10)
 
 	// Get next version number for UI display (best-effort, not guaranteed unique on concurrent writes)
-	lastVersionNumVal, err := s.db.GetLatestVersionNumber(ctx, plan.ID)
+	lastVersionNum, err := s.db.GetLatestVersionNumber(ctx, plan.ID)
 	if err != nil {
 		return fmt.Errorf("failed to get latest version number: %w", err)
-	}
-
-	var lastVersionNum int64
-	switch v := lastVersionNumVal.(type) {
-	case int64:
-		lastVersionNum = v
-	case int:
-		lastVersionNum = int64(v)
-	default:
-		lastVersionNum = 0
 	}
 	nextVersionNum := lastVersionNum + 1
 
@@ -61,7 +51,7 @@ func (s *Service) SavePlanVersion(ctx context.Context, planName, content string)
 
 	// Step 2: Save to database (timestamp + plan_id ensures uniqueness; race condition safe)
 	wordCount := CountWords(content)
-	err = s.db.InsertPlanVersion(ctx, repository.InsertPlanVersionParams{
+	err = s.db.InsertPlanVersion(ctx, dto.InsertPlanVersionParams{
 		PlanID:        plan.ID,
 		VersionNumber: nextVersionNum,
 		FilePath:      versionFilePath,
@@ -90,7 +80,7 @@ func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, of
 		return nil, fmt.Errorf("plan not found: %w", err)
 	}
 
-	versions, err := s.db.GetPlanVersionHistory(ctx, repository.GetPlanVersionHistoryParams{
+	versions, err := s.db.GetPlanVersionHistory(ctx, dto.VersionHistoryParams{
 		PlanID: plan.ID,
 		Limit:  limit,
 		Offset: offset,
@@ -135,10 +125,7 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName string, versionNu
 		return nil, fmt.Errorf("plan not found: %w", err)
 	}
 
-	version, err := s.db.GetPlanVersionByNumber(ctx, repository.GetPlanVersionByNumberParams{
-		PlanID:        plan.ID,
-		VersionNumber: versionNumber,
-	})
+	version, err := s.db.GetPlanVersionByNumber(ctx, plan.ID, versionNumber)
 	if err != nil {
 		return nil, fmt.Errorf("version not found: %w", err)
 	}
@@ -230,7 +217,7 @@ func (s *Service) CleanupOldVersions(ctx context.Context, planName string, maxVe
 	}
 
 	// Get all versions
-	versions, err := s.db.GetPlanVersionHistory(ctx, repository.GetPlanVersionHistoryParams{
+	versions, err := s.db.GetPlanVersionHistory(ctx, dto.VersionHistoryParams{
 		PlanID: plan.ID,
 		Limit:  1000, // Get all versions
 		Offset: 0,
@@ -255,7 +242,7 @@ func (s *Service) CleanupOldVersions(ctx context.Context, planName string, maxVe
 		if len(versionsToDelete) > 0 {
 			// The highest version number to delete (oldest versions we're removing)
 			cutoffVersionNum := versionsToDelete[0].VersionNumber
-			err = s.db.DeleteVersionsOlderThan(ctx, repository.DeleteVersionsOlderThanParams{
+			err = s.db.DeleteVersionsOlderThan(ctx, dto.DeleteVersionsParams{
 				PlanID:        plan.ID,
 				VersionNumber: cutoffVersionNum,
 			})
@@ -278,10 +265,9 @@ func (s *Service) SearchVersions(ctx context.Context, planName, query string) ([
 	}
 
 	// Search versions with LIKE query (case-insensitive in SQLite)
-	searchPattern := fmt.Sprintf("%%%s%%", query)
-	versions, err := s.db.SearchVersionsByContent(ctx, repository.SearchVersionsByContentParams{
-		PlanID:  plan.ID,
-		Content: searchPattern,
+	versions, err := s.db.SearchVersionsByContent(ctx, dto.SearchVersionsParams{
+		PlanID: plan.ID,
+		Query:  query,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("search failed: %w", err)

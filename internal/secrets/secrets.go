@@ -6,7 +6,7 @@ import (
 	"database/sql"
 	"errors"
 
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
 // Store provides access to secrets (connector tokens, API keys, etc.).
@@ -19,21 +19,18 @@ type Store interface {
 
 // DBStore implements Store using the connector_settings table.
 type DBStore struct {
-	db repository.Querier
+	db dto.Repository
 }
 
 // NewDBStore creates a new DBStore.
-// The db parameter can be any type implementing repository.Querier.
-func NewDBStore(db repository.Querier) *DBStore {
+// The db parameter can be any type implementing dto.Repository.
+func NewDBStore(db dto.Repository) *DBStore {
 	return &DBStore{db: db}
 }
 
 // Get retrieves a secret value for a connector.
 func (s *DBStore) Get(ctx context.Context, connectorName, key string) (string, bool, error) {
-	setting, err := s.db.GetConnectorSetting(ctx, repository.GetConnectorSettingParams{
-		ConnectorName: connectorName,
-		SettingKey:    key,
-	})
+	setting, err := s.db.GetConnectorSetting(ctx, connectorName, key)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
@@ -45,7 +42,7 @@ func (s *DBStore) Get(ctx context.Context, connectorName, key string) (string, b
 
 // Set stores a secret value for a connector.
 func (s *DBStore) Set(ctx context.Context, connectorName, key, value string) error {
-	return s.db.UpsertConnectorSetting(ctx, repository.UpsertConnectorSettingParams{
+	return s.db.UpsertConnectorSetting(ctx, dto.UpsertConnectorSettingParams{
 		ConnectorName: connectorName,
 		SettingKey:    key,
 		SettingValue:  value,
@@ -55,10 +52,7 @@ func (s *DBStore) Set(ctx context.Context, connectorName, key, value string) err
 
 // Delete removes a secret for a connector.
 func (s *DBStore) Delete(ctx context.Context, connectorName, key string) error {
-	return s.db.DeleteConnectorSetting(ctx, repository.DeleteConnectorSettingParams{
-		ConnectorName: connectorName,
-		SettingKey:    key,
-	})
+	return s.db.DeleteConnectorSetting(ctx, connectorName, key)
 }
 
 // List returns all secrets for a connector.

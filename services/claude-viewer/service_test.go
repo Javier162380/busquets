@@ -11,18 +11,19 @@ import (
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
 
 	"github.com/stretchr/testify/require"
 )
 
 // newTestRepository creates a new SQLite repository with migrations for testing.
-func newTestRepository(ctx context.Context, dbPath string) (*repository.Queries, error) {
+func newTestRepository(ctx context.Context, dbPath string) (*sqlite.Repository, error) {
 	db, err := storage.NewSQLiteClientWithMigrations(ctx, dbPath)
 	if err != nil {
 		return nil, err
 	}
-	return repository.New(db), nil
+	return sqlite.NewRepository(db), nil
 }
 
 type mockNowProvider struct {
@@ -1225,7 +1226,7 @@ func TestConcurrentVersionSaves(t *testing.T) {
 
 		// Manually insert version 2 (simulating first concurrent request)
 		fixedTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
-		err = service.db.InsertPlanVersion(ctx, repository.InsertPlanVersionParams{
+		err = service.db.InsertPlanVersion(ctx, dto.InsertPlanVersionParams{
 			PlanID:        plan.ID,
 			VersionNumber: 2,
 			FilePath:      filepath.Join(versionDir, "2-12345.md"),
@@ -1244,7 +1245,7 @@ func TestConcurrentVersionSaves(t *testing.T) {
 		versionFile := filepath.Join(versionDir, "2-"+strconv.FormatInt(fixedTime.Unix(), 10)+".md")
 		require.NoError(t, os.WriteFile(versionFile, []byte("# Version 2 from second request"), 0o600))
 
-		err2 := service.db.InsertPlanVersion(ctx, repository.InsertPlanVersionParams{
+		err2 := service.db.InsertPlanVersion(ctx, dto.InsertPlanVersionParams{
 			PlanID:        plan.ID,
 			VersionNumber: 2, // Same version number - will conflict
 			FilePath:      versionFile,

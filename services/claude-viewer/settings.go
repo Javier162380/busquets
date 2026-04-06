@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
 var (
@@ -84,7 +84,7 @@ func (s *Setting) GetDateValue() time.Time {
 }
 
 func (s *Service) GetSetting(ctx context.Context, variableName string) (Setting, bool, error) {
-	repoSetting, err := s.db.GetSettingByName(ctx, variableName)
+	domainSetting, err := s.db.GetSettingByName(ctx, variableName)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return Setting{}, false, ErrSettingNotFound
@@ -93,21 +93,11 @@ func (s *Service) GetSetting(ctx context.Context, variableName string) (Setting,
 	}
 
 	setting := Setting{
-		SettingName: repoSetting.VariableName,
-	}
-
-	switch {
-	case repoSetting.StringValue.Valid:
-		setting.StringValue = &repoSetting.StringValue.String
-
-	case repoSetting.NumberValue.Valid:
-		setting.NumberValue = &repoSetting.NumberValue.Float64
-
-	case repoSetting.BooleanValue.Valid:
-		setting.BoolValue = &repoSetting.BooleanValue.Bool
-
-	case repoSetting.DatetimeValue.Valid:
-		setting.DateValue = &repoSetting.DatetimeValue.Time
+		SettingName: domainSetting.VariableName,
+		StringValue: domainSetting.StringValue,
+		NumberValue: domainSetting.NumberValue,
+		BoolValue:   domainSetting.BooleanValue,
+		DateValue:   domainSetting.DatetimeValue,
 	}
 	return setting, true, nil
 }
@@ -132,38 +122,13 @@ func (s *Service) SetSetting(ctx context.Context, varName string, values Setting
 		return fmt.Errorf("no value provided in SettingValues")
 	}
 
-	params := repository.UpsertSettingParams{
-		VariableName: varName,
-		VariableType: varType,
-		StringValue: sql.NullString{
-			String: "",
-			Valid:  values.StringValue != nil,
-		},
-		NumberValue: sql.NullFloat64{
-			Float64: 0,
-			Valid:   values.NumberValue != nil,
-		},
-		BooleanValue: sql.NullBool{
-			Bool:  false,
-			Valid: values.BooleanValue != nil,
-		},
-		DatetimeValue: sql.NullTime{
-			Time:  time.Time{},
-			Valid: values.DateTimeValue != nil,
-		},
-	}
-
-	if values.StringValue != nil {
-		params.StringValue.String = *values.StringValue
-	}
-	if values.NumberValue != nil {
-		params.NumberValue.Float64 = *values.NumberValue
-	}
-	if values.BooleanValue != nil {
-		params.BooleanValue.Bool = *values.BooleanValue
-	}
-	if values.DateTimeValue != nil {
-		params.DatetimeValue.Time = *values.DateTimeValue
+	params := dto.UpsertSettingParams{
+		VariableName:  varName,
+		VariableType:  varType,
+		StringValue:   values.StringValue,
+		NumberValue:   values.NumberValue,
+		BooleanValue:  values.BooleanValue,
+		DatetimeValue: values.DateTimeValue,
 	}
 
 	if err := s.db.UpsertSetting(ctx, params); err != nil {

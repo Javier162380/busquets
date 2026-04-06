@@ -2,12 +2,11 @@ package claudeviewer
 
 import (
 	"context"
-	"fmt"
 
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
-func (s *Service) ListAllPlans(ctx context.Context) ([]repository.ListAllPlansRow, error) {
+func (s *Service) ListAllPlans(ctx context.Context) ([]dto.PlanSummary, error) {
 	return s.db.ListAllPlans(ctx)
 }
 
@@ -39,11 +38,7 @@ func (s *Service) SearchPlansWithReadingTime(ctx context.Context, query string) 
 		return s.ListAllPlansWithReadingTime(ctx)
 	}
 
-	searchPattern := fmt.Sprintf("%%%s%%", query)
-	plans, err := s.db.SearchPlans(ctx, repository.SearchPlansParams{
-		Title:   searchPattern,
-		Content: searchPattern,
-	})
+	plans, err := s.db.SearchPlans(ctx, dto.SearchParams{Query: query})
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +62,7 @@ func (s *Service) SearchPlansWithReadingTime(ctx context.Context, query string) 
 
 // ListAllPlansWithPaginationAndReadingTime returns paginated plans with reading time.
 func (s *Service) ListAllPlansWithPaginationAndReadingTime(ctx context.Context, limit, offset int64) ([]PlanSummary, error) {
-	plans, err := s.db.ListAllPlansWithPagination(ctx, repository.ListAllPlansWithPaginationParams{
+	plans, err := s.db.ListAllPlansWithPagination(ctx, dto.PaginationParams{
 		Limit:  limit,
 		Offset: offset,
 	})
@@ -98,12 +93,10 @@ func (s *Service) SearchPlansWithPaginationAndReadingTime(ctx context.Context, q
 		return s.ListAllPlansWithPaginationAndReadingTime(ctx, limit, offset)
 	}
 
-	searchPattern := fmt.Sprintf("%%%s%%", query)
-	plans, err := s.db.SearchPlansWithPagination(ctx, repository.SearchPlansWithPaginationParams{
-		Title:   searchPattern,
-		Content: searchPattern,
-		Limit:   limit,
-		Offset:  offset,
+	plans, err := s.db.SearchPlansWithPagination(ctx, dto.SearchPaginationParams{
+		Query:  query,
+		Limit:  limit,
+		Offset: offset,
 	})
 	if err != nil {
 		return nil, err

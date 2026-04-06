@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
 // UpdatePlanRequest contains the data needed to update a plan.
@@ -78,7 +78,7 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 		return nil, fmt.Errorf("failed to stat updated file: %w", err)
 	}
 
-	err = s.db.UpdatePlan(ctx, repository.UpdatePlanParams{
+	err = s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
 		Title:      title,
 		Content:    contentToStore,
 		ModifiedAt: info.ModTime(),
@@ -145,7 +145,7 @@ func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*Up
 		return nil, fmt.Errorf("failed to stat updated file: %w", err)
 	}
 
-	err = s.db.UpdatePlan(ctx, repository.UpdatePlanParams{
+	err = s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
 		Title:      title,
 		Content:    contentToStore,
 		ModifiedAt: info.ModTime(),

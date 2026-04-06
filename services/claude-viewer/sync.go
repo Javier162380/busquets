@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -125,7 +125,7 @@ func (s *Service) syncSinglePlan(ctx context.Context, fileName string) (bool, er
 	// Update or insert plan
 	if planExists {
 		// Update existing plan
-		err = s.db.UpdatePlan(ctx, repository.UpdatePlanParams{
+		err = s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
 			Title:      title,
 			Content:    contentToStore,
 			ModifiedAt: info.ModTime(),
@@ -141,7 +141,7 @@ func (s *Service) syncSinglePlan(ctx context.Context, fileName string) (bool, er
 	}
 
 	// Insert new plan
-	err = s.db.InsertPlan(ctx, repository.InsertPlanParams{
+	err = s.db.InsertPlan(ctx, dto.InsertPlanParams{
 		FileName:   fileName,
 		FilePath:   destPath,
 		Title:      title,
