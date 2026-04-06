@@ -13,7 +13,6 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors/telegram"
-	"github.com/Javier162380/claude-plan-viewer/internal/secrets"
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
@@ -178,10 +177,7 @@ func runTUI(cfg *config.Config) error {
 	registry := connectors.NewRegistry()
 	_ = registry.Register(telegram.New())
 
-	// For connectors, we need the underlying Querier that supports the connector interface
-	// The secrets store and connector manager need direct DB access
-	secretsStore := secrets.NewDBStore(repo)
-	connectorManager := connectors.NewManager(registry, repo, secretsStore)
+	connectorManager := connectors.NewManager(registry, repo)
 	service.SetConnectorManager(connectorManager)
 
 	return tuiapp.StartWithOptions(ctx, service, debug)

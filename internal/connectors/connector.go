@@ -1,11 +1,7 @@
 // Package connectors provides interfaces and types for external channel connectors.
 package connectors
 
-import (
-	"context"
-
-	"github.com/Javier162380/claude-plan-viewer/internal/secrets"
-)
+import "context"
 
 // SendResult contains the result of a send operation.
 type SendResult struct {
@@ -15,6 +11,8 @@ type SendResult struct {
 }
 
 // Connector defines the interface for external channel connectors.
+//
+//go:generate mockgen -package connectors_test -destination ./test/connector_stub.go . Connector
 type Connector interface {
 	// Name returns the unique identifier for this connector.
 	Name() string
@@ -32,10 +30,15 @@ type Connector interface {
 	RequiredSettings() []SettingDefinition
 }
 
-// ConfigurableConnector can load config from a secrets store.
+// SettingGetter provides access to connector settings.
+type SettingGetter interface {
+	GetConnectorSetting(ctx context.Context, connectorName, key string) (string, bool, error)
+}
+
+// ConfigurableConnector can load config from a setting getter.
 type ConfigurableConnector interface {
 	Connector
-	LoadConfig(ctx context.Context, store secrets.Store) error
+	LoadConfig(ctx context.Context, getter SettingGetter) error
 }
 
 // SettingDefinition describes a configuration setting for a connector.

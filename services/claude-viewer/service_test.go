@@ -10,10 +10,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
+	connectors_test "github.com/Javier162380/claude-plan-viewer/internal/connectors/test"
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -1197,6 +1200,601 @@ func TestVersionOperations(t *testing.T) {
 		results, err = service.SearchVersions(ctx, "search-test.md", "nonexistent")
 		require.NoError(t, err)
 		require.Equal(t, 0, len(results), "should find no versions with 'nonexistent'")
+	})
+}
+
+// setupMockConnector creates a gomock MockConnector with standard expectations.
+func setupMockConnector(ctrl *gomock.Controller, name, displayName string) *connectors_test.MockConnector {
+	mock := connectors_test.NewMockConnector(ctrl)
+	mock.EXPECT().Name().Return(name).AnyTimes()
+	mock.EXPECT().DisplayName().Return(displayName).AnyTimes()
+	mock.EXPECT().RequiredSettings().Return([]connectors.SettingDefinition{
+		{Key: "api_token", DisplayName: "API Token", Required: true, Sensitive: true},
+		{Key: "channel_id", DisplayName: "Channel ID", Required: true, Sensitive: false},
+	}).AnyTimes()
+	return mock
+}
+
+func TestConnectorManager(t *testing.T) {
+	t.Run("GetEnabledConnector returns nil when none enabled", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+
+		connector, err := manager.GetEnabledConnector(ctx)
+		require.NoError(t, err)
+		require.Nil(t, connector)
+	})
+
+	t.Run("EnableConnector fails for unregistered connector", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		registry := connectors.NewRegistry()
+		manager := connectors.NewManager(registry, service.DB())
+
+		err := manager.EnableConnector(ctx, "non-existent")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not registered")
+	})
+
+	t.Run("EnableConnector enables registered connector", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+
+		err := manager.EnableConnector(ctx, "mock-connector")
+		require.NoError(t, err)
+
+		connector, err := manager.GetEnabledConnector(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, connector)
+		require.Equal(t, "mock-connector", connector.Name())
+	})
+
+	t.Run("DisableConnector disables all connectors", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+
+		// First enable
+		require.NoError(t, manager.EnableConnector(ctx, "mock-connector"))
+
+		// Then disable
+		err := manager.DisableConnector(ctx)
+		require.NoError(t, err)
+
+		connector, err := manager.GetEnabledConnector(ctx)
+		require.NoError(t, err)
+		require.Nil(t, connector)
+	})
+
+	t.Run("SetConnectorSetting and GetConnectorSetting", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+
+		err := manager.SetConnectorSetting(ctx, "mock-connector", "api_token", "test-token", true)
+		require.NoError(t, err)
+
+		value, exists, err := manager.GetConnectorSetting(ctx, "mock-connector", "api_token")
+		require.NoError(t, err)
+		require.True(t, exists)
+		require.Equal(t, "test-token", value)
+	})
+
+	t.Run("GetConnectorSetting returns false for non-existent setting", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+
+		_, exists, err := manager.GetConnectorSetting(ctx, "mock-connector", "non-existent")
+		require.NoError(t, err)
+		require.False(t, exists)
+	})
+
+	t.Run("ListAvailable returns all registered connectors with status", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+
+		statuses, err := manager.ListAvailable(ctx)
+		require.NoError(t, err)
+		require.Len(t, statuses, 1)
+		require.Equal(t, "mock-connector", statuses[0].Name)
+		require.Equal(t, "Mock Connector", statuses[0].DisplayName)
+		require.False(t, statuses[0].Enabled)
+		require.False(t, statuses[0].Configured) // No settings configured yet
+	})
+
+	t.Run("ListAvailable shows configured status when required settings present", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+
+		// Set all required settings
+		require.NoError(t, manager.SetConnectorSetting(ctx, "mock-connector", "api_token", "token", true))
+		require.NoError(t, manager.SetConnectorSetting(ctx, "mock-connector", "channel_id", "123", false))
+
+		statuses, err := manager.ListAvailable(ctx)
+		require.NoError(t, err)
+		require.Len(t, statuses, 1)
+		require.True(t, statuses[0].Configured)
+	})
+
+	t.Run("EnsureConnectorExists creates connector record", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+
+		err := manager.EnsureConnectorExists(ctx, "mock-connector")
+		require.NoError(t, err)
+
+		// Should not error on second call (idempotent)
+		err = manager.EnsureConnectorExists(ctx, "mock-connector")
+		require.NoError(t, err)
+	})
+
+	t.Run("EnsureConnectorExists fails for unregistered connector", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		registry := connectors.NewRegistry()
+		manager := connectors.NewManager(registry, service.DB())
+
+		err := manager.EnsureConnectorExists(ctx, "unregistered")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not registered")
+	})
+
+	t.Run("GetConnectorRequiredSettings returns settings definitions", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+
+		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+
+		settings, err := manager.GetConnectorRequiredSettings("mock-connector")
+		require.NoError(t, err)
+		require.Len(t, settings, 2)
+		require.Equal(t, "api_token", settings[0].Key)
+		require.True(t, settings[0].Sensitive)
+		require.Equal(t, "channel_id", settings[1].Key)
+		require.False(t, settings[1].Sensitive)
+	})
+
+	t.Run("GetConnectorRequiredSettings fails for unknown connector", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+
+		registry := connectors.NewRegistry()
+		manager := connectors.NewManager(registry, service.DB())
+
+		_, err := manager.GetConnectorRequiredSettings("unknown")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not found")
+	})
+
+	t.Run("Send fails when no connector enabled", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+
+		_, err := manager.Send(ctx, "Title", "Content")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no connector enabled")
+	})
+
+	t.Run("Send calls connector with correct arguments", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
+
+		// Expect Validate and Send to be called with specific arguments
+		mockConn.EXPECT().Validate().Return(nil).Times(1)
+		mockConn.EXPECT().Send(gomock.Any(), "Test Title", "Test Content").Return(
+			&connectors.SendResult{Success: true, MessageID: "msg-123"},
+			nil,
+		).Times(1)
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+
+		require.NoError(t, manager.EnableConnector(ctx, "mock-connector"))
+
+		result, err := manager.Send(ctx, "Test Title", "Test Content")
+		require.NoError(t, err)
+		require.True(t, result.Success)
+		require.Equal(t, "msg-123", result.MessageID)
+	})
+
+	t.Run("Send fails when connector validation fails", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
+
+		// Expect Validate to fail
+		mockConn.EXPECT().Validate().Return(fmt.Errorf("missing api_token")).Times(1)
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+
+		require.NoError(t, manager.EnableConnector(ctx, "mock-connector"))
+
+		_, err := manager.Send(ctx, "Title", "Content")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "validation failed")
+		require.Contains(t, err.Error(), "missing api_token")
+	})
+
+	t.Run("Send returns error from connector", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
+
+		mockConn.EXPECT().Validate().Return(nil).Times(1)
+		mockConn.EXPECT().Send(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+			nil,
+			fmt.Errorf("network timeout"),
+		).Times(1)
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+
+		require.NoError(t, manager.EnableConnector(ctx, "mock-connector"))
+
+		_, err := manager.Send(ctx, "Title", "Content")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "network timeout")
+	})
+}
+
+func TestServiceConnectorOperations(t *testing.T) {
+	t.Run("Operations fail when connector manager not set", func(t *testing.T) {
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		// Service has no connector manager by default
+
+		err := service.EnableConnector(ctx, "any")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not initialized")
+
+		err = service.DisableConnector(ctx)
+		require.Error(t, err)
+
+		err = service.ConfigureConnector(ctx, "any", "key", "value", false)
+		require.Error(t, err)
+
+		_, err = service.GetConnectorSettings(ctx, "any")
+		require.Error(t, err)
+
+		err = service.ValidateConnector(ctx, "any")
+		require.Error(t, err)
+	})
+
+	t.Run("ListConnectors returns nil when manager not set", func(t *testing.T) {
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		infos, err := service.ListConnectors(ctx)
+		require.NoError(t, err)
+		require.Nil(t, infos)
+	})
+
+	t.Run("GetEnabledConnector returns nil when manager not set", func(t *testing.T) {
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		info, err := service.GetEnabledConnector(ctx)
+		require.NoError(t, err)
+		require.Nil(t, info)
+	})
+
+	t.Run("Full connector workflow through service", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "test-conn", "Test Connector")
+
+		// Expect validate and send for the SendToConnector call
+		mockConn.EXPECT().Validate().Return(nil).Times(1)
+		mockConn.EXPECT().Send(gomock.Any(), "Test Plan", "# Test Plan\n\nContent to send").Return(
+			&connectors.SendResult{Success: true, MessageID: "sent-123"},
+			nil,
+		).Times(1)
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+		service.SetConnectorManager(manager)
+
+		// List connectors
+		infos, err := service.ListConnectors(ctx)
+		require.NoError(t, err)
+		require.Len(t, infos, 1)
+		require.Equal(t, "test-conn", infos[0].Name)
+
+		// Enable connector
+		err = service.EnableConnector(ctx, "test-conn")
+		require.NoError(t, err)
+
+		// Get enabled connector
+		info, err := service.GetEnabledConnector(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, info)
+		require.Equal(t, "test-conn", info.Name)
+		require.True(t, info.Enabled)
+
+		// Configure connector
+		err = service.ConfigureConnector(ctx, "test-conn", "api_token", "my-secret-token", true)
+		require.NoError(t, err)
+
+		// Get connector settings (should mask sensitive values)
+		settings, err := service.GetConnectorSettings(ctx, "test-conn")
+		require.NoError(t, err)
+		require.Len(t, settings, 2)
+
+		// Find api_token setting
+		var tokenSetting ConnectorSettingInfo
+		for _, s := range settings {
+			if s.Key == "api_token" {
+				tokenSetting = s
+				break
+			}
+		}
+		require.Equal(t, "api_token", tokenSetting.Key)
+		require.Equal(t, "••••••••", tokenSetting.Value) // Should be masked
+		require.True(t, tokenSetting.Sensitive)
+
+		// Create a plan and send to connector
+		createTestPlanFile(t, sourcePlansDir, "connector-test.md", "# Test Plan\n\nContent to send")
+		_, err = service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		err = service.SendToConnector(ctx, "connector-test.md")
+		require.NoError(t, err)
+
+		// Disable connector
+		err = service.DisableConnector(ctx)
+		require.NoError(t, err)
+
+		info, err = service.GetEnabledConnector(ctx)
+		require.NoError(t, err)
+		require.Nil(t, info)
+	})
+
+	t.Run("SendToConnector fails when no connector enabled", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "test-conn", "Test Connector")
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+		service.SetConnectorManager(manager)
+
+		// Create a plan
+		createTestPlanFile(t, sourcePlansDir, "send-test.md", "# Test Plan")
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		// Try to send - should fail (no connector enabled)
+		err = service.SendToConnector(ctx, "send-test.md")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no connector enabled")
+	})
+
+	t.Run("SendToConnector fails for non-existent plan", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "test-conn", "Test Connector")
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+		service.SetConnectorManager(manager)
+		require.NoError(t, manager.EnableConnector(ctx, "test-conn"))
+
+		err := service.SendToConnector(ctx, "non-existent.md")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to get plan")
+	})
+
+	t.Run("ValidateConnector calls connector Validate", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "test-conn", "Test Connector")
+
+		// Expect Validate to be called and return an error
+		mockConn.EXPECT().Validate().Return(fmt.Errorf("api_token is required")).Times(1)
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+		service.SetConnectorManager(manager)
+
+		err := service.ValidateConnector(ctx, "test-conn")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "api_token is required")
+	})
+
+	t.Run("ValidateConnector succeeds when connector is valid", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "test-conn", "Test Connector")
+
+		// Expect Validate to succeed
+		mockConn.EXPECT().Validate().Return(nil).Times(1)
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+		service.SetConnectorManager(manager)
+
+		err := service.ValidateConnector(ctx, "test-conn")
+		require.NoError(t, err)
 	})
 }
 

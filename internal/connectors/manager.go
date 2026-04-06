@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/Javier162380/claude-plan-viewer/internal/secrets"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
@@ -14,15 +13,13 @@ import (
 type Manager struct {
 	registry *Registry
 	db       dto.Repository
-	secrets  secrets.Store
 }
 
 // NewManager creates a new connector manager.
-func NewManager(registry *Registry, db dto.Repository, secrets secrets.Store) *Manager {
+func NewManager(registry *Registry, db dto.Repository) *Manager {
 	return &Manager{
 		registry: registry,
 		db:       db,
-		secrets:  secrets,
 	}
 }
 
@@ -41,9 +38,9 @@ func (m *Manager) GetEnabledConnector(ctx context.Context) (Connector, error) {
 		return nil, fmt.Errorf("enabled connector %q not found in registry", row.Name)
 	}
 
-	// Load config from secrets if supported
+	// Load config if supported
 	if cfg, ok := connector.(ConfigurableConnector); ok {
-		if err := cfg.LoadConfig(ctx, m.secrets); err != nil {
+		if err := cfg.LoadConfig(ctx, m); err != nil {
 			return nil, fmt.Errorf("failed to load config for %q: %w", row.Name, err)
 		}
 	}
@@ -191,7 +188,7 @@ func (m *Manager) ValidateConnector(ctx context.Context, connectorName string) e
 
 	// Load config if configurable
 	if cfg, ok := connector.(ConfigurableConnector); ok {
-		if err := cfg.LoadConfig(ctx, m.secrets); err != nil {
+		if err := cfg.LoadConfig(ctx, m); err != nil {
 			return fmt.Errorf("failed to load config: %w", err)
 		}
 	}
