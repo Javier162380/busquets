@@ -12,7 +12,7 @@ import (
 func (s *Service) GetPlanByFileName(ctx context.Context, fileName string) (*dto.Plan, error) {
 	plan, err := s.db.GetPlanByFileName(ctx, fileName)
 	if err != nil {
-		return nil, fmt.Errorf("plan not found: %w", err)
+		return nil, err
 	}
 	return &plan, nil
 }

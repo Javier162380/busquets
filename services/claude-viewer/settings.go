@@ -2,18 +2,10 @@ package claudeviewer
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
-)
-
-var (
-	ErrSettingNotFound    = errors.New("setting not found")
-	ErrInvalidDateFormat  = errors.New("invalid datetime format")
-	ErrInvalidNumberValue = errors.New("invalid number value")
 )
 
 // Setting type constants.
@@ -86,10 +78,10 @@ func (s *Setting) GetDateValue() time.Time {
 func (s *Service) GetSetting(ctx context.Context, variableName string) (Setting, bool, error) {
 	domainSetting, err := s.db.GetSettingByName(ctx, variableName)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return Setting{}, false, ErrSettingNotFound
+		if dto.IsNotFound(err) {
+			return Setting{}, false, dto.ErrNotFound
 		}
-		return Setting{}, false, fmt.Errorf("%w: %s", ErrSettingNotFound, variableName)
+		return Setting{}, false, err
 	}
 
 	setting := Setting{
@@ -119,7 +111,7 @@ func (s *Service) SetSetting(ctx context.Context, varName string, values Setting
 	case values.DateTimeValue != nil:
 		varType = SettingTypeDatetime
 	default:
-		return fmt.Errorf("no value provided in SettingValues")
+		return dto.ErrNoValue
 	}
 
 	params := dto.UpsertSettingParams{
@@ -176,7 +168,7 @@ func ValidateDateTimeValue(value string) (time.Time, error) {
 		}
 	}
 
-	return time.Time{}, fmt.Errorf("%w: expected ISO 8601 format (e.g., 2024-03-15T10:30:00Z)", ErrInvalidDateFormat)
+	return time.Time{}, dto.ErrInvalidDateFormat
 }
 
 // validateNumberValue validates numeric values with optional bounds.
@@ -184,7 +176,7 @@ func validateNumberValue(value float64) error {
 	// Add specific validation for reading speed WPM if needed
 	// For now, just ensure it's a reasonable positive number
 	if value <= 0 {
-		return fmt.Errorf("number value must be positive")
+		return dto.ErrInvalidNumber
 	}
 	return nil
 }

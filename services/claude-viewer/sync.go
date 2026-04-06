@@ -2,8 +2,6 @@ package claudeviewer
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -88,11 +86,11 @@ func (s *Service) syncSinglePlan(ctx context.Context, fileName string) (bool, er
 			// File hasn't changed since last sync, skip
 			return false, nil
 		}
-	} else if !errors.Is(err, sql.ErrNoRows) {
+	} else if !dto.IsNotFound(err) {
 		// Unexpected database error
 		return false, fmt.Errorf("failed to check existing plan: %w", err)
 	}
-	// If err == sql.ErrNoRows, this is a new file, proceed with sync
+	// If dto.IsNotFound(err), this is a new file, proceed with sync
 
 	// Copy file
 	if err := copyFile(sourcePath, destPath); err != nil {

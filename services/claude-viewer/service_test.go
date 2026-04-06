@@ -1249,7 +1249,7 @@ func TestConnectorManager(t *testing.T) {
 
 		err := manager.EnableConnector(ctx, "non-existent")
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "not registered")
+		require.True(t, dto.IsNotFound(err), "expected not found error, got: %v", err)
 	})
 
 	t.Run("EnableConnector enables registered connector", func(t *testing.T) {
@@ -1432,7 +1432,7 @@ func TestConnectorManager(t *testing.T) {
 
 		err := manager.EnsureConnectorExists(ctx, "unregistered")
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "not registered")
+		require.True(t, dto.IsNotFound(err), "expected not found error, got: %v", err)
 	})
 
 	t.Run("GetConnectorRequiredSettings returns settings definitions", func(t *testing.T) {
@@ -1747,7 +1747,7 @@ func TestServiceConnectorOperations(t *testing.T) {
 
 		err := service.SendToConnector(ctx, "non-existent.md")
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "failed to get plan")
+		require.True(t, dto.IsNotFound(err), "expected not found error, got: %v", err)
 	})
 
 	t.Run("ValidateConnector calls connector Validate", func(t *testing.T) {

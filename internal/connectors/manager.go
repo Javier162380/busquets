@@ -2,7 +2,6 @@ package connectors
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 
@@ -26,7 +25,7 @@ func NewManager(registry *Registry, db dto.Repository) *Manager {
 // GetEnabledConnector returns the currently enabled connector, if any.
 func (m *Manager) GetEnabledConnector(ctx context.Context) (Connector, error) {
 	row, err := m.db.GetEnabledConnector(ctx)
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, dto.ErrNoConnectorEnabled) {
 		return nil, nil
 	}
 	if err != nil {
@@ -51,7 +50,7 @@ func (m *Manager) GetEnabledConnector(ctx context.Context) (Connector, error) {
 // EnableConnector enables a specific connector by name (disables all others).
 func (m *Manager) EnableConnector(ctx context.Context, name string) error {
 	if _, ok := m.registry.Get(name); !ok {
-		return fmt.Errorf("connector %q not registered", name)
+		return dto.ErrNotFound
 	}
 
 	// First ensure the connector exists in DB
@@ -96,7 +95,7 @@ func (m *Manager) SetConnectorSetting(ctx context.Context, connectorName, key, v
 // GetConnectorSetting retrieves a setting for a specific connector.
 func (m *Manager) GetConnectorSetting(ctx context.Context, connectorName, key string) (string, bool, error) {
 	setting, err := m.db.GetConnectorSetting(ctx, connectorName, key)
-	if errors.Is(err, sql.ErrNoRows) {
+	if dto.IsNotFound(err) {
 		return "", false, nil
 	}
 	if err != nil {
@@ -112,7 +111,7 @@ func (m *Manager) Send(ctx context.Context, title, content string) (*SendResult,
 		return nil, err
 	}
 	if connector == nil {
-		return nil, fmt.Errorf("no connector enabled")
+		return nil, dto.ErrNoConnectorEnabled
 	}
 
 	if err := connector.Validate(); err != nil {
@@ -160,7 +159,7 @@ func (m *Manager) isConfigured(ctx context.Context, c Connector) bool {
 func (m *Manager) EnsureConnectorExists(ctx context.Context, name string) error {
 	connector, ok := m.registry.Get(name)
 	if !ok {
-		return fmt.Errorf("connector %q not registered", name)
+		return dto.ErrNotFound
 	}
 
 	return m.db.UpsertConnector(ctx, dto.UpsertConnectorParams{
@@ -174,7 +173,7 @@ func (m *Manager) EnsureConnectorExists(ctx context.Context, name string) error 
 func (m *Manager) GetConnectorRequiredSettings(connectorName string) ([]SettingDefinition, error) {
 	connector, ok := m.registry.Get(connectorName)
 	if !ok {
-		return nil, fmt.Errorf("connector %q not found", connectorName)
+		return nil, dto.ErrNotFound
 	}
 	return connector.RequiredSettings(), nil
 }
@@ -183,7 +182,7 @@ func (m *Manager) GetConnectorRequiredSettings(connectorName string) ([]SettingD
 func (m *Manager) ValidateConnector(ctx context.Context, connectorName string) error {
 	connector, ok := m.registry.Get(connectorName)
 	if !ok {
-		return fmt.Errorf("connector %q not found", connectorName)
+		return dto.ErrNotFound
 	}
 
 	// Load config if configurable

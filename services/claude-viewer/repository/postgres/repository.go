@@ -3,10 +3,12 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -208,6 +210,9 @@ func (r *Repository) CountPlans(ctx context.Context) (int64, error) {
 
 func (r *Repository) GetPlanByFileName(ctx context.Context, fileName string) (dto.Plan, error) {
 	p, err := r.q.GetPlanByFileName(ctx, fileName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dto.Plan{}, dto.ErrNotFound
+	}
 	if err != nil {
 		return dto.Plan{}, err
 	}
@@ -339,6 +344,9 @@ func (r *Repository) GetPlanVersionByNumber(ctx context.Context, planID, version
 		PlanID:        planID,
 		VersionNumber: versionNumber,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dto.PlanVersion{}, dto.ErrNotFound
+	}
 	if err != nil {
 		return dto.PlanVersion{}, err
 	}
@@ -388,6 +396,9 @@ func (r *Repository) SearchVersionsByContent(ctx context.Context, params dto.Sea
 
 func (r *Repository) GetSettingByName(ctx context.Context, name string) (dto.Setting, error) {
 	s, err := r.q.GetSettingByName(ctx, name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dto.Setting{}, dto.ErrNotFound
+	}
 	if err != nil {
 		return dto.Setting{}, err
 	}
@@ -413,6 +424,9 @@ func (r *Repository) DeleteSetting(ctx context.Context, name string) error {
 
 func (r *Repository) GetConnectorByName(ctx context.Context, name string) (dto.Connector, error) {
 	c, err := r.q.GetConnectorByName(ctx, name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dto.Connector{}, dto.ErrNotFound
+	}
 	if err != nil {
 		return dto.Connector{}, err
 	}
@@ -433,6 +447,9 @@ func (r *Repository) ListConnectors(ctx context.Context) ([]dto.Connector, error
 
 func (r *Repository) GetEnabledConnector(ctx context.Context) (dto.Connector, error) {
 	c, err := r.q.GetEnabledConnector(ctx)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dto.Connector{}, dto.ErrNoConnectorEnabled
+	}
 	if err != nil {
 		return dto.Connector{}, err
 	}
@@ -466,6 +483,9 @@ func (r *Repository) GetConnectorSetting(ctx context.Context, connectorName, key
 		ConnectorName: connectorName,
 		SettingKey:    key,
 	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dto.ConnectorSetting{}, dto.ErrNotFound
+	}
 	if err != nil {
 		return dto.ConnectorSetting{}, err
 	}
