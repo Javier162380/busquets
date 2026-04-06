@@ -2,19 +2,20 @@ package claudeviewer
 
 import (
 	"context"
-	"fmt"
+
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
 // SendToConnector sends a plan to the enabled connector.
 func (s *Service) SendToConnector(ctx context.Context, planFileName string) error {
 	if s.connectorManager == nil {
-		return fmt.Errorf("connector manager not initialized")
+		return dto.ErrConnectorDisabled
 	}
 
 	// Get the plan content
 	plan, err := s.GetPlanDetailByFileName(ctx, planFileName)
 	if err != nil {
-		return fmt.Errorf("failed to get plan: %w", err)
+		return err
 	}
 
 	// Send through connector manager
@@ -77,7 +78,7 @@ func (s *Service) ListConnectors(ctx context.Context) ([]ConnectorInfo, error) {
 // EnableConnector enables a specific connector.
 func (s *Service) EnableConnector(ctx context.Context, name string) error {
 	if s.connectorManager == nil {
-		return fmt.Errorf("connector manager not initialized")
+		return dto.ErrConnectorDisabled
 	}
 	return s.connectorManager.EnableConnector(ctx, name)
 }
@@ -85,7 +86,7 @@ func (s *Service) EnableConnector(ctx context.Context, name string) error {
 // DisableConnector disables all connectors.
 func (s *Service) DisableConnector(ctx context.Context) error {
 	if s.connectorManager == nil {
-		return fmt.Errorf("connector manager not initialized")
+		return dto.ErrConnectorDisabled
 	}
 	return s.connectorManager.DisableConnector(ctx)
 }
@@ -93,7 +94,7 @@ func (s *Service) DisableConnector(ctx context.Context) error {
 // ConfigureConnector sets a configuration value for a connector.
 func (s *Service) ConfigureConnector(ctx context.Context, connectorName, key, value string, isSecret bool) error {
 	if s.connectorManager == nil {
-		return fmt.Errorf("connector manager not initialized")
+		return dto.ErrConnectorDisabled
 	}
 	return s.connectorManager.SetConnectorSetting(ctx, connectorName, key, value, isSecret)
 }
@@ -101,7 +102,7 @@ func (s *Service) ConfigureConnector(ctx context.Context, connectorName, key, va
 // GetConnectorSettings returns the settings for a connector with their current values.
 func (s *Service) GetConnectorSettings(ctx context.Context, connectorName string) ([]ConnectorSettingInfo, error) {
 	if s.connectorManager == nil {
-		return nil, fmt.Errorf("connector manager not initialized")
+		return nil, dto.ErrConnectorDisabled
 	}
 
 	// Get required settings definitions from the connector
@@ -137,7 +138,7 @@ func (s *Service) GetConnectorSettings(ctx context.Context, connectorName string
 // ValidateConnector validates a connector's configuration.
 func (s *Service) ValidateConnector(ctx context.Context, connectorName string) error {
 	if s.connectorManager == nil {
-		return fmt.Errorf("connector manager not initialized")
+		return dto.ErrConnectorDisabled
 	}
 	return s.connectorManager.ValidateConnector(ctx, connectorName)
 }

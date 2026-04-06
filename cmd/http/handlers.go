@@ -2,12 +2,12 @@ package http
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"html/template"
 	"net/http"
 
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
 	"github.com/labstack/echo/v4"
 )
@@ -170,7 +170,7 @@ func (s *Server) handleGetSetting(c echo.Context, variableName string) error {
 	// Get the setting using the generic method.
 	setting, exists, err := s.service.GetSetting(ctx, variableName)
 	switch {
-	case errors.Is(err, claudeviewer.ErrSettingNotFound):
+	case dto.IsNotFound(err):
 		return c.JSON(http.StatusNotFound, ErrorResponse{
 			Error:   "Setting not found",
 			Details: err.Error(),
