@@ -4,13 +4,15 @@ This guide helps agents understand the codebase structure, conventions, and work
 
 ## Project Overview
 
-Claude Plan Viewer is a Go web application that:
-- Syncs Claude AI plans from `~/.claude/plans/` to a local SQLite database
-- Provides full-text search across plans
-- Renders markdown plans with syntax highlighting in a web interface
-- Tracks reading time, word count, and file metadata
+Claude Plan Viewer is a Go application that:
+- Syncs Claude AI plans from `~/.claude/plans/` to a database (SQLite or PostgreSQL)
+- Provides a Terminal User Interface (TUI) for browsing and viewing plans
+- Supports full-text search across plans
+- Tracks plan versions, reading time, word count, and file metadata
+- Includes a connector system for sending plans to external services (e.g., Telegram)
+- Optionally serves plans via HTTP API
 
-**Main commands**: `sync` (index plans) and `serve` (start web server on :8081)
+**Main commands**: `sync`, `tui`, `serve`, `migrate`
 
 ## Essential Commands
 
@@ -18,356 +20,361 @@ Claude Plan Viewer is a Go web application that:
 ```bash
 make build           # Build binary to bin/plan-viewer
 make sync            # Sync plans from ~/.claude/plans/ to database
-make serve           # Start web server (default :8081, custom with -addr :3000)
-make test            # Run all tests with verbose output
-make generate        # Regenerate SQLC code (run after schema/query changes)
+make tui             # Start terminal user interface
+make serve           # Start web server (default :8081)
+make test            # Run all tests
+make generate        # Regenerate SQLC code for both SQLite and PostgreSQL
 make deps            # Download and tidy dependencies
-make clean           # Remove build artifacts and generated repository code
+make clean           # Remove build artifacts
 ```
 
 ### Development Workflow
-1. **After modifying SQL schema** (`services/claude-viewer/sqlc/schema.sql`) or **queries** (`services/claude-viewer/sqlc/queries.sql`):
+1. **After modifying SQL schema or queries**:
    ```bash
-   make generate  # Regenerates services/claude-viewer/repository/ code
+   make generate  # Regenerates repository code for both database backends
    ```
-   - Do NOT hand-edit files in `services/claude-viewer/repository/` - they are SQLC-generated
-   - Changes to `queries.sql` create new methods on the `Queries` struct
+   - SQLite: `services/claude-viewer/repository/sqlite/`
+   - PostgreSQL: `services/claude-viewer/repository/postgres/`
+   - Do NOT hand-edit generated files (`queries.sql.go`, `models.go`, `db.go`)
 
 2. **Before committing**:
    ```bash
    make test      # Verify tests pass
    ```
 
-3. **Quick iteration during development**:
+3. **Quick iteration**:
    ```bash
-   go run cmd/main.go sync    # Run sync without full build
-   go run cmd/main.go serve   # Run server without full build
+   go run cmd/main.go sync
+   go run cmd/main.go tui
+   DEBUG=1 go run cmd/main.go tui  # Enable debug mode
    ```
 
 ## Project Structure
 
 ```
 .
-├── cmd/                          # CLI entry point and HTTP server
-│   ├── main.go                  # Command router (sync/serve)
-│   └── http/                    # Web server
-│       ├── server.go            # Echo server setup
-│       ├── handlers.go          # HTTP route handlers
-│       ├── types.go             # Request/response types
-│       └── templates/           # HTML templates
+├── cmd/                              # CLI entry points
+│   ├── main.go                       # Command router (sync/serve/tui/migrate)
+│   ├── http/                         # HTTP server
+│   │   ├── server.go                 # Echo server setup
+│   │   ├── handlers.go               # HTTP route handlers
+│   │   └── types.go                  # Request/response types
+│   └── tui/                          # Terminal User Interface
+│       ├── app.go                    # TUI application entry
+│       ├── screens/                  # Screen implementations
+│       ├── components/               # Reusable UI components
+│       ├── content/                  # Content rendering
+│       └── styles/                   # Styling definitions
 │
-├── services/claude-viewer/       # Core business logic
-│   ├── service.go               # Service initialization
-│   ├── sync.go                  # Plan synchronization logic
-│   ├── search.go                # Search functionality
-│   ├── update.go                # Plan update operations
-│   ├── viewer.go                # Plan rendering
-│   ├── settings.go              # Settings management
-│   ├── types.go                 # Domain types (PlanSummary, PlanDetail, etc.)
-│   ├── service_test.go          # Comprehensive test suite
-│   ├── repository/              # SQLC-generated database layer (AUTO-GENERATED)
-│   │   ├── models.go            # Generated struct types from schema
-│   │   ├── queries.sql.go       # Generated query methods
-│   │   ├── querier.go           # Generated query interface
-│   │   └── db.go                # Database connection wrapper
-│   └── sqlc/                    # SQL definitions for SQLC code generation
-│       ├── schema.sql           # Database schema (2 tables: plans, settings)
-│       └── queries.sql          # Parameterized queries (13 queries defined)
+├── services/claude-viewer/           # Core business logic
+│   ├── service.go                    # Service initialization
+│   ├── sync.go                       # Plan synchronization
+│   ├── search.go                     # Search functionality
+│   ├── version.go                    # Plan versioning
+│   ├── settings.go                   # Settings management
+│   ├── connector.go                  # Connector operations
+│   ├── types.go                      # Domain types (PlanSummary, PlanDetail)
+│   ├── service_test.go               # Comprehensive test suite (~1800 lines)
+│   │
+│   ├── dto/                          # Data Transfer Objects (shared types)
+│   │   ├── models.go                 # Plan, PlanVersion, Connector, Setting
+│   │   ├── params.go                 # Parameter structs for mutations
+│   │   └── repository.go             # Repository interface (45 methods)
+│   │
+│   ├── repository/
+│   │   ├── sqlite/                   # SQLite implementation
+│   │   │   ├── repository.go         # Implements dto.Repository
+│   │   │   ├── queries.sql.go        # SQLC-generated (DO NOT EDIT)
+│   │   │   ├── models.go             # SQLC-generated (DO NOT EDIT)
+│   │   │   └── db.go                 # SQLC-generated (DO NOT EDIT)
+│   │   └── postgres/                 # PostgreSQL implementation
+│   │       ├── repository.go         # Implements dto.Repository
+│   │       ├── queries.sql.go        # SQLC-generated (DO NOT EDIT)
+│   │       ├── models.go             # SQLC-generated (DO NOT EDIT)
+│   │       └── db.go                 # SQLC-generated (DO NOT EDIT)
+│   │
+│   └── sqlc/                         # SQL definitions
+│       ├── sqlite/
+│       │   ├── schema.sql            # SQLite schema
+│       │   └── queries.sql           # SQLite queries
+│       └── postgres/
+│           ├── schema.sql            # PostgreSQL schema
+│           └── queries.sql           # PostgreSQL queries
 │
-├── internal/storage/            # Database infrastructure
-│   └── db.go                    # SQLite connection setup
+├── internal/
+│   ├── config/                       # Configuration loading
+│   │   └── config.go                 # TOML config, env vars
+│   ├── connectors/                   # External service connectors
+│   │   ├── connector.go              # Connector interface, SettingGetter
+│   │   ├── manager.go                # Connector orchestration
+│   │   ├── registry.go               # Connector registration
+│   │   ├── telegram/                 # Telegram connector implementation
+│   │   │   └── telegram.go
+│   │   └── test/                     # Generated mocks
+│   │       └── connector_stub.go     # gomock-generated
+│   └── storage/                      # Database infrastructure
+│       ├── sqlite.go                 # SQLite connection + migrations
+│       └── postgres.go               # PostgreSQL connection + migrations
 │
-├── go.mod / go.sum              # Go module dependencies
-├── Makefile                     # Build and task automation
-├── .golangci.yml                # Linting configuration (23 linters enabled)
-├── .tool-versions               # Tool versions (Go 1.25.3, golangci-lint 2.8.0)
-├── sqlc.yaml                    # SQLC code generation config
-└── README.md                    # User documentation
+├── sqlc.yaml                         # SQLC config (both engines)
+├── plan-viewer.toml.example          # Example configuration file
+└── Makefile                          # Build automation
 ```
 
-## Code Organization & Patterns
+## Architecture
 
-### Service Layer Pattern
-The `Service` struct in `services/claude-viewer/service.go` is the main business logic container:
+### Repository Pattern with Two Implementations
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Service Layer                         │
+│              (uses dto.Repository interface)             │
+│              (uses dto.Plan, dto.Setting, etc.)          │
+├─────────────────────────────────────────────────────────┤
+│     SQLite Implementation   │   Postgres Implementation  │
+│   (implements Repository)   │   (implements Repository)  │
+│   converts: sql.Null* →     │   converts: pgtype.* →     │
+│             dto types       │             dto types      │
+├─────────────────────────────────────────────────────────┤
+│   SQLC-generated queries    │   SQLC-generated queries   │
+│   (internal to sqlite pkg)  │   (internal to postgres)   │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Key principle**: Service layer uses only `dto.Repository` interface and `dto.*` types. Each database implementation converts its SQLC types internally.
+
+### Connector System
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                     Service                              │
+│              (has ConnectorManager)                      │
+├─────────────────────────────────────────────────────────┤
+│                  ConnectorManager                        │
+│   - Registry (available connectors)                      │
+│   - dto.Repository (settings storage)                    │
+│   - Implements SettingGetter interface                   │
+├─────────────────────────────────────────────────────────┤
+│     Connector Interface     │  ConfigurableConnector     │
+│   - Name()                  │  - LoadConfig(SettingGetter)│
+│   - DisplayName()           │                            │
+│   - Send(title, content)    │                            │
+│   - Validate()              │                            │
+│   - RequiredSettings()      │                            │
+└─────────────────────────────────────────────────────────┘
+```
+
+## Code Patterns
+
+### Service Layer
 ```go
 type Service struct {
-    db               *repository.Queries   // Database queries
-    viewerDir        string                // ~/.claude-viewer
-    sourcePlansDir   string                // ~/.claude/plans
-    indexFullContent bool                 // Whether to store full content or just title
-    markdown         goldmark.Markdown    // Markdown renderer
-    nowProvider      NowProvider           // Injected time provider (testable)
+    db               dto.Repository    // Database operations
+    viewerDir        string            // ~/.claude-viewer
+    sourcePlansDir   string            // ~/.claude/plans
+    indexFullContent bool              // Store full content or just title
+    markdown         goldmark.Markdown // Markdown renderer
+    nowProvider      NowProvider       // Injected time (testable)
+    connectorManager *connectors.Manager
 }
 ```
 
-Key pattern: **NowProvider interface** allows injecting time in tests instead of using `time.Now()` directly.
-
-### Database Layer (SQLC)
-- **Schema**: Two tables: `plans` (indexed markdown files) and `settings` (key-value store)
-- **Query definitions**: `services/claude-viewer/sqlc/queries.sql` 
-- **Generated code**: Never hand-edit; regenerate with `make generate`
-- **Query syntax**: Named queries with `:one`, `:many`, `:exec` directives
-  - `:exec` - No return value
-  - `:one` - Returns single row
-  - `:many` - Returns multiple rows
-
-### Error Handling
-- Use standard Go error wrapping: `fmt.Errorf("context: %w", err)`
-- Custom sentinel errors defined in `settings.go`: `ErrSettingNotFound`, `ErrInvalidDateFormat`
-- HTTP handlers return JSON error responses via `ErrorResponse` struct in `cmd/http/types.go`
-
-### Concurrency
-- Plan syncing uses `golang.org/x/sync/errgroup` with concurrency limit of 5:
-  ```go
-  errGroup.SetLimit(5)  // services/claude-viewer/sync.go:34
-  ```
-- Atomic counters for tracking results: `atomic.Int64` for counting synced plans
-
-### Markdown Processing
-- Uses `github.com/yuin/goldmark` with GFM extension
-- Renderer configured with `html.WithUnsafe()` for raw HTML (trusted markdown source)
-- Title extraction: Scans for first `# Heading` in content
-
-## Naming Conventions & Style
-
-### Variables & Functions
-- **Interface names**: Verb-ending for behavior (e.g., `NowProvider`)
-- **Function receivers**: Single letter matching type (e.g., `func (s *Service)`)
-- **Errors**: Verb-object form (`ErrInvalidDateFormat`, not `InvalidDateFormat`)
-- **Constants**: SCREAMING_SNAKE_CASE for exported (e.g., `AverageReadingSpeed = 200`)
-- **Unexported internals**: lowercase_snake_case for functions extracted to helpers
-
-### Directory Organization
-- SQL definitions go in `sqlc/` subdirectory (separate from generated code in `repository/`)
-- Tests colocate with source: `service_test.go` next to `service.go`
-- HTTP handlers grouped in `cmd/http/`; business logic in `services/`
-
-### Import Organization (via gci formatter)
-Enforced by `.golangci.yml`:
-1. Standard library (`fmt`, `context`, etc.)
-2. Local module imports (`github.com/Javier162380/claude-plan-viewer`)
-3. Wildcard group (everything else)
-
-## Testing Patterns
-
-### Test Structure
-Located in `services/claude-viewer/service_test.go`:
-- Table-driven tests using subtests
-- Mock time provider for deterministic testing:
-  ```go
-  type mockNowProvider struct {
-      currentTime time.Time
-  }
-  ```
-- Sample markdown constants for reuse across test cases
-
-### Running Tests
-```bash
-make test                      # All tests with verbose output
-go test -v ./...              # Same, direct
-go test -v ./services/claude-viewer  # Single package
-go test -run TestUtilityFunctions -v ./services/claude-viewer  # Single test
+### DTO Types (Clean Go Types)
+```go
+// dto/models.go - No sql.Null* or pgtype.* here
+type Plan struct {
+    ID         int64
+    FileName   string
+    FilePath   string
+    Title      string
+    Content    string
+    CreatedAt  time.Time
+    ModifiedAt time.Time
+    IndexedAt  time.Time
+    FileSize   int64
+    WordCount  int64
+}
 ```
 
-### Test Coverage Areas
-- Utility functions: Word counting, reading time calculation, title extraction
-- Markdown rendering: Headings, lists, code blocks, GFM tables, strikethrough
-- Sync operations: File copying, plan insertion/update, concurrency
-- Search: Query parsing and results
-
-## Important Patterns & Gotchas
-
-### 1. **SQLC Generation is Required**
-After ANY change to `.sqlc/schema.sql` or `.sqlc/queries.sql`:
-```bash
-make generate
+### Repository Interface
+```go
+// dto/repository.go
+type Repository interface {
+    // Plan operations
+    CountPlans(ctx context.Context) (int64, error)
+    GetPlanByFileName(ctx context.Context, fileName string) (Plan, error)
+    InsertPlan(ctx context.Context, params InsertPlanParams) error
+    // ... 45 methods total
+}
 ```
-This regenerates the entire `repository/` package. Forgetting this breaks the build.
 
-### 2. **File Paths and Permissions**
-- Uses `os.MkdirAll(path, 0o750)` for directory creation (not 0o755 elsewhere)
-- `nolint:gosec // G304` comments mark user-controlled paths that have been validated
-- Home directory resolution: `os.UserHomeDir()` + filepath joins (not string concat)
+### Connector Interface
+```go
+// internal/connectors/connector.go
+type Connector interface {
+    Name() string
+    DisplayName() string
+    Send(ctx context.Context, title, content string) (*SendResult, error)
+    Validate() error
+    RequiredSettings() []SettingDefinition
+}
 
-### 3. **Concurrent Sync with Error Handling**
-- `errgroup.WithContext(ctx)` ensures context cancellation propagates
-- `errgroup.SetLimit(5)` prevents resource exhaustion during file I/O
-- Atomic counters (`atomic.Int64`) track results from concurrent goroutines
-- Missing error wrapping in group.Go() callback will silently fail—always wrap errors
+type SettingGetter interface {
+    GetConnectorSetting(ctx context.Context, connectorName, key string) (string, bool, error)
+}
 
-### 4. **Database Schema Assumptions**
-- `plans.file_name` is UNIQUE (errors if duplicate synced)
-- `modified_at` index used for default sort order
-- Settings table uses single-column key with typed value columns
-- UPSERT pattern used for settings (INSERT ... ON CONFLICT)
+type ConfigurableConnector interface {
+    Connector
+    LoadConfig(ctx context.Context, getter SettingGetter) error
+}
+```
 
-### 5. **Markdown Rendering Safety**
-- Markdown content assumed trusted (from local files, not user input)
-- HTML rendering configured with `WithUnsafe()` to allow raw HTML in markdown
-- HTTP handler marks template.HTML as safe: `//nolint:gosec // G203`
+## Configuration
 
-### 6. **Reading Time Calculation**
-- Assumes 200 words per minute (constant `AverageReadingSpeed`)
-- Returns minimum 1 minute (uses `max(1, ...)`)
-- Rounds UP using `math.Ceil()`
-- Custom WPM supported via `CalculateReadingTimeWithWPM()`
+### Config File (plan-viewer.toml)
+```toml
+[database]
+backend = "sqlite"  # or "postgres"
 
-### 7. **HTTP Server Port**
-- Default port is `:8081` (not 8080 as README shows)
-- Customizable via `-addr` flag: `./bin/plan-viewer serve -addr :3000`
+[database.sqlite]
+path = "~/.claude-viewer/plans.db"
 
-### 8. **Index Full Content Flag**
-- `Service.indexFullContent` controls what's stored in DB:
-  - `true`: Full markdown content stored (enables full-text search)
-  - `false`: Only title stored (saves space, limits search)
-- Currently hardcoded to `true` in both `sync` and `serve` commands
+[database.postgres]
+connection_string = "postgres://user:pass@localhost:5432/planviewer"
+max_open_conns = 25
+max_idle_conns = 5
 
-### 9. **Linting is Strict**
-- 23 linters enabled in `.golangci.yml`
-- `nolint` comments require explanation AND specific linter name
-- Generate code paths excluded from most checks
-- Build may fail without running `make generate` first
+[paths]
+plans_dir = "~/.claude/plans"
+viewer_dir = "~/.claude-viewer"
+```
+
+### Environment Variables
+```bash
+PLAN_VIEWER_DB_BACKEND=postgres
+PLAN_VIEWER_POSTGRES_URL=postgres://...
+DEBUG=1  # Enable TUI debug mode
+```
 
 ## Database Schema
 
+### Core Tables (both SQLite and PostgreSQL)
+
+| Table | Purpose |
+|-------|---------|
+| `plans` | Indexed plan files |
+| `plan_versions` | Version history for plans |
+| `settings` | Application settings (typed key-value) |
+| `connectors` | Registered external connectors |
+| `connector_settings` | Per-connector configuration |
+
 ### plans table
 ```sql
-id           INTEGER PRIMARY KEY AUTOINCREMENT
-file_name    TEXT NOT NULL UNIQUE          -- e.g., "my-plan.md"
-file_path    TEXT NOT NULL                 -- Full path to copied file
-title        TEXT NOT NULL                 -- First # heading (or "Untitled Plan")
-content      TEXT NOT NULL                 -- Full markdown or title (depends on indexFullContent)
-created_at   TIMESTAMP NOT NULL            -- File creation time
-modified_at  TIMESTAMP NOT NULL            -- File modification time
-indexed_at   TIMESTAMP NOT NULL            -- When plan was synced/updated
-file_size    INTEGER NOT NULL              -- Bytes
-word_count   INTEGER NOT NULL DEFAULT 0    -- Extracted word count
--- Indexes: idx_plans_modified_at (DESC), idx_plans_title
+id           INTEGER PRIMARY KEY
+file_name    TEXT NOT NULL UNIQUE
+file_path    TEXT NOT NULL
+title        TEXT NOT NULL
+content      TEXT NOT NULL
+created_at   TIMESTAMP NOT NULL
+modified_at  TIMESTAMP NOT NULL
+indexed_at   TIMESTAMP NOT NULL
+file_size    INTEGER NOT NULL
+word_count   INTEGER NOT NULL DEFAULT 0
 ```
 
-### settings table
+### plan_versions table
 ```sql
-variable_name  TEXT PRIMARY KEY            -- Setting key
-variable_type  TEXT NOT NULL               -- Type hint: "string", "number", "boolean", "datetime"
-string_value   TEXT                        -- For string settings
-number_value   REAL                        -- For numeric settings
-boolean_value  BOOLEAN                     -- For boolean settings
-datetime_value DATETIME                    -- For timestamp settings
+id             INTEGER PRIMARY KEY
+plan_id        INTEGER NOT NULL REFERENCES plans(id)
+version_number INTEGER NOT NULL
+file_path      TEXT NOT NULL
+content        TEXT NOT NULL
+word_count     INTEGER NOT NULL
+created_at     TIMESTAMP NOT NULL
+UNIQUE(plan_id, version_number)
 ```
 
-## Common Tasks for Agents
+## Testing
 
-### Adding a New Field to Plans
-1. Update `services/claude-viewer/sqlc/schema.sql`
-2. Update `services/claude-viewer/sqlc/queries.sql` (add/modify SELECT statements)
-3. Run `make generate` to regenerate `repository/` package
-4. Update domain types in `services/claude-viewer/types.go` if needed
-5. Update sync logic in `services/claude-viewer/sync.go`
-6. Write tests in `service_test.go`
-7. Run `make test` to verify
+### Test Structure
+- Main test file: `services/claude-viewer/service_test.go` (~1800 lines)
+- Uses gomock for connector mocking
+- Table-driven tests with subtests
+- Mock time provider for deterministic tests
 
-### Adding a New Search Query
-1. Add to `services/claude-viewer/sqlc/queries.sql` with name and `:many` or `:one` directive
-2. Run `make generate` (creates new method on `*repository.Queries`)
-3. Implement business logic in `services/claude-viewer/service.go` or appropriate file
-4. Add HTTP handler in `cmd/http/handlers.go` if needed
-5. Test thoroughly
-
-### Modifying the Sync Logic
-1. Edit `services/claude-viewer/sync.go`
-2. Remember: plans are synced concurrently with limit of 5
-3. Use context properly: pass `groupCtx` to database operations
-4. Update tests in `service_test.go`
-5. Run `make test`
-
-### Working with Settings
-1. Settings API is in `services/claude-viewer/settings.go`
-2. Must specify type when saving (string/number/boolean/datetime)
-3. Retrieval returns `*Setting` with typed accessors (`IsString()`, `GetStringValue()`, etc.)
-4. Use `ErrSettingNotFound` for missing settings
-5. Database uses UPSERT pattern (safe to call multiple times)
-
-## Linting & Code Quality
-
-### Run Linting
+### Running Tests
 ```bash
-golangci-lint run ./...
+make test                                    # All tests
+go test -v ./services/claude-viewer          # Service tests only
+go test -run TestConnectorManager -v ./...   # Specific test
 ```
 
-The project uses 23 linters with strict settings:
-- Security checks (gosec, staticcheck)
-- Common mistakes (errcheck, govet, ineffassign)
-- Style (godot, dogsled, whitespace)
-- Generated code excluded (paths with `*.gen.go` or `repository/`)
-
-### Common Lint Fixes
-- **Missing error checks**: Wrap with `if err != nil { return ... }`
-- **Naked returns**: Explicitly return values in functions > 70 lines
-- **Unused parameters**: Add `_` prefix or use `//nolint:unparam`
-- **Format issues**: Run `gofumpt` and `gci` formatters (auto-enabled in golangci-lint)
-
-## Dependencies
-
-### Core Dependencies
-- **github.com/labstack/echo/v4**: HTTP server framework
-- **github.com/mattn/go-sqlite3**: SQLite driver
-- **github.com/yuin/goldmark**: Markdown parser/renderer
-- **golang.org/x/sync**: Concurrency utilities (errgroup)
-
-### Testing
-- **github.com/stretchr/testify**: Assertions and test helpers
-
-### Code Generation
-- **sqlc**: SQL-to-Go code generation (run with `make generate`)
-
-## Development Environment
-
-- **Go Version**: 1.25.3 (per `.tool-versions`)
-- **Linter Version**: golangci-lint 2.8.0
-- **OS**: Cross-platform (darwin/linux/windows via bash-compatible Makefile)
-
-## Debugging Tips
-
-### Enable Debug Logging
-Modify `cmd/main.go` or handlers to add logging:
+### Test Patterns
 ```go
-log.Printf("Debug: %v", value)
+// Setup helper
+func setupTestService(t *testing.T) (*Service, string, string, func())
+
+// Mock connector with gomock
+func setupMockConnector(ctrl *gomock.Controller, name, displayName string) *connectors_test.MockConnector
+
+// Time injection
+type mockNowProvider struct {
+    currentTime time.Time
+}
 ```
 
-### Database Inspection
-Plans are stored in `~/.claude-viewer/plans.db`. Inspect with:
-```bash
-sqlite3 ~/.claude-viewer/plans.db "SELECT * FROM plans LIMIT 5;"
-```
+## Common Tasks
 
-### Test with Sample Data
-The test suite includes sample markdown constants in `service_test.go`:
-- `sampleMarkdown`: Basic plan
-- `sampleMarkdownUpdated`: Modified plan
-- `sampleMarkdownWithCode`: Markdown with code blocks
+### Adding a New Database Field
+1. Update both schema files:
+   - `services/claude-viewer/sqlc/sqlite/schema.sql`
+   - `services/claude-viewer/sqlc/postgres/schema.sql`
+2. Update query files if needed
+3. Run `make generate`
+4. Add field to `dto/models.go`
+5. Update repository implementations to map the new field
+6. Update service layer
+7. Write tests
 
-Use these to reproduce issues in tests before modifying production code.
+### Adding a New Connector
+1. Create package: `internal/connectors/myconnector/`
+2. Implement `Connector` interface (and `ConfigurableConnector` if configurable)
+3. Register in `cmd/main.go`:
+   ```go
+   registry.Register(myconnector.New())
+   ```
+4. Write tests
 
-### HTTP Debugging
-- Server logs start message to stdout: `Server running on http://localhost:8081`
-- All handlers pass context from request: `c.Request().Context()`
-- JSON responses include error details in `ErrorResponse` struct
+### Switching Database Backend
+1. Set in config file: `backend = "postgres"`
+2. Or via env: `PLAN_VIEWER_DB_BACKEND=postgres`
+3. Run migrations: `./bin/plan-viewer migrate`
 
 ## Key Files Quick Reference
 
 | File | Purpose |
 |------|---------|
-| `cmd/main.go` | Entry point, command routing |
-| `services/claude-viewer/service.go` | Service initialization, core type |
-| `services/claude-viewer/sync.go` | Plan syncing and file handling |
-| `services/claude-viewer/search.go` | Search implementation |
-| `services/claude-viewer/types.go` | Domain types (PlanSummary, PlanDetail) |
-| `services/claude-viewer/service_test.go` | Test suite (all unit tests) |
-| `services/claude-viewer/sqlc/schema.sql` | Database schema definition |
-| `services/claude-viewer/sqlc/queries.sql` | SQL query definitions |
-| `cmd/http/handlers.go` | HTTP route handlers |
-| `cmd/http/types.go` | HTTP request/response types |
-| `internal/storage/db.go` | SQLite connection setup |
-| `Makefile` | Build automation |
-| `.golangci.yml` | Linting rules |
+| `cmd/main.go` | Entry point, command routing, dependency wiring |
+| `services/claude-viewer/service.go` | Service initialization |
+| `services/claude-viewer/dto/repository.go` | Repository interface definition |
+| `services/claude-viewer/dto/models.go` | Shared domain types |
+| `services/claude-viewer/repository/sqlite/repository.go` | SQLite implementation |
+| `services/claude-viewer/repository/postgres/repository.go` | PostgreSQL implementation |
+| `internal/connectors/manager.go` | Connector orchestration |
+| `internal/connectors/connector.go` | Connector interfaces |
+| `internal/config/config.go` | Configuration loading |
+| `sqlc.yaml` | SQLC code generation config |
 
+## Important Notes
+
+1. **Never edit SQLC-generated files** - They will be overwritten by `make generate`
+
+2. **Repository implementations are internal** - Service layer only uses `dto.Repository`
+
+3. **Connector settings stored in database** - Use `Manager.SetConnectorSetting()` and `Manager.GetConnectorSetting()`
+
+4. **Plan versioning is automatic** - New versions created on sync when content changes
+
+5. **TUI is the primary interface** - HTTP server is secondary
+
+6. **Tests use SQLite** - Even when developing PostgreSQL features, tests run against SQLite for speed
