@@ -4,6 +4,9 @@
 # All settings have sensible defaults. You only need to configure
 # what you want to change.
 #
+# IMPORTANT: Use full paths, not ~ (tilde is not expanded).
+# Example: /Users/yourname/.claude-viewer instead of ~/.claude-viewer
+#
 # Environment variables can override any setting:
 #   PLAN_VIEWER_DB_BACKEND    - Database backend (sqlite or postgres)
 #   PLAN_VIEWER_SQLITE_PATH   - SQLite database file path
@@ -25,8 +28,8 @@ backend = "sqlite"
 [database.sqlite]
 
 # Path to the SQLite database file
-# Default: ~/.claude-viewer/plans.db
-path = "~/.claude-viewer/plans.db"
+# Default: $HOME/.claude-viewer/plans.db
+# path = "/Users/yourname/.claude-viewer/plans.db"
 
 # -----------------------------------------------------------------------------
 # PostgreSQL Configuration (used when backend = "postgres")
@@ -51,9 +54,9 @@ max_idle_conns = 5
 [paths]
 
 # Directory where the viewer stores its data (copied plans, versions, etc.)
-# Default: ~/.claude-viewer
-viewer_dir = "~/.claude-viewer"
+# Default: $HOME/.claude-viewer
+# viewer_dir = "/Users/yourname/.claude-viewer"
 
 # Directory containing the source Claude plan files to sync
-# Default: ~/.claude/plans
-plans_dir = "~/.claude/plans"
+# Default: $HOME/.claude/plans
+# plans_dir = "/Users/yourname/.claude/plans"
