@@ -143,6 +143,16 @@ func SyncPlansCmd(ctx context.Context, svc Service) tea.Cmd {
 	}
 }
 
+// RSyncPlansCmd rsync plans from the viewer directory into the source directory.
+func RsyncPlansCmd(ctx context.Context, svc Service) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		conunt, err := svc.RS
+	}
+}
+
 // SearchVersionsCmd searches a plan over it's different versions.
 func SearchVersionsCmd(ctx context.Context, svc Service, currentPlanName, query string) tea.Cmd {
 	return func() tea.Msg {

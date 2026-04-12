@@ -477,6 +477,12 @@ func (s *PlansScreen) syncPlans() tea.Cmd {
 	}
 }
 
+func (s *PlansScreen) rsyncPlans() tea.Cmd {
+	return func() tea.Msg {
+		return RSyncPlansMsg{}
+	}
+}
+
 // Message types for plans screen.
 
 // PlansLoadedMsg is sent when plans are loaded.
@@ -503,6 +509,9 @@ type SavePlanMsg struct {
 
 // SyncPlansMsg requests syncing plans.
 type SyncPlansMsg struct{}
+
+// RSyncPlansMsg request resync plans from the viewer directory back into the LLM directory.
+type RSyncPlansMsg struct{}
 
 // SaveResultMsg is sent when save completes.
 type SaveResultMsg struct {

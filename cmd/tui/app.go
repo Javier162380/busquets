@@ -198,6 +198,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.statusBar.SetLoading("Syncing plans...")
 		return a, SyncPlansCmd(a.ctx, a.service)
 
+	case screens.RSyncPlansMsg:
+		a.statusBar.SetLoading("Rsyncing plans from remote directory into the LLM directory...")
+		return a,
+
 	case screens.LoadVersionsMsg:
 		return a, LoadVersionsCmd(a.ctx, a.service, msg.PlanName)
 

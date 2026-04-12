@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
-
 	"golang.org/x/sync/errgroup"
 )
 
@@ -62,6 +61,63 @@ func (s *Service) SyncPlans(ctx context.Context) (int, error) {
 	syncDeRef := int(syncPlans.Load())
 
 	return syncDeRef, nil
+}
+
+func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
+	if _, err := os.Stat(s.viewerDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(s.viewerDir, 0o750); err != nil {
+			return 0, fmt.Errorf("failed to create viewer directory: %w", err)
+		}
+	}
+
+	syncPlans := atomic.Int64{}
+	errGroup, groupCtx := errgroup.WithContext(ctx)
+	errGroup.SetLimit(5)
+
+	entries, err := os.ReadDir(s.sourcePlansDir)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read plans directory: %w", err)
+	}
+
+	for _, entry := range entries {
+		planName := entry.Name()
+		errGroup.Go(func() error {
+			plan, planErr := s.GetPlanByFileName(groupCtx, planName)
+			switch {
+			case dto.IsNotFound(planErr):
+				return nil
+			case err != nil:
+				return err
+			}
+
+			if plan.Content == "" {
+				return nil
+			}
+
+			info, err := entry.Info()
+			if err != nil {
+				return err
+			}
+
+			if info.ModTime().Before(plan.ModifiedAt) {
+				sourcePath := filepath.Join(s.sourcePlansDir, planName)
+				destPath := filepath.Join(s.viewerDir, planName)
+				err := copyFile(destPath, sourcePath)
+				if err != nil {
+					return err
+				}
+				syncPlans.Add(int64(1))
+			}
+			return nil
+		})
+	}
+
+	if err := errGroup.Wait(); err != nil {
+		return 0, fmt.Errorf("failed to sync plans: %w", err)
+	}
+
+	return int(syncPlans.Load()), nil
+
 }
 
 // syncSinglePlan copies and indexes a single plan file.
