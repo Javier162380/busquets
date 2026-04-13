@@ -80,6 +80,16 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("failed to read plans directory: %w", err)
 	}
 
+	viewerEntries, err := os.ReadDir(s.viewerDir)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read plans directory: %w", err)
+	}
+
+	viewerEntriesFiles := map[string]struct{}{}
+	for _, dest := range viewerEntries {
+		viewerEntriesFiles[dest.Name()] = struct{}{}
+	}
+
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
 			continue
@@ -103,10 +113,10 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 				return err
 			}
 
-			if info.ModTime().Before(plan.ModifiedAt) {
+			if _, ok := viewerEntriesFiles[info.Name()]; !ok {
 				sourcePath := filepath.Join(s.sourcePlansDir, planName)
 				destPath := filepath.Join(s.viewerDir, planName)
-				err := copyFile(destPath, sourcePath)
+				err := copyFile(sourcePath, destPath)
 				if err != nil {
 					return err
 				}
