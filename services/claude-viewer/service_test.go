@@ -362,6 +362,146 @@ func TestSyncOperations(t *testing.T) {
 	})
 }
 
+func TestRSyncOperations(t *testing.T) {
+	t.Run("RSyncPlans with empty source directory", func(t *testing.T) {
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+
+		ctx := context.Background()
+		count, err := service.RSyncPlans(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 0, count)
+	})
+
+	t.Run("RSyncPlans syncs newer viewer file back to source", func(t *testing.T) {
+		service, sourcePlansDir, viewerDir, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		// Create and sync a plan first
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		// Wait and update the viewer file (simulating edit in viewer)
+		time.Sleep(10 * time.Millisecond)
+		createTestPlanFile(t, viewerDir, "test-plan.md", sampleMarkdownUpdated)
+
+		// Update the plan in DB to reflect newer modification time
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md")
+		require.NoError(t, err)
+
+		// Manually update the plan's ModifiedAt to be newer than source file
+		err = service.db.UpdatePlan(ctx, dto.UpdatePlanParams{
+			FileName:   "test-plan.md",
+			Title:      "Updated Plan",
+			Content:    sampleMarkdownUpdated,
+			ModifiedAt: time.Now().Add(time.Hour),
+			IndexedAt:  plan.IndexedAt,
+			FileSize:   int64(len(sampleMarkdownUpdated)),
+			WordCount:  int64(CountWords(sampleMarkdownUpdated)),
+		})
+		require.NoError(t, err)
+
+		// RSyncPlans should copy viewer -> source
+		count, err := service.RSyncPlans(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		// Verify source file was updated
+		content, err := os.ReadFile(filepath.Join(sourcePlansDir, "test-plan.md"))
+		require.NoError(t, err)
+		require.Equal(t, sampleMarkdownUpdated, string(content))
+	})
+
+	t.Run("RSyncPlans skips when source is newer than viewer", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		// Create and sync a plan
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		// Wait and update the source file to be newer than the DB record
+		time.Sleep(10 * time.Millisecond)
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdownUpdated)
+
+		// Source file is now newer than viewer DB record, so rsync should skip
+		count, err := service.RSyncPlans(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 0, count)
+	})
+
+	t.Run("RSyncPlans ignores non-markdown files", func(t *testing.T) {
+		service, sourcePlansDir, viewerDir, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		// Create a non-markdown file in source
+		createTestPlanFile(t, sourcePlansDir, "test.txt", "not markdown")
+		createTestPlanFile(t, viewerDir, "test.txt", "updated content")
+
+		count, err := service.RSyncPlans(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 0, count)
+	})
+
+	t.Run("RSyncPlans skips files not in viewer database", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		// Create a file in source but don't sync it (so it's not in DB)
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+
+		// RSyncPlans should skip since file is not in DB
+		count, err := service.RSyncPlans(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 0, count)
+	})
+
+	t.Run("RSyncPlans handles multiple files", func(t *testing.T) {
+		service, sourcePlansDir, viewerDir, cleanup := setupTestService(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		// Create and sync multiple plans
+		for i := 1; i <= 5; i++ {
+			filename := "plan-" + strconv.Itoa(i) + ".md"
+			createTestPlanFile(t, sourcePlansDir, filename, sampleMarkdown)
+		}
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		// Update viewer files and DB entries to be newer
+		time.Sleep(10 * time.Millisecond)
+		for i := 1; i <= 5; i++ {
+			filename := "plan-" + strconv.Itoa(i) + ".md"
+			createTestPlanFile(t, viewerDir, filename, sampleMarkdownUpdated)
+
+			plan, err := service.GetPlanByFileName(ctx, filename)
+			require.NoError(t, err)
+
+			err = service.db.UpdatePlan(ctx, dto.UpdatePlanParams{
+				FileName:   filename,
+				Title:      "Updated Plan",
+				Content:    sampleMarkdownUpdated,
+				ModifiedAt: time.Now().Add(time.Hour),
+				IndexedAt:  plan.IndexedAt,
+				FileSize:   int64(len(sampleMarkdownUpdated)),
+				WordCount:  int64(CountWords(sampleMarkdownUpdated)),
+			})
+			require.NoError(t, err)
+		}
+
+		count, err := service.RSyncPlans(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 5, count)
+	})
+}
+
 func TestSearchAndListing(t *testing.T) {
 	t.Run("ListAllPlansWithReadingTime returns empty list for empty database", func(t *testing.T) {
 		service, _, _, cleanup := setupTestService(t)

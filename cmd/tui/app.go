@@ -183,8 +183,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.RSyncResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError("RSync failed: " + msg.Error.Error())
+			return a, nil
 		}
-
 		a.statusBar.SetSuccess(fmt.Sprintf("Rsync succeeded: %d plans sync from remote into the local directory", msg.Count))
 		return a, LoadPlansCmd(a.ctx, a.service)
 	case screens.ErrorMsg:

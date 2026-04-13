@@ -18,6 +18,9 @@ build: generate ## Build the application
 sync: build ## Build and run sync command
 	./bin/plan-viewer sync
 
+rsync: build
+	./bin/plan-viewer rsync
+
 serve: build ## Build and run web server
 	./bin/plan-viewer serve
 

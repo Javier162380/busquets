@@ -39,6 +39,10 @@ func main() {
 		if err := runSync(cfg); err != nil {
 			log.Fatalf("Sync failed: %v", err)
 		}
+	case "rsync":
+		if err := runRSync(cfg); err != nil {
+			log.Fatalf("RSync failed: %v", err)
+		}
 	case "serve":
 		if err := runServe(cfg); err != nil {
 			log.Fatalf("Server failed: %v", err)
@@ -125,6 +129,30 @@ func runSync(cfg *config.Config) error {
 
 	fmt.Printf("✓ Synced %d plans from %s to %s (backend: %s)\n",
 		count, cfg.Paths.PlansDir, cfg.Paths.ViewerDir, cfg.Database.Backend)
+	return nil
+}
+
+func runRSync(cfg *config.Config) error {
+	ctx := context.Background()
+
+	repo, cleanup, err := initRepository(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to initialize repository: %w", err)
+	}
+	defer cleanup()
+
+	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDir, true)
+	if err != nil {
+		return fmt.Errorf("failed to initialize service: %w", err)
+	}
+
+	count, err := service.RSyncPlans(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to sync plans: %w", err)
+	}
+
+	fmt.Printf("✓ RSynced %d plans from %s to %s (backend: %s)\n",
+		count, cfg.Paths.ViewerDir, cfg.Paths.PlansDir, cfg.Database.Backend)
 	return nil
 }
 

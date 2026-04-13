@@ -81,14 +81,17 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 	}
 
 	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
+			continue
+		}
 		planName := entry.Name()
 		errGroup.Go(func() error {
 			plan, planErr := s.GetPlanByFileName(groupCtx, planName)
 			switch {
 			case dto.IsNotFound(planErr):
 				return nil
-			case err != nil:
-				return err
+			case planErr != nil:
+				return planErr
 			}
 
 			if plan.Content == "" {
