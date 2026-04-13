@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+
 	"golang.org/x/sync/errgroup"
 )
 
@@ -117,7 +118,6 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 	}
 
 	return int(syncPlans.Load()), nil
-
 }
 
 // syncSinglePlan copies and indexes a single plan file.

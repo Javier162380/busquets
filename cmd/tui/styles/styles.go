@@ -46,10 +46,6 @@ var (
 			Foreground(LoadingColor).
 			Bold(true)
 
-	HelpStyle = lipgloss.NewStyle().
-			Foreground(ForegroundColor).
-			Italic(true)
-
 	MutedStyle = lipgloss.NewStyle().
 			Foreground(MutedColor)
 
@@ -62,15 +58,6 @@ var (
 			Italic(true)
 )
 
-// HeaderStyle returns a style for the header bar.
-func HeaderStyle(width int) lipgloss.Style {
-	return lipgloss.NewStyle().
-		Width(width).
-		Padding(0, 2).
-		Background(HeaderBgColor).
-		Foreground(ForegroundColor)
-}
-
 // StatusStyle returns a style for the status bar.
 func StatusStyle(width int) lipgloss.Style {
 	return lipgloss.NewStyle().
@@ -80,15 +67,6 @@ func StatusStyle(width int) lipgloss.Style {
 		Foreground(MutedColor)
 }
 
-// PanelStyle returns a style for a bordered panel.
-func PanelStyle(width, height int) lipgloss.Style {
-	return lipgloss.NewStyle().
-		Width(width).
-		Height(height).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(BorderColor)
-}
-
 // HelpBoxStyle returns a style for the help overlay.
 func HelpBoxStyle(width int) lipgloss.Style {
 	return lipgloss.NewStyle().
@@ -96,16 +74,4 @@ func HelpBoxStyle(width int) lipgloss.Style {
 		Padding(2, 4).
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(HelpColor)
-}
-
-// VerticalDivider creates a vertical divider string of the given height.
-func VerticalDivider(height int) string {
-	divider := ""
-	for i := 0; i < height; i++ {
-		divider += "│"
-		if i < height-1 {
-			divider += "\n"
-		}
-	}
-	return divider
 }

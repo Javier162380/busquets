@@ -14,9 +14,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 )
 
-// Ensure UnifiedService satisfies the Service interface used by commands.
-var _ Service = (UnifiedService)(nil)
-
 // UnifiedService is the interface the TUI expects from the service.
 type UnifiedService interface {
 	ListAllPlansWithReadingTime(ctx context.Context) ([]claudeviewer.PlanSummary, error)
@@ -29,6 +26,7 @@ type UnifiedService interface {
 	SearchVersions(ctx context.Context, planName, query string) ([]claudeviewer.PlanVersionDetail, error)
 	RestorePlanVersion(ctx context.Context, planName string, versionNumber int64) error
 	SyncPlans(ctx context.Context) (int, error)
+	RSyncPlans(ctx context.Context) (int, error)
 	RenderMarkdown(content string) (string, error)
 	GetSetting(ctx context.Context, variableName string) (claudeviewer.Setting, bool, error)
 	SetSetting(ctx context.Context, varName string, values claudeviewer.SettingValues) error
@@ -182,6 +180,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.statusBar.SetSuccess(fmt.Sprintf("Synced %d plans", msg.Count))
 		return a, LoadPlansCmd(a.ctx, a.service)
 
+	case screens.RSyncResultMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError("RSync failed: " + msg.Error.Error())
+		}
+
+		a.statusBar.SetSuccess(fmt.Sprintf("Rsync succeeded: %d plans sync from remote into the local directory", msg.Count))
+		return a, LoadPlansCmd(a.ctx, a.service)
 	case screens.ErrorMsg:
 		// Show error in App's status bar (which is rendered).
 		a.statusBar.SetError(msg.Error.Error())
@@ -200,7 +205,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.RSyncPlansMsg:
 		a.statusBar.SetLoading("Rsyncing plans from remote directory into the LLM directory...")
-		return a,
+		return a, RsyncPlansCmd(a.ctx, a.service)
 
 	case screens.LoadVersionsMsg:
 		return a, LoadVersionsCmd(a.ctx, a.service, msg.PlanName)

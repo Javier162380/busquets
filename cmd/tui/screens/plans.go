@@ -130,12 +130,10 @@ func (s *PlansScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
 	case "/":
-		// Activate search mode.
 		s.focus = FocusSearch
 		return s, s.searchBar.Focus()
 
 	case "c":
-		// Clear search and reload all plans.
 		if s.searchQuery != "" {
 			s.searchQuery = ""
 			s.searchBar.Reset()
@@ -146,7 +144,6 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		return s, nil
 
 	case "v":
-		// Switch to fullscreen view.
 		if s.current != nil {
 			s.layout = LayoutFullscreen
 			s.focus = FocusContent
@@ -154,7 +151,6 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		return s, nil
 
 	case "e":
-		// Enter edit mode.
 		if s.current != nil {
 			s.layout = LayoutFullscreen
 			s.focus = FocusEditor
@@ -163,32 +159,29 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		return s, nil
 
 	case "s":
-		// Sync plans.
 		return s, s.syncPlans()
 
+	case "r":
+		return s, s.rsyncPlans()
+
 	case "S":
-		// Open settings screen.
 		return s, func() tea.Msg {
 			return OpenSettingsMsg{}
 		}
 
 	case "C":
-		// Open connectors screen.
 		return s, func() tea.Msg {
 			return OpenConnectorsMsg{}
 		}
 
 	case "tab":
-		// Switch to content panel (right side) in split view.
 		if s.current != nil {
 			s.focus = FocusContent
 		}
 		return s, nil
 
 	case "j", "down", "k", "up":
-		// Navigate list.
 		cmd := s.list.Update(msg)
-		// Load selected plan.
 		if item := s.list.SelectedItem(); item != nil {
 			if plan, ok := item.Data().(claudeviewer.PlanSummary); ok {
 				return s, tea.Batch(cmd, s.loadPlanDetail(plan.FileName))
@@ -413,7 +406,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.searchQuery != "" {
 			searchHelp = fmt.Sprintf("/: search | c: clear [%s]", s.searchQuery)
 		}
-		return fmt.Sprintf("j/k: navigate | tab: content | v: fullscreen | e: edit | s: sync | S: settings | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
+		return fmt.Sprintf("j/k: navigate | tab: content | v: fullscreen | e: edit | s: sync | S: settings | r: rsync | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
 	case FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeHTML {
@@ -521,6 +514,12 @@ type SaveResultMsg struct {
 
 // SyncResultMsg is sent when sync completes.
 type SyncResultMsg struct {
+	Count int
+	Error error
+}
+
+// RSyncResultMsg is sent when rsync completes.
+type RSyncResultMsg struct {
 	Count int
 	Error error
 }

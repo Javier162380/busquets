@@ -10,33 +10,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Service interface for the commands package.
-// This is a subset of UnifiedService that commands need.
-type Service interface {
-	ListAllPlansWithReadingTime(ctx context.Context) ([]claudeviewer.PlanSummary, error)
-	SearchPlansWithReadingTime(ctx context.Context, query string) ([]claudeviewer.PlanSummary, error)
-	GetPlanDetailByFileName(ctx context.Context, fileName string) (*claudeviewer.PlanDetail, error)
-	UpdatePlan(ctx context.Context, req claudeviewer.UpdatePlanRequest) (*claudeviewer.UpdatePlanResult, error)
-	GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]claudeviewer.PlanVersionDetail, error)
-	SearchVersions(ctx context.Context, planName, query string) ([]claudeviewer.PlanVersionDetail, error)
-	SyncPlans(ctx context.Context) (int, error)
-	RenderMarkdown(content string) (string, error)
-	RestorePlanVersion(ctx context.Context, planName string, versionNumber int64) error
-	GetSetting(ctx context.Context, variableName string) (claudeviewer.Setting, bool, error)
-	SetSetting(ctx context.Context, varName string, values claudeviewer.SettingValues) error
-	SendToConnector(ctx context.Context, planFileName string) error
-	ListConnectors(ctx context.Context) ([]claudeviewer.ConnectorInfo, error)
-	EnableConnector(ctx context.Context, name string) error
-	DisableConnector(ctx context.Context) error
-	ConfigureConnector(ctx context.Context, connectorName, key, value string, isSecret bool) error
-	GetConnectorSettings(ctx context.Context, connectorName string) ([]claudeviewer.ConnectorSettingInfo, error)
-	ValidateConnector(ctx context.Context, connectorName string) error
-}
-
 // Command builders.
 
 // LoadPlansCmd loads all plans from the service.
-func LoadPlansCmd(ctx context.Context, svc Service) tea.Cmd {
+func LoadPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -50,7 +27,7 @@ func LoadPlansCmd(ctx context.Context, svc Service) tea.Cmd {
 }
 
 // SearchPlansCmd searches plans by query.
-func SearchPlansCmd(ctx context.Context, svc Service, query string) tea.Cmd {
+func SearchPlansCmd(ctx context.Context, svc UnifiedService, query string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -64,7 +41,7 @@ func SearchPlansCmd(ctx context.Context, svc Service, query string) tea.Cmd {
 }
 
 // LoadPlanDetailCmd loads a specific plan's details.
-func LoadPlanDetailCmd(ctx context.Context, svc Service, fileName string) tea.Cmd {
+func LoadPlanDetailCmd(ctx context.Context, svc UnifiedService, fileName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -78,7 +55,7 @@ func LoadPlanDetailCmd(ctx context.Context, svc Service, fileName string) tea.Cm
 }
 
 // LoadVersionsCmd loads version history for a plan.
-func LoadVersionsCmd(ctx context.Context, svc Service, planName string) tea.Cmd {
+func LoadVersionsCmd(ctx context.Context, svc UnifiedService, planName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -92,7 +69,7 @@ func LoadVersionsCmd(ctx context.Context, svc Service, planName string) tea.Cmd 
 }
 
 // LoadVersionsForNavigationCmd checks versions before navigating to versions screen.
-func LoadVersionsForNavigationCmd(ctx context.Context, svc Service, planName string) tea.Cmd {
+func LoadVersionsForNavigationCmd(ctx context.Context, svc UnifiedService, planName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -109,7 +86,7 @@ func LoadVersionsForNavigationCmd(ctx context.Context, svc Service, planName str
 }
 
 // SavePlanCmd saves a plan and syncs to source directory.
-func SavePlanCmd(ctx context.Context, svc Service, fileName, content string, lastModified time.Time) tea.Cmd {
+func SavePlanCmd(ctx context.Context, svc UnifiedService, fileName, content string, lastModified time.Time) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
@@ -130,7 +107,7 @@ func SavePlanCmd(ctx context.Context, svc Service, fileName, content string, las
 }
 
 // SyncPlansCmd syncs plans from the source directory.
-func SyncPlansCmd(ctx context.Context, svc Service) tea.Cmd {
+func SyncPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -143,18 +120,22 @@ func SyncPlansCmd(ctx context.Context, svc Service) tea.Cmd {
 	}
 }
 
-// RSyncPlansCmd rsync plans from the viewer directory into the source directory.
-func RsyncPlansCmd(ctx context.Context, svc Service) tea.Cmd {
+// RsyncPlansCmd syncs plans from the viewer directory back to the source directory.
+func RsyncPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		conunt, err := svc.RS
+		count, err := svc.RSyncPlans(ctx)
+		if err != nil {
+			return screens.RSyncResultMsg{Error: err}
+		}
+		return screens.RSyncResultMsg{Count: count}
 	}
 }
 
 // SearchVersionsCmd searches a plan over it's different versions.
-func SearchVersionsCmd(ctx context.Context, svc Service, currentPlanName, query string) tea.Cmd {
+func SearchVersionsCmd(ctx context.Context, svc UnifiedService, currentPlanName, query string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -168,7 +149,7 @@ func SearchVersionsCmd(ctx context.Context, svc Service, currentPlanName, query 
 }
 
 // RestoreVersionCmd restores a plan to a previous version.
-func RestoreVersionCmd(ctx context.Context, svc Service, planName string, versionNumber int64) tea.Cmd {
+func RestoreVersionCmd(ctx context.Context, svc UnifiedService, planName string, versionNumber int64) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -185,7 +166,7 @@ func RestoreVersionCmd(ctx context.Context, svc Service, planName string, versio
 }
 
 // LoadSettingsCmd loads settings by name.
-func LoadSettingsCmd(ctx context.Context, svc Service, settingNames []string) tea.Cmd {
+func LoadSettingsCmd(ctx context.Context, svc UnifiedService, settingNames []string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -202,7 +183,7 @@ func LoadSettingsCmd(ctx context.Context, svc Service, settingNames []string) te
 }
 
 // SetSettingCmd updates a setting.
-func SetSettingCmd(ctx context.Context, svc Service, name string, values claudeviewer.SettingValues) tea.Cmd {
+func SetSettingCmd(ctx context.Context, svc UnifiedService, name string, values claudeviewer.SettingValues) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -219,7 +200,7 @@ func SetSettingCmd(ctx context.Context, svc Service, name string, values claudev
 }
 
 // SendToConnectorCmd sends a plan to the enabled connector.
-func SendToConnectorCmd(ctx context.Context, svc Service, planFileName string) tea.Cmd {
+func SendToConnectorCmd(ctx context.Context, svc UnifiedService, planFileName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
@@ -233,7 +214,7 @@ func SendToConnectorCmd(ctx context.Context, svc Service, planFileName string) t
 }
 
 // LoadConnectorsCmd loads all available connectors with their status.
-func LoadConnectorsCmd(ctx context.Context, svc Service) tea.Cmd {
+func LoadConnectorsCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -258,7 +239,7 @@ func LoadConnectorsCmd(ctx context.Context, svc Service) tea.Cmd {
 }
 
 // LoadConnectorSettingsCmd loads settings for a specific connector.
-func LoadConnectorSettingsCmd(ctx context.Context, svc Service, connectorName string) tea.Cmd {
+func LoadConnectorSettingsCmd(ctx context.Context, svc UnifiedService, connectorName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -288,7 +269,7 @@ func LoadConnectorSettingsCmd(ctx context.Context, svc Service, connectorName st
 }
 
 // EnableConnectorCmd enables a specific connector.
-func EnableConnectorCmd(ctx context.Context, svc Service, name string) tea.Cmd {
+func EnableConnectorCmd(ctx context.Context, svc UnifiedService, name string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -302,7 +283,7 @@ func EnableConnectorCmd(ctx context.Context, svc Service, name string) tea.Cmd {
 }
 
 // DisableConnectorCmd disables all connectors.
-func DisableConnectorCmd(ctx context.Context, svc Service) tea.Cmd {
+func DisableConnectorCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -316,7 +297,7 @@ func DisableConnectorCmd(ctx context.Context, svc Service) tea.Cmd {
 }
 
 // SaveConnectorSettingCmd saves a connector setting.
-func SaveConnectorSettingCmd(ctx context.Context, svc Service, connectorName, key, value string, isSecret bool) tea.Cmd {
+func SaveConnectorSettingCmd(ctx context.Context, svc UnifiedService, connectorName, key, value string, isSecret bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -330,7 +311,7 @@ func SaveConnectorSettingCmd(ctx context.Context, svc Service, connectorName, ke
 }
 
 // ValidateConnectorCmd validates a connector's settings.
-func ValidateConnectorCmd(ctx context.Context, svc Service, connectorName string) tea.Cmd {
+func ValidateConnectorCmd(ctx context.Context, svc UnifiedService, connectorName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()

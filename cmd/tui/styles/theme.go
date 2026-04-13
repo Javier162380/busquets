@@ -79,7 +79,6 @@ func updateStyleVariables() {
 	ErrorStyle = lipgloss.NewStyle().Foreground(ErrorColor).Bold(true)
 	SuccessStyle = lipgloss.NewStyle().Foreground(SuccessColor).Bold(true)
 	LoadingStyle = lipgloss.NewStyle().Foreground(LoadingColor).Bold(true)
-	HelpStyle = lipgloss.NewStyle().Foreground(ForegroundColor).Italic(true)
 	MutedStyle = lipgloss.NewStyle().Foreground(MutedColor)
 	TitleStyle = lipgloss.NewStyle().Foreground(AccentColor).Bold(true)
 	MetaStyle = lipgloss.NewStyle().Foreground(ForegroundColor).Italic(true)
