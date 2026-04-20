@@ -37,6 +37,18 @@ type UnifiedService interface {
 	ConfigureConnector(ctx context.Context, connectorName, key, value string, isSecret bool) error
 	GetConnectorSettings(ctx context.Context, connectorName string) ([]claudeviewer.ConnectorSettingInfo, error)
 	ValidateConnector(ctx context.Context, connectorName string) error
+	// Watch mode methods
+	StartWatchMode(ctx context.Context, intervalSeconds float64) error
+	StopWatchMode(ctx context.Context) error
+	GetWatchResultChannel() <-chan claudeviewer.WatchResult
+	IsWatchModeRunning() bool
+	UpdateWatchInterval(intervalSeconds float64)
+}
+
+// WatchResultMsg wraps watch sync results from service.
+type WatchResultMsg struct {
+	Count int
+	Error error
 }
 
 // App is the root TUI application model.
@@ -86,8 +98,11 @@ func (a *App) Init() tea.Cmd {
 	plansScreen := screens.NewPlansScreen(a.width, a.height)
 	a.stack = append(a.stack, plansScreen)
 
-	// Load initial plans.
-	return LoadPlansCmd(a.ctx, a.service)
+	// Start watching for watch results and load initial plans.
+	return tea.Batch(
+		LoadPlansCmd(a.ctx, a.service),
+		WatchChannelListenerCmd(a.ctx, a.service),
+	)
 }
 
 // Update handles all messages.
@@ -256,7 +271,54 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.statusBar.SetSuccess("Setting saved")
 		}
+
+		// Handle watch mode toggle
+		if msg.Success && msg.SettingName == claudeviewer.SettingWatchModeEnabled {
+			// Retrieve the new value
+			setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingWatchModeEnabled)
+			if exists && setting.IsBoolean() {
+				enabled := setting.GetBooleanValue()
+				if enabled {
+					// Get interval
+					intervalSetting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingWatchIntervalSeconds)
+					intervalSeconds := 5.0
+					if exists && intervalSetting.IsNumber() {
+						intervalSeconds = intervalSetting.GetNumberValue()
+					}
+					_ = a.service.StartWatchMode(a.ctx, intervalSeconds)
+					a.statusBar.SetSuccess("Watch mode enabled")
+				} else {
+					_ = a.service.StopWatchMode(a.ctx)
+					a.statusBar.SetSuccess("Watch mode disabled")
+				}
+			}
+		}
+
+		// Handle interval changes while watch mode is running
+		if msg.Success && msg.SettingName == claudeviewer.SettingWatchIntervalSeconds {
+			if a.service.IsWatchModeRunning() {
+				setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingWatchIntervalSeconds)
+				if exists && setting.IsNumber() {
+					a.service.UpdateWatchInterval(setting.GetNumberValue())
+				}
+			}
+		}
+
 		return a.delegateToCurrentScreen(msg)
+
+	// Watch mode messages.
+	case WatchResultMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError(fmt.Sprintf("Auto-sync failed: %v", msg.Error))
+		} else if msg.Count > 0 {
+			a.statusBar.SetSuccess(fmt.Sprintf("Auto-synced %d plans", msg.Count))
+			return a, tea.Batch(
+				LoadPlansCmd(a.ctx, a.service),
+				WatchChannelListenerCmd(a.ctx, a.service),
+			)
+		}
+		// Always re-schedule listener
+		return a, WatchChannelListenerCmd(a.ctx, a.service)
 
 	// Connector messages.
 	case screens.SendToConnectorMsg:

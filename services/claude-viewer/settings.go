@@ -18,8 +18,10 @@ const (
 
 // Known setting name constants.
 const (
-	SettingReadingSpeedWPM = "reading_speed_wpm"
-	SettingDarkModeEnabled = "dark_mode_enabled"
+	SettingReadingSpeedWPM      = "reading_speed_wpm"
+	SettingDarkModeEnabled      = "dark_mode_enabled"
+	SettingWatchModeEnabled     = "watch_mode_enabled"
+	SettingWatchIntervalSeconds = "watch_interval_seconds"
 )
 
 type Setting struct {

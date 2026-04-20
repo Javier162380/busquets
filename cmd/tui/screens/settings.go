@@ -33,6 +33,18 @@ var KnownSettings = []SettingDefinition{
 		Default:              claudeviewer.SettingValues{BooleanValue: boolPtr(true)},
 		RequiresThemeRefresh: true,
 	},
+	{
+		Name:        claudeviewer.SettingWatchModeEnabled,
+		Description: "Automatically sync plans in the background",
+		Type:        claudeviewer.SettingTypeBoolean,
+		Default:     claudeviewer.SettingValues{BooleanValue: boolPtr(false)},
+	},
+	{
+		Name:        claudeviewer.SettingWatchIntervalSeconds,
+		Description: "Watch mode sync interval (seconds)",
+		Type:        claudeviewer.SettingTypeNumber,
+		Default:     claudeviewer.SettingValues{NumberValue: floatPtr(5)},
+	},
 }
 
 func floatPtr(v float64) *float64 { return &v }

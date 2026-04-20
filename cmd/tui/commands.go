@@ -323,3 +323,19 @@ func ValidateConnectorCmd(ctx context.Context, svc UnifiedService, connectorName
 		return screens.ValidateConnectorResultMsg{Success: true}
 	}
 }
+
+// WatchChannelListenerCmd listens to the service's watch result channel
+// and converts results into WatchResultMsg for the TUI to handle.
+func WatchChannelListenerCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case <-ctx.Done():
+			return nil
+		case result := <-svc.GetWatchResultChannel():
+			return WatchResultMsg{
+				Count: result.Count,
+				Error: result.Error,
+			}
+		}
+	}
+}

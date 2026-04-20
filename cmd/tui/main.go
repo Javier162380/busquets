@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"time"
 
+	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -37,6 +39,23 @@ func StartWithOptions(ctx context.Context, service UnifiedService, debug bool) e
 		}
 
 		app.SetDump(f)
+	}
+
+	// Check if watch mode should be auto-started
+	setting, exists, _ := service.GetSetting(ctx, claudeviewer.SettingWatchModeEnabled)
+	if exists && setting.IsBoolean() && setting.GetBooleanValue() {
+		// Get interval
+		intervalSetting, exists, _ := service.GetSetting(ctx, claudeviewer.SettingWatchIntervalSeconds)
+		intervalSeconds := 5.0 // default
+		if exists && intervalSetting.IsNumber() {
+			intervalSeconds = intervalSetting.GetNumberValue()
+		}
+
+		// Start watch mode
+		if err := service.StartWatchMode(ctx, intervalSeconds); err != nil {
+			// Log warning but don't fail
+			fmt.Fprintf(os.Stderr, "Warning: failed to start watch mode: %v\n", err)
+		}
 	}
 
 	p := tea.NewProgram(app, tea.WithAltScreen())
