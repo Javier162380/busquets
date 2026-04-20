@@ -38,7 +38,6 @@ type UnifiedService interface {
 	ConfigureConnector(ctx context.Context, connectorName, key, value string, isSecret bool) error
 	GetConnectorSettings(ctx context.Context, connectorName string) ([]claudeviewer.ConnectorSettingInfo, error)
 	ValidateConnector(ctx context.Context, connectorName string) error
-	// Watch mode methods
 	StartWatchMode(ctx context.Context, intervalSeconds float64) error
 	StopWatchMode(ctx context.Context) error
 	GetWatchResultChannel() <-chan claudeviewer.WatchResult
@@ -319,7 +318,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Batch(
 				LoadPlansCmd(a.ctx, a.service),
 				WatchChannelListenerCmd(a.ctx, a.service),
-				ClearStatusCmd(5*time.Second),
+				ClearStatusCmd(1*time.Second),
 			)
 		}
 		// Always re-schedule listener
