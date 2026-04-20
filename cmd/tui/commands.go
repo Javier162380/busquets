@@ -339,3 +339,10 @@ func WatchChannelListenerCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 		}
 	}
 }
+
+// ClearStatusCmd clears the status bar after a delay.
+func ClearStatusCmd(delay time.Duration) tea.Cmd {
+	return tea.Tick(delay, func(time.Time) tea.Msg {
+		return ClearStatusMsg{}
+	})
+}

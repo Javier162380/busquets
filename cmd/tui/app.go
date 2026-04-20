@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
@@ -50,6 +51,9 @@ type WatchResultMsg struct {
 	Count int
 	Error error
 }
+
+// ClearStatusMsg signals to clear the status bar message.
+type ClearStatusMsg struct{}
 
 // App is the root TUI application model.
 type App struct {
@@ -315,10 +319,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Batch(
 				LoadPlansCmd(a.ctx, a.service),
 				WatchChannelListenerCmd(a.ctx, a.service),
+				ClearStatusCmd(5*time.Second),
 			)
 		}
 		// Always re-schedule listener
 		return a, WatchChannelListenerCmd(a.ctx, a.service)
+
+	case ClearStatusMsg:
+		a.statusBar.Clear()
+		return a, nil
 
 	// Connector messages.
 	case screens.SendToConnectorMsg:
