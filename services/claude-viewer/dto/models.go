@@ -16,6 +16,7 @@ type Plan struct {
 	IndexedAt  time.Time
 	FileSize   int64
 	WordCount  int64
+	Tags       []Tag
 }
 
 // PlanSummary represents a plan summary for listing.
@@ -28,6 +29,7 @@ type PlanSummary struct {
 	ModifiedAt time.Time
 	FileSize   int64
 	WordCount  int64
+	Tags       []Tag
 }
 
 // PlanVersion represents a versioned snapshot of a plan.
@@ -67,4 +69,26 @@ type Setting struct {
 	NumberValue   *float64
 	BooleanValue  *bool
 	DatetimeValue *time.Time
+}
+
+// Tag represents a tag that can be associated with plans.
+type Tag struct {
+	ID          int64
+	Name        string
+	Description *string
+	Color       *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+// PlanWithTags represents a plan with its associated tags.
+type PlanWithTags struct {
+	Plan Plan
+	Tags []Tag
+}
+
+// PlanSummaryWithTags represents a plan summary with its associated tags.
+type PlanSummaryWithTags struct {
+	Summary PlanSummary
+	Tags    []Tag
 }

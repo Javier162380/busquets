@@ -57,14 +57,18 @@ type DeleteVersionsParams struct {
 
 // SearchParams contains parameters for searching plans.
 type SearchParams struct {
-	Query string // Will be used for both title and content LIKE search
+	Query    string   // Will be used for both title and content LIKE search
+	TagNames []string // Tag names to filter by
+	MatchAll bool     // true = AND logic (all tags must match), false = OR logic (any tag can match)
 }
 
 // SearchPaginationParams contains parameters for paginated search.
 type SearchPaginationParams struct {
-	Query  string
-	Limit  int64
-	Offset int64
+	Query    string
+	TagNames []string
+	MatchAll bool
+	Limit    int64
+	Offset   int64
 }
 
 // SearchVersionsParams contains parameters for searching versions by content.
@@ -96,4 +100,25 @@ type UpsertConnectorSettingParams struct {
 	SettingKey    string
 	SettingValue  string
 	IsSecret      bool
+}
+
+// InsertTagParams contains parameters for inserting a new tag.
+type InsertTagParams struct {
+	Name        string
+	Description *string
+	Color       *string
+}
+
+// UpdateTagParams contains parameters for updating an existing tag.
+type UpdateTagParams struct {
+	ID          int64
+	Name        string
+	Description *string
+	Color       *string
+}
+
+// TagFilterParams contains parameters for filtering plans by tags.
+type TagFilterParams struct {
+	TagNames []string
+	MatchAll bool // AND vs OR logic
 }

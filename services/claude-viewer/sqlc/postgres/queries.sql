@@ -136,3 +136,52 @@ DELETE FROM connector_settings WHERE connector_name = $1 AND setting_key = $2;
 
 -- name: DeleteAllConnectorSettings :exec
 DELETE FROM connector_settings WHERE connector_name = $1;
+
+-- Tag queries
+
+-- name: InsertTag :one
+INSERT INTO tags (name, description, color)
+VALUES ($1, $2, $3)
+RETURNING *;
+
+-- name: GetTagByName :one
+SELECT * FROM tags WHERE name = $1 LIMIT 1;
+
+-- name: GetTagByID :one
+SELECT * FROM tags WHERE id = $1 LIMIT 1;
+
+-- name: ListAllTags :many
+SELECT * FROM tags ORDER BY name ASC;
+
+-- name: UpdateTag :exec
+UPDATE tags
+SET name = $1, description = $2, color = $3, updated_at = NOW()
+WHERE id = $4;
+
+-- name: DeleteTag :exec
+DELETE FROM tags WHERE id = $1;
+
+-- Plan-Tag association queries
+
+-- name: AddTagToPlan :exec
+INSERT INTO plan_tags (plan_id, tag_id)
+VALUES ($1, $2);
+
+-- name: RemoveTagFromPlan :exec
+DELETE FROM plan_tags WHERE plan_id = $1 AND tag_id = $2;
+
+-- name: RemoveAllTagsFromPlan :exec
+DELETE FROM plan_tags WHERE plan_id = $1;
+
+-- name: GetPlanTags :many
+SELECT t.* FROM tags t
+JOIN plan_tags pt ON t.id = pt.tag_id
+WHERE pt.plan_id = $1
+ORDER BY t.name ASC;
+
+-- name: GetPlansWithTag :many
+SELECT p.id, p.file_name, p.title, p.created_at, p.modified_at, p.file_size, p.word_count
+FROM plans p
+JOIN plan_tags pt ON p.id = pt.plan_id
+WHERE pt.tag_id = $1
+ORDER BY p.modified_at DESC;

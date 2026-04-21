@@ -37,6 +37,12 @@ type Plan struct {
 	WordCount  int64              `json:"word_count"`
 }
 
+type PlanTag struct {
+	PlanID     int64              `json:"plan_id"`
+	TagID      int64              `json:"tag_id"`
+	AssignedAt pgtype.Timestamptz `json:"assigned_at"`
+}
+
 type PlanVersion struct {
 	ID            int32              `json:"id"`
 	PlanID        int64              `json:"plan_id"`
@@ -54,4 +60,13 @@ type Setting struct {
 	NumberValue   pgtype.Float8      `json:"number_value"`
 	BooleanValue  pgtype.Bool        `json:"boolean_value"`
 	DatetimeValue pgtype.Timestamptz `json:"datetime_value"`
+}
+
+type Tag struct {
+	ID          int32              `json:"id"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	Color       pgtype.Text        `json:"color"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }

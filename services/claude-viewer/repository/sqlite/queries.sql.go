@@ -11,6 +11,23 @@ import (
 	"time"
 )
 
+const addTagToPlan = `-- name: AddTagToPlan :exec
+
+INSERT INTO plan_tags (plan_id, tag_id)
+VALUES (?, ?)
+`
+
+type AddTagToPlanParams struct {
+	PlanID int64 `json:"plan_id"`
+	TagID  int64 `json:"tag_id"`
+}
+
+// Plan-Tag association queries
+func (q *Queries) AddTagToPlan(ctx context.Context, arg AddTagToPlanParams) error {
+	_, err := q.db.ExecContext(ctx, addTagToPlan, arg.PlanID, arg.TagID)
+	return err
+}
+
 const countPlans = `-- name: CountPlans :one
 SELECT COUNT(*) FROM plans
 `
@@ -69,6 +86,15 @@ DELETE FROM settings WHERE variable_name = ?
 
 func (q *Queries) DeleteSetting(ctx context.Context, variableName string) error {
 	_, err := q.db.ExecContext(ctx, deleteSetting, variableName)
+	return err
+}
+
+const deleteTag = `-- name: DeleteTag :exec
+DELETE FROM tags WHERE id = ?
+`
+
+func (q *Queries) DeleteTag(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteTag, id)
 	return err
 }
 
@@ -189,6 +215,43 @@ func (q *Queries) GetPlanByFileName(ctx context.Context, fileName string) (Plan,
 	return i, err
 }
 
+const getPlanTags = `-- name: GetPlanTags :many
+SELECT t.id, t.name, t.description, t.color, t.created_at, t.updated_at FROM tags t
+JOIN plan_tags pt ON t.id = pt.tag_id
+WHERE pt.plan_id = ?
+ORDER BY t.name ASC
+`
+
+func (q *Queries) GetPlanTags(ctx context.Context, planID int64) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, getPlanTags, planID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Tag{}
+	for rows.Next() {
+		var i Tag
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Color,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPlanVersionByNumber = `-- name: GetPlanVersionByNumber :one
 SELECT id, plan_id, version_number, file_path, content, word_count, created_at
 FROM plan_versions
@@ -261,6 +324,55 @@ func (q *Queries) GetPlanVersionHistory(ctx context.Context, arg GetPlanVersionH
 	return items, nil
 }
 
+const getPlansWithTag = `-- name: GetPlansWithTag :many
+SELECT p.id, p.file_name, p.title, p.created_at, p.modified_at, p.file_size, p.word_count
+FROM plans p
+JOIN plan_tags pt ON p.id = pt.plan_id
+WHERE pt.tag_id = ?
+ORDER BY p.modified_at DESC
+`
+
+type GetPlansWithTagRow struct {
+	ID         int64     `json:"id"`
+	FileName   string    `json:"file_name"`
+	Title      string    `json:"title"`
+	CreatedAt  time.Time `json:"created_at"`
+	ModifiedAt time.Time `json:"modified_at"`
+	FileSize   int64     `json:"file_size"`
+	WordCount  int64     `json:"word_count"`
+}
+
+func (q *Queries) GetPlansWithTag(ctx context.Context, tagID int64) ([]GetPlansWithTagRow, error) {
+	rows, err := q.db.QueryContext(ctx, getPlansWithTag, tagID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetPlansWithTagRow{}
+	for rows.Next() {
+		var i GetPlansWithTagRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FileName,
+			&i.Title,
+			&i.CreatedAt,
+			&i.ModifiedAt,
+			&i.FileSize,
+			&i.WordCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSettingByName = `-- name: GetSettingByName :one
 SELECT variable_name, variable_type, string_value, number_value, boolean_value, datetime_value FROM settings WHERE variable_name = ? LIMIT 1
 `
@@ -275,6 +387,42 @@ func (q *Queries) GetSettingByName(ctx context.Context, variableName string) (Se
 		&i.NumberValue,
 		&i.BooleanValue,
 		&i.DatetimeValue,
+	)
+	return i, err
+}
+
+const getTagByID = `-- name: GetTagByID :one
+SELECT id, name, description, color, created_at, updated_at FROM tags WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetTagByID(ctx context.Context, id int64) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, getTagByID, id)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Color,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const getTagByName = `-- name: GetTagByName :one
+SELECT id, name, description, color, created_at, updated_at FROM tags WHERE name = ? LIMIT 1
+`
+
+func (q *Queries) GetTagByName(ctx context.Context, name string) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, getTagByName, name)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Color,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -346,6 +494,34 @@ func (q *Queries) InsertPlanVersion(ctx context.Context, arg InsertPlanVersionPa
 		arg.CreatedAt,
 	)
 	return err
+}
+
+const insertTag = `-- name: InsertTag :one
+
+INSERT INTO tags (name, description, color)
+VALUES (?, ?, ?)
+RETURNING id, name, description, color, created_at, updated_at
+`
+
+type InsertTagParams struct {
+	Name        string         `json:"name"`
+	Description sql.NullString `json:"description"`
+	Color       sql.NullString `json:"color"`
+}
+
+// Tag queries
+func (q *Queries) InsertTag(ctx context.Context, arg InsertTagParams) (Tag, error) {
+	row := q.db.QueryRowContext(ctx, insertTag, arg.Name, arg.Description, arg.Color)
+	var i Tag
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Color,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const listAllPlans = `-- name: ListAllPlans :many
@@ -448,6 +624,40 @@ func (q *Queries) ListAllPlansWithPagination(ctx context.Context, arg ListAllPla
 	return items, nil
 }
 
+const listAllTags = `-- name: ListAllTags :many
+SELECT id, name, description, color, created_at, updated_at FROM tags ORDER BY name ASC
+`
+
+func (q *Queries) ListAllTags(ctx context.Context) ([]Tag, error) {
+	rows, err := q.db.QueryContext(ctx, listAllTags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Tag{}
+	for rows.Next() {
+		var i Tag
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Color,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listConnectorSettings = `-- name: ListConnectorSettings :many
 SELECT id, connector_name, setting_key, setting_value, is_secret FROM connector_settings WHERE connector_name = ?
 `
@@ -512,6 +722,29 @@ func (q *Queries) ListConnectors(ctx context.Context) ([]Connector, error) {
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeAllTagsFromPlan = `-- name: RemoveAllTagsFromPlan :exec
+DELETE FROM plan_tags WHERE plan_id = ?
+`
+
+func (q *Queries) RemoveAllTagsFromPlan(ctx context.Context, planID int64) error {
+	_, err := q.db.ExecContext(ctx, removeAllTagsFromPlan, planID)
+	return err
+}
+
+const removeTagFromPlan = `-- name: RemoveTagFromPlan :exec
+DELETE FROM plan_tags WHERE plan_id = ? AND tag_id = ?
+`
+
+type RemoveTagFromPlanParams struct {
+	PlanID int64 `json:"plan_id"`
+	TagID  int64 `json:"tag_id"`
+}
+
+func (q *Queries) RemoveTagFromPlan(ctx context.Context, arg RemoveTagFromPlanParams) error {
+	_, err := q.db.ExecContext(ctx, removeTagFromPlan, arg.PlanID, arg.TagID)
+	return err
 }
 
 const searchPlans = `-- name: SearchPlans :many
@@ -705,6 +938,29 @@ func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) error {
 		arg.FileSize,
 		arg.WordCount,
 		arg.FileName,
+	)
+	return err
+}
+
+const updateTag = `-- name: UpdateTag :exec
+UPDATE tags
+SET name = ?, description = ?, color = ?, updated_at = CURRENT_TIMESTAMP
+WHERE id = ?
+`
+
+type UpdateTagParams struct {
+	Name        string         `json:"name"`
+	Description sql.NullString `json:"description"`
+	Color       sql.NullString `json:"color"`
+	ID          int64          `json:"id"`
+}
+
+func (q *Queries) UpdateTag(ctx context.Context, arg UpdateTagParams) error {
+	_, err := q.db.ExecContext(ctx, updateTag,
+		arg.Name,
+		arg.Description,
+		arg.Color,
+		arg.ID,
 	)
 	return err
 }
