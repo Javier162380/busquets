@@ -24,6 +24,7 @@ type Metadata struct {
 	PrimaryLabel  string
 	PrimaryTime   time.Time
 	SecondaryInfo string
+	TagNames      []string
 }
 
 // PlanContent wraps PlanDetail to implement Displayable.
@@ -53,10 +54,15 @@ func (p *PlanContent) GetReadingTime() int {
 }
 
 func (p *PlanContent) GetMetadata() Metadata {
+	tagNames := make([]string, len(p.Tags))
+	for i, tag := range p.Tags {
+		tagNames[i] = tag.Name
+	}
 	return Metadata{
 		PrimaryLabel:  "Modified",
 		PrimaryTime:   p.ModifiedAt,
 		SecondaryInfo: fmt.Sprintf("Size: %d bytes", p.FileSize),
+		TagNames:      tagNames,
 	}
 }
 
