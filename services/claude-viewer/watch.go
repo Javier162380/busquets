@@ -86,6 +86,7 @@ func (wm *WatchManager) UpdateInterval(interval time.Duration) {
 // watchLoop runs the periodic sync in a goroutine.
 func (wm *WatchManager) watchLoop(ctx context.Context) {
 	ticker := time.NewTicker(wm.interval)
+	tickerInterval := wm.interval
 	defer ticker.Stop()
 
 	for {
@@ -99,8 +100,9 @@ func (wm *WatchManager) watchLoop(ctx context.Context) {
 			wm.mu.RUnlock()
 
 			// Reset ticker if interval changed
-			if currentInterval != wm.interval {
+			if tickerInterval != currentInterval {
 				ticker.Reset(currentInterval)
+				tickerInterval = currentInterval
 			}
 
 			count, err := wm.service.SyncPlans(ctx)

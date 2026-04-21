@@ -124,8 +124,8 @@ func planToDomain(p Plan) dto.Plan {
 	}
 }
 
-func planSummaryFromListRow(r ListAllPlansRow) dto.PlanSummary {
-	return dto.PlanSummary{
+func planSummaryFromListRow(r ListAllPlansWithTagsRow) dto.PlanSummary {
+	planSummaryDto := dto.PlanSummary{
 		ID:         int64(r.ID),
 		FileName:   r.FileName,
 		Title:      r.Title,
@@ -134,6 +134,18 @@ func planSummaryFromListRow(r ListAllPlansRow) dto.PlanSummary {
 		FileSize:   r.FileSize,
 		WordCount:  r.WordCount,
 	}
+
+	tags := make([]dto.Tag, len(r.TagIds))
+	for i, tagID := range r.TagIds {
+		tags[i] = dto.Tag{
+			ID: int64(tagID),
+		}
+		if i < len(r.TagNames)-1 {
+			tags[i].Name = r.TagNames[i]
+		}
+	}
+	planSummaryDto.Tags = tags
+	return planSummaryDto
 }
 
 func planSummaryFromPaginationRow(r ListAllPlansWithPaginationRow) dto.PlanSummary {
@@ -300,19 +312,13 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
 }
 
 func (r *Repository) ListAllPlans(ctx context.Context) ([]dto.PlanSummary, error) {
-	rows, err := r.q.ListAllPlans(ctx)
+	rows, err := r.q.ListAllPlansWithTags(ctx)
 	if err != nil {
 		return nil, err
 	}
 	result := make([]dto.PlanSummary, len(rows))
 	for i, row := range rows {
 		result[i] = planSummaryFromListRow(row)
-		// Load tags for this plan
-		tags, err := r.GetPlanTags(ctx, result[i].ID)
-		if err != nil {
-			return nil, err
-		}
-		result[i].Tags = tags
 	}
 	return result, nil
 }

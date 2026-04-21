@@ -609,6 +609,73 @@ func (q *Queries) ListAllPlansWithPagination(ctx context.Context, arg ListAllPla
 	return items, nil
 }
 
+const listAllPlansWithTags = `-- name: ListAllPlansWithTags :many
+SELECT
+    p.id,
+    p.file_name,
+    p.title,
+    p.created_at,
+    p.modified_at,
+    p.file_size,
+    p.word_count,
+    t.tag_ids,
+    t.tag_names
+FROM plans p
+         LEFT JOIN (
+    SELECT
+        pt.plan_id,
+        array_agg(DISTINCT t.id ORDER BY t.id)::int4[] AS tag_ids,
+        array_agg(DISTINCT t.name ORDER BY t.name)::text[] AS tag_names
+
+    FROM plan_tags pt
+             JOIN tags t ON pt.tag_id = t.id
+    GROUP BY pt.plan_id
+) t ON t.plan_id = p.id
+ORDER BY p.id
+`
+
+type ListAllPlansWithTagsRow struct {
+	ID         int32              `json:"id"`
+	FileName   string             `json:"file_name"`
+	Title      string             `json:"title"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	ModifiedAt pgtype.Timestamptz `json:"modified_at"`
+	FileSize   int64              `json:"file_size"`
+	WordCount  int64              `json:"word_count"`
+	TagIds     []int32            `json:"tag_ids"`
+	TagNames   []string           `json:"tag_names"`
+}
+
+func (q *Queries) ListAllPlansWithTags(ctx context.Context) ([]ListAllPlansWithTagsRow, error) {
+	rows, err := q.db.Query(ctx, listAllPlansWithTags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllPlansWithTagsRow{}
+	for rows.Next() {
+		var i ListAllPlansWithTagsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FileName,
+			&i.Title,
+			&i.CreatedAt,
+			&i.ModifiedAt,
+			&i.FileSize,
+			&i.WordCount,
+			&i.TagIds,
+			&i.TagNames,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAllTags = `-- name: ListAllTags :many
 SELECT id, name, description, color, created_at, updated_at FROM tags ORDER BY name ASC
 `
