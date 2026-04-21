@@ -724,6 +724,15 @@ func (q *Queries) ListConnectors(ctx context.Context) ([]Connector, error) {
 	return items, nil
 }
 
+const removeAllPlansFromTag = `-- name: RemoveAllPlansFromTag :exec
+DELETE FROM plan_tags WHERE tag_id = ?
+`
+
+func (q *Queries) RemoveAllPlansFromTag(ctx context.Context, tagID int64) error {
+	_, err := q.db.ExecContext(ctx, removeAllPlansFromTag, tagID)
+	return err
+}
+
 const removeAllTagsFromPlan = `-- name: RemoveAllTagsFromPlan :exec
 DELETE FROM plan_tags WHERE plan_id = ?
 `

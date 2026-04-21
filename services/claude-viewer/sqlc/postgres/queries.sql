@@ -173,6 +173,9 @@ DELETE FROM plan_tags WHERE plan_id = $1 AND tag_id = $2;
 -- name: RemoveAllTagsFromPlan :exec
 DELETE FROM plan_tags WHERE plan_id = $1;
 
+-- name: RemoveAllPlansFromTag :exec
+DELETE FROM plan_tags WHERE tag_id = $1;
+
 -- name: GetPlanTags :many
 SELECT t.* FROM tags t
 JOIN plan_tags pt ON t.id = pt.tag_id

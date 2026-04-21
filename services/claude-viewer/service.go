@@ -115,3 +115,75 @@ func (s *Service) UpdateWatchInterval(intervalSeconds float64) {
 	interval := time.Duration(intervalSeconds) * time.Second
 	s.watchManager.UpdateInterval(interval)
 }
+
+// Tag management methods
+
+// CreateTag creates a new tag with the given name, description, and color.
+func (s *Service) CreateTag(ctx context.Context, name string, description, color *string) (dto.Tag, error) {
+	// Normalize tag name
+	normalized := NormalizeTags([]string{name})
+	if len(normalized) == 0 {
+		return dto.Tag{}, fmt.Errorf("invalid tag name: %s", name)
+	}
+
+	return s.db.InsertTag(ctx, dto.InsertTagParams{
+		Name:        normalized[0],
+		Description: description,
+		Color:       color,
+	})
+}
+
+// GetAllTags returns all tags sorted by name.
+func (s *Service) GetAllTags(ctx context.Context) ([]dto.Tag, error) {
+	return s.db.ListAllTags(ctx)
+}
+
+// DeleteTag deletes a tag by ID. This will also remove all plan-tag associations
+// within a transaction (first removes associations, then the tag).
+func (s *Service) DeleteTag(ctx context.Context, id int64) error {
+	return s.db.DeleteTag(ctx, id)
+}
+
+// SetPlanTags sets the tags for a plan, replacing any existing tags.
+// Tag names will be normalized (lowercase, trimmed).
+// If a tag doesn't exist, it will be created automatically.
+func (s *Service) SetPlanTags(ctx context.Context, fileName string, tagNames []string) error {
+	// Normalize tag names
+	tagNames = NormalizeTags(tagNames)
+
+	// Get plan by filename
+	plan, err := s.db.GetPlanByFileName(ctx, fileName)
+	if err != nil {
+		return fmt.Errorf("failed to get plan: %w", err)
+	}
+
+	// Get or create tags and collect IDs
+	tagIDs := make([]int64, 0, len(tagNames))
+	for _, tagName := range tagNames {
+		tag, err := s.db.GetTagByName(ctx, tagName)
+		if dto.IsNotFound(err) {
+			// Create new tag
+			tag, err = s.db.InsertTag(ctx, dto.InsertTagParams{
+				Name: tagName,
+			})
+		}
+		if err != nil {
+			return fmt.Errorf("failed to get or create tag %s: %w", tagName, err)
+		}
+		tagIDs = append(tagIDs, tag.ID)
+	}
+
+	// Set plan tags (atomic operation)
+	return s.db.SetPlanTags(ctx, plan.ID, tagIDs)
+}
+
+// GetPlanTags returns all tags associated with a plan.
+func (s *Service) GetPlanTags(ctx context.Context, fileName string) ([]dto.Tag, error) {
+	// Get plan by filename
+	plan, err := s.db.GetPlanByFileName(ctx, fileName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plan: %w", err)
+	}
+
+	return s.db.GetPlanTags(ctx, plan.ID)
+}

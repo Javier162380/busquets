@@ -4,22 +4,34 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Repository implements dto.Repository for PostgreSQL.
 type Repository struct {
-	q *Queries
+	pool *pgxpool.Pool
+	q    *Queries
 }
 
 // NewRepository creates a new PostgreSQL repository.
 func NewRepository(db DBTX) *Repository {
-	return &Repository{q: New(db)}
+	// Type assert to *pgxpool.Pool for transaction support
+	pool, ok := db.(*pgxpool.Pool)
+	if !ok {
+		// If not *pgxpool.Pool, create repository without transaction support
+		return &Repository{q: New(db)}
+	}
+	return &Repository{
+		pool: pool,
+		q:    New(db),
+	}
 }
 
 // Verify interface compliance at compile time.
@@ -246,7 +258,38 @@ func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams
 }
 
 func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
-	return r.q.DeletePlan(ctx, fileName)
+	if r.pool == nil {
+		return errors.New("transaction support not available")
+	}
+
+	// Begin transaction
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Create queries with transaction
+	qtx := r.q.WithTx(tx)
+
+	// First, get the plan to obtain its ID
+	plan, err := qtx.GetPlanByFileName(ctx, fileName)
+	if err != nil {
+		return fmt.Errorf("failed to get plan: %w", err)
+	}
+
+	// Delete all plan_tags associations for this plan
+	if err := qtx.RemoveAllTagsFromPlan(ctx, int64(plan.ID)); err != nil {
+		return fmt.Errorf("failed to delete plan_tags associations: %w", err)
+	}
+
+	// Then delete the plan itself
+	if err := qtx.DeletePlan(ctx, fileName); err != nil {
+		return fmt.Errorf("failed to delete plan: %w", err)
+	}
+
+	// Commit transaction
+	return tx.Commit(ctx)
 }
 
 func (r *Repository) ListAllPlans(ctx context.Context) ([]dto.PlanSummary, error) {
@@ -522,4 +565,169 @@ func (r *Repository) DeleteConnectorSetting(ctx context.Context, connectorName, 
 
 func (r *Repository) DeleteAllConnectorSettings(ctx context.Context, connectorName string) error {
 	return r.q.DeleteAllConnectorSettings(ctx, connectorName)
+}
+
+// Tag domain conversion helpers
+
+func tagToDomain(t Tag) dto.Tag {
+	return dto.Tag{
+		ID:          int64(t.ID),
+		Name:        t.Name,
+		Description: textToPtr(t.Description),
+		Color:       textToPtr(t.Color),
+		CreatedAt:   timestamptzToTime(t.CreatedAt),
+		UpdatedAt:   timestamptzToTime(t.UpdatedAt),
+	}
+}
+
+// Tag operations
+
+func (r *Repository) InsertTag(ctx context.Context, params dto.InsertTagParams) (dto.Tag, error) {
+	tag, err := r.q.InsertTag(ctx, InsertTagParams{
+		Name:        params.Name,
+		Description: ptrToText(params.Description),
+		Color:       ptrToText(params.Color),
+	})
+	if err != nil {
+		return dto.Tag{}, err
+	}
+	return tagToDomain(tag), nil
+}
+
+func (r *Repository) GetTagByName(ctx context.Context, name string) (dto.Tag, error) {
+	tag, err := r.q.GetTagByName(ctx, name)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dto.Tag{}, dto.ErrNotFound
+	}
+	if err != nil {
+		return dto.Tag{}, err
+	}
+	return tagToDomain(tag), nil
+}
+
+func (r *Repository) GetTagByID(ctx context.Context, id int64) (dto.Tag, error) {
+	tag, err := r.q.GetTagByID(ctx, int32(id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dto.Tag{}, dto.ErrNotFound
+	}
+	if err != nil {
+		return dto.Tag{}, err
+	}
+	return tagToDomain(tag), nil
+}
+
+func (r *Repository) ListAllTags(ctx context.Context) ([]dto.Tag, error) {
+	rows, err := r.q.ListAllTags(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.Tag, len(rows))
+	for i, row := range rows {
+		result[i] = tagToDomain(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) UpdateTag(ctx context.Context, params dto.UpdateTagParams) error {
+	return r.q.UpdateTag(ctx, UpdateTagParams{
+		Name:        params.Name,
+		Description: ptrToText(params.Description),
+		Color:       ptrToText(params.Color),
+		ID:          int32(params.ID),
+	})
+}
+
+func (r *Repository) DeleteTag(ctx context.Context, id int64) error {
+	if r.pool == nil {
+		return errors.New("transaction support not available")
+	}
+
+	// Begin transaction
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Create queries with transaction
+	qtx := r.q.WithTx(tx)
+
+	// First, delete all plan_tags associations for this tag
+	if err := qtx.RemoveAllPlansFromTag(ctx, id); err != nil {
+		return fmt.Errorf("failed to delete plan_tags associations: %w", err)
+	}
+
+	// Then delete the tag itself
+	if err := qtx.DeleteTag(ctx, int32(id)); err != nil {
+		return fmt.Errorf("failed to delete tag: %w", err)
+	}
+
+	// Commit transaction
+	return tx.Commit(ctx)
+}
+
+// Plan-Tag associations
+
+func (r *Repository) AddTagToPlan(ctx context.Context, planID int64, tagID int64) error {
+	return r.q.AddTagToPlan(ctx, AddTagToPlanParams{
+		PlanID: planID,
+		TagID:  tagID,
+	})
+}
+
+func (r *Repository) RemoveTagFromPlan(ctx context.Context, planID int64, tagID int64) error {
+	return r.q.RemoveTagFromPlan(ctx, RemoveTagFromPlanParams{
+		PlanID: planID,
+		TagID:  tagID,
+	})
+}
+
+func (r *Repository) RemoveAllTagsFromPlan(ctx context.Context, planID int64) error {
+	return r.q.RemoveAllTagsFromPlan(ctx, planID)
+}
+
+func (r *Repository) GetPlanTags(ctx context.Context, planID int64) ([]dto.Tag, error) {
+	rows, err := r.q.GetPlanTags(ctx, planID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.Tag, len(rows))
+	for i, row := range rows {
+		result[i] = tagToDomain(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int64) error {
+	if r.pool == nil {
+		return errors.New("transaction support not available")
+	}
+
+	// Begin transaction
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	// Create queries with transaction
+	qtx := r.q.WithTx(tx)
+
+	// Remove all existing tags
+	if err := qtx.RemoveAllTagsFromPlan(ctx, planID); err != nil {
+		return err
+	}
+
+	// Insert new tags
+	for _, tagID := range tagIDs {
+		if err := qtx.AddTagToPlan(ctx, AddTagToPlanParams{
+			PlanID: planID,
+			TagID:  tagID,
+		}); err != nil {
+			return err
+		}
+	}
+
+	// Commit transaction
+	return tx.Commit(ctx)
 }

@@ -45,4 +45,19 @@ type Repository interface {
 	UpsertConnectorSetting(ctx context.Context, params UpsertConnectorSettingParams) error
 	DeleteConnectorSetting(ctx context.Context, connectorName, key string) error
 	DeleteAllConnectorSettings(ctx context.Context, connectorName string) error
+
+	// Tag operations
+	InsertTag(ctx context.Context, params InsertTagParams) (Tag, error)
+	GetTagByName(ctx context.Context, name string) (Tag, error)
+	GetTagByID(ctx context.Context, id int64) (Tag, error)
+	ListAllTags(ctx context.Context) ([]Tag, error)
+	UpdateTag(ctx context.Context, params UpdateTagParams) error
+	DeleteTag(ctx context.Context, id int64) error
+
+	// Plan-Tag associations
+	AddTagToPlan(ctx context.Context, planID int64, tagID int64) error
+	RemoveTagFromPlan(ctx context.Context, planID int64, tagID int64) error
+	RemoveAllTagsFromPlan(ctx context.Context, planID int64) error
+	GetPlanTags(ctx context.Context, planID int64) ([]Tag, error)
+	SetPlanTags(ctx context.Context, planID int64, tagIDs []int64) error
 }
