@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
@@ -267,7 +268,6 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
 
 	// Create queries with transaction
 	qtx := r.q.WithTx(tx)
@@ -289,7 +289,14 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
 	}
 
 	// Commit transaction
-	return tx.Commit(ctx)
+	err = tx.Commit(ctx)
+	if err != nil {
+		rollBarErr := tx.Rollback(ctx)
+		if rollBarErr != nil {
+			return fmt.Errorf("failed to rollback: %w orginial error %w", rollBarErr, err)
+		}
+	}
+	return err
 }
 
 func (r *Repository) ListAllPlans(ctx context.Context) ([]dto.PlanSummary, error) {
@@ -300,6 +307,12 @@ func (r *Repository) ListAllPlans(ctx context.Context) ([]dto.PlanSummary, error
 	result := make([]dto.PlanSummary, len(rows))
 	for i, row := range rows {
 		result[i] = planSummaryFromListRow(row)
+		// Load tags for this plan
+		tags, err := r.GetPlanTags(ctx, result[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		result[i].Tags = tags
 	}
 	return result, nil
 }
@@ -331,6 +344,12 @@ func (r *Repository) SearchPlans(ctx context.Context, params dto.SearchParams) (
 	result := make([]dto.PlanSummary, len(rows))
 	for i, row := range rows {
 		result[i] = planSummaryFromSearchRow(row)
+		// Load tags for this plan
+		tags, err := r.GetPlanTags(ctx, result[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		result[i].Tags = tags
 	}
 	return result, nil
 }
@@ -351,6 +370,80 @@ func (r *Repository) SearchPlansWithPagination(ctx context.Context, params dto.S
 		result[i] = planSummaryFromSearchPaginationRow(row)
 	}
 	return result, nil
+}
+
+func (r *Repository) SearchPlansWithTags(ctx context.Context, params dto.SearchParams) ([]dto.PlanSummary, error) {
+	// If no tags, just do regular search
+	if len(params.TagNames) == 0 {
+		return r.SearchPlans(ctx, params)
+	}
+
+	// Strategy: Get all plans (filtered by text search if query provided), then filter by tags
+	// This uses SQLC queries and avoids dynamic IN clauses
+
+	// Step 1: Get all plans (filtered by text search if query provided)
+	var allPlans []dto.PlanSummary
+	var err error
+
+	if params.Query == "" {
+		// No text search, get all plans
+		allPlans, err = r.ListAllPlans(ctx)
+	} else {
+		// Text search
+		allPlans, err = r.SearchPlans(ctx, params)
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	// Step 2: Filter plans by tags
+	var result []dto.PlanSummary
+	for _, plan := range allPlans {
+		// Get tags for this plan
+		planTags, err := r.GetPlanTags(ctx, plan.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		// Check if plan matches tag filter
+		if r.matchesTagFilter(planTags, params.TagNames, params.MatchAll) {
+			plan.Tags = planTags
+			result = append(result, plan)
+		}
+	}
+
+	return result, nil
+}
+
+// matchesTagFilter checks if a plan's tags match the filter criteria.
+func (r *Repository) matchesTagFilter(planTags []dto.Tag, filterTags []string, matchAll bool) bool {
+	if len(filterTags) == 0 {
+		return true
+	}
+
+	// Build a map of plan tag names
+	planTagMap := make(map[string]bool)
+	for _, tag := range planTags {
+		planTagMap[strings.ToLower(tag.Name)] = true
+	}
+
+	matchCount := 0
+	for _, filterTag := range filterTags {
+		if planTagMap[strings.ToLower(filterTag)] {
+			matchCount++
+			if !matchAll {
+				// OR logic: at least one match is enough
+				return true
+			}
+		}
+	}
+
+	if matchAll {
+		// AND logic: all tags must match
+		return matchCount == len(filterTags)
+	}
+
+	return false
 }
 
 // Plan version operations
@@ -647,7 +740,6 @@ func (r *Repository) DeleteTag(ctx context.Context, id int64) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
 
 	// Create queries with transaction
 	qtx := r.q.WithTx(tx)
@@ -663,19 +755,26 @@ func (r *Repository) DeleteTag(ctx context.Context, id int64) error {
 	}
 
 	// Commit transaction
-	return tx.Commit(ctx)
+	err = tx.Commit(ctx)
+	if err != nil {
+		rollBarErr := tx.Rollback(ctx)
+		if rollBarErr != nil {
+			return fmt.Errorf("failed to rollback: %w orginial error %w", rollBarErr, err)
+		}
+	}
+	return err
 }
 
 // Plan-Tag associations
 
-func (r *Repository) AddTagToPlan(ctx context.Context, planID int64, tagID int64) error {
+func (r *Repository) AddTagToPlan(ctx context.Context, planID, tagID int64) error {
 	return r.q.AddTagToPlan(ctx, AddTagToPlanParams{
 		PlanID: planID,
 		TagID:  tagID,
 	})
 }
 
-func (r *Repository) RemoveTagFromPlan(ctx context.Context, planID int64, tagID int64) error {
+func (r *Repository) RemoveTagFromPlan(ctx context.Context, planID, tagID int64) error {
 	return r.q.RemoveTagFromPlan(ctx, RemoveTagFromPlanParams{
 		PlanID: planID,
 		TagID:  tagID,
@@ -708,7 +807,6 @@ func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
 
 	// Create queries with transaction
 	qtx := r.q.WithTx(tx)
@@ -729,5 +827,13 @@ func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int
 	}
 
 	// Commit transaction
-	return tx.Commit(ctx)
+	err = tx.Commit(ctx)
+	if err != nil {
+		rollBarErr := tx.Rollback(ctx)
+		if rollBarErr != nil {
+			return fmt.Errorf("failed to rollback: %w orginial error %w", rollBarErr, err)
+		}
+	}
+
+	return err
 }

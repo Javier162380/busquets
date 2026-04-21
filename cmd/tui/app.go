@@ -43,6 +43,10 @@ type UnifiedService interface {
 	GetWatchResultChannel() <-chan claudeviewer.WatchResult
 	IsWatchModeRunning() bool
 	UpdateWatchInterval(intervalSeconds float64)
+	GetAllTags(ctx context.Context) ([]claudeviewer.Tag, error)
+	GetPlanTags(ctx context.Context, fileName string) ([]claudeviewer.Tag, error)
+	SetPlanTags(ctx context.Context, fileName string, tagNames []string) error
+	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]claudeviewer.PlanSummary, error)
 }
 
 // WatchResultMsg wraps watch sync results from service.
@@ -196,7 +200,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Show success message and reload plans.
 		a.statusBar.SetSuccess(fmt.Sprintf("Synced %d plans", msg.Count))
-		return a, LoadPlansCmd(a.ctx, a.service)
+		return a, tea.Batch(LoadPlansCmd(a.ctx, a.service), ClearStatusCmd(1*time.Second))
 
 	case screens.RSyncResultMsg:
 		if msg.Error != nil {
@@ -388,6 +392,23 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.statusBar.SetSuccess("Connector validated successfully!")
 		}
 		return a, nil
+
+	// Tag messages.
+	case screens.LoadTagsForModalMsg:
+		return a, LoadTagsForModalCmd(a.ctx, a.service, msg.FileName)
+
+	case screens.TagsLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.SetPlanTagsMsg:
+		a.statusBar.SetLoading("Saving tags...")
+		return a, tea.Batch(
+			SetPlanTagsCmd(a.ctx, a.service, msg.FileName, msg.Tags),
+			ClearStatusCmd(1*time.Second),
+		)
+
+	case screens.SearchPlansWithTagsMsg:
+		return a, SearchPlansWithTagsCmd(a.ctx, a.service, msg.Query, msg.Tags, msg.MatchAll)
 
 	case screens.ThemeChangedMsg:
 		// Get current dark mode setting and apply theme.

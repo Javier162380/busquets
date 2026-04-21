@@ -346,3 +346,63 @@ func ClearStatusCmd(delay time.Duration) tea.Cmd {
 		return ClearStatusMsg{}
 	})
 }
+
+// LoadTagsForModalCmd loads all tags and current plan tags for the tag modal.
+func LoadTagsForModalCmd(ctx context.Context, svc UnifiedService, fileName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		// Load all tags.
+		allTags, err := svc.GetAllTags(ctx)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+
+		// Load plan tags.
+		planTags, err := svc.GetPlanTags(ctx, fileName)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+
+		return screens.TagsLoadedMsg{
+			FileName: fileName,
+			PlanTags: planTags,
+			AllTags:  allTags,
+		}
+	}
+}
+
+// SetPlanTagsCmd sets tags for a plan.
+func SetPlanTagsCmd(ctx context.Context, svc UnifiedService, fileName string, tags []string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		err := svc.SetPlanTags(ctx, fileName, tags)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+
+		// Reload plans after setting tags.
+		plans, err := svc.ListAllPlansWithReadingTime(ctx)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.PlansLoadedMsg{Plans: plans}
+	}
+}
+
+// SearchPlansWithTagsCmd searches plans with text query and tag filters.
+func SearchPlansWithTagsCmd(ctx context.Context, svc UnifiedService, query string, tags []string, matchAll bool) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		plans, err := svc.SearchPlansWithTags(ctx, query, tags, matchAll)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.PlansLoadedMsg{Plans: plans}
+	}
+}

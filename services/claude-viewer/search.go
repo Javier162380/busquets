@@ -27,6 +27,7 @@ func (s *Service) ListAllPlansWithReadingTime(ctx context.Context) ([]PlanSummar
 			ModifiedAt:  plan.ModifiedAt,
 			FileSize:    plan.FileSize,
 			ReadingTime: s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM),
+			Tags:        plan.Tags,
 		}
 	}
 
@@ -54,6 +55,7 @@ func (s *Service) SearchPlansWithReadingTime(ctx context.Context, query string) 
 			ModifiedAt:  plan.ModifiedAt,
 			FileSize:    plan.FileSize,
 			ReadingTime: s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM),
+			Tags:        plan.Tags,
 		}
 	}
 
@@ -113,6 +115,41 @@ func (s *Service) SearchPlansWithPaginationAndReadingTime(ctx context.Context, q
 			ModifiedAt:  plan.ModifiedAt,
 			FileSize:    plan.FileSize,
 			ReadingTime: s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM),
+		}
+	}
+
+	return summaries, nil
+}
+
+// SearchPlansWithTags searches plans with text query and tag filters.
+func (s *Service) SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]PlanSummary, error) {
+	if query == "" && len(tags) == 0 {
+		return s.ListAllPlansWithReadingTime(ctx)
+	}
+
+	// Search with tags
+	plans, err := s.db.SearchPlansWithTags(ctx, dto.SearchParams{
+		Query:    query,
+		TagNames: tags,
+		MatchAll: matchAll,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to service layer types with reading time
+	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
+	summaries := make([]PlanSummary, len(plans))
+	for i, plan := range plans {
+		summaries[i] = PlanSummary{
+			ID:          plan.ID,
+			FileName:    plan.FileName,
+			Title:       plan.Title,
+			CreatedAt:   plan.CreatedAt,
+			ModifiedAt:  plan.ModifiedAt,
+			FileSize:    plan.FileSize,
+			ReadingTime: s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM),
+			Tags:        plan.Tags,
 		}
 	}
 

@@ -2,12 +2,14 @@ package screens
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -20,13 +22,17 @@ type PlansScreen struct {
 	viewer    *components.Viewer
 	editor    *components.Editor
 	searchBar *components.SearchBar
+	tagModal  *components.TagModal
+	tagFilter *components.TagFilter
 
 	// State.
-	layout      Layout
-	focus       Focus
-	plans       []claudeviewer.PlanSummary
-	current     *claudeviewer.PlanDetail
-	searchQuery string // Current active search query (empty = show all).
+	layout       Layout
+	focus        Focus
+	plans        []claudeviewer.PlanSummary
+	current      *claudeviewer.PlanDetail
+	searchQuery  string   // Current active search query (empty = show all).
+	tagFilters   []string // Active tag filters.
+	showingModal bool     // Whether tag modal is shown.
 
 	// Dimensions.
 	width  int
@@ -46,6 +52,8 @@ func NewPlansScreen(width, height int) *PlansScreen {
 		viewer:    components.NewViewer(panelWidth, contentHeight),
 		editor:    components.NewEditor(width-4, contentHeight),
 		searchBar: components.NewSearchBar(panelWidth),
+		tagModal:  components.NewTagModal(),
+		tagFilter: components.NewTagFilter(panelWidth),
 		layout:    LayoutSplit,
 		focus:     FocusList,
 		width:     width,
@@ -63,6 +71,24 @@ func (s *PlansScreen) Init() tea.Cmd {
 
 // Update handles messages.
 func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
+	// Handle tag modal if showing.
+	if s.showingModal {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			cmd := s.tagModal.Update(msg)
+			return s, cmd
+		case components.SavePlanTagsMsg:
+			s.showingModal = false
+			return s, func() tea.Msg {
+				return SavePlanTagsMsg{
+					FileName: msg.FileName,
+					Tags:     msg.Tags,
+				}
+			}
+		}
+		return s, nil
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return s.handleKey(msg)
@@ -91,6 +117,37 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			}
 		}
 		return s, nil
+
+	case OpenTagModalMsg:
+		// Load all tags and current plan tags, then open modal.
+		return s, func() tea.Msg {
+			return LoadTagsForModalMsg{FileName: msg.FileName}
+		}
+
+	case TagsLoadedMsg:
+		// Open modal with loaded tags.
+		s.tagModal.Open(msg.FileName, msg.PlanTags, msg.AllTags)
+		s.showingModal = true
+		return s, nil
+
+	case SavePlanTagsMsg:
+		// Save tags via service layer.
+		return s, func() tea.Msg {
+			return SetPlanTagsMsg{
+				FileName: msg.FileName,
+				Tags:     msg.Tags,
+			}
+		}
+
+	case FilterByTagsMsg:
+		// Apply tag filter.
+		return s, func() tea.Msg {
+			return SearchPlansWithTagsMsg{
+				Query:    s.searchQuery,
+				Tags:     msg.Tags,
+				MatchAll: msg.MatchAll,
+			}
+		}
 	}
 
 	// Update active component.
@@ -121,6 +178,8 @@ func (s *PlansScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		return s.handleEditorKey(key, msg)
 	case FocusSearch:
 		return s.handleSearchKey(key, msg)
+	case FocusTagFilter:
+		return s.handleTagFilterKey(key, msg)
 	}
 
 	return s, nil
@@ -133,10 +192,27 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		s.focus = FocusSearch
 		return s, s.searchBar.Focus()
 
+	case "T":
+		// Open tag filter.
+		s.focus = FocusTagFilter
+		return s, s.tagFilter.Focus()
+
+	case "m":
+		// Open tag modal for current plan.
+		if s.current != nil {
+			return s, func() tea.Msg {
+				return OpenTagModalMsg{FileName: s.current.FileName}
+			}
+		}
+		return s, nil
+
 	case "c":
-		if s.searchQuery != "" {
+		// Clear search or tag filter.
+		if s.searchQuery != "" || len(s.tagFilters) > 0 {
 			s.searchQuery = ""
+			s.tagFilters = nil
 			s.searchBar.Reset()
+			s.tagFilter.Reset()
 			return s, func() tea.Msg {
 				return ClearSearchMsg{}
 			}
@@ -303,6 +379,38 @@ func (s *PlansScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, tea.C
 	return s, s.searchBar.Update(msg)
 }
 
+// handleTagFilterKey handles keys in tag filter mode.
+func (s *PlansScreen) handleTagFilterKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
+	switch key {
+	case "esc":
+		// Cancel tag filter input, back to list.
+		s.focus = FocusList
+		s.tagFilter.Blur()
+		return s, nil
+
+	case "enter":
+		// Apply tag filter.
+		tags := s.tagFilter.Tags()
+		s.tagFilters = tags
+		s.focus = FocusList
+		s.tagFilter.Blur()
+		return s, func() tea.Msg {
+			return FilterByTagsMsg{
+				Tags:     tags,
+				MatchAll: s.tagFilter.MatchAll(),
+			}
+		}
+
+	case "ctrl+t":
+		// Toggle AND/OR mode.
+		s.tagFilter.ToggleMatchMode()
+		return s, nil
+	}
+
+	// Pass other keys to tag filter for input.
+	return s, s.tagFilter.Update(msg)
+}
+
 // View renders the screen.
 func (s *PlansScreen) View() string {
 	var mainContent string
@@ -318,6 +426,23 @@ func (s *PlansScreen) View() string {
 		mainContent = s.renderSplitView()
 	}
 
+	// Overlay tag modal if showing.
+	if s.showingModal {
+		modal := s.tagModal.View()
+
+		// Overlay modal on top of main content by placing it centered
+		overlay := lipgloss.Place(
+			s.width,
+			s.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			modal,
+		)
+
+		// Combine main content with overlay
+		return s.overlayContent(mainContent, overlay)
+	}
+
 	return mainContent
 }
 
@@ -326,21 +451,28 @@ func (s *PlansScreen) renderSplitView() string {
 	panelWidth := (s.width - 3) / 2
 	contentHeight := s.height - 4
 
-	// Adjust list height if search bar is active.
+	// Adjust list height if search bar or tag filter is active.
 	listHeight := contentHeight - 4
 	if s.searchBar.IsActive() {
 		listHeight -= 3 // Make room for search bar.
+	}
+	if s.tagFilter.IsActive() {
+		listHeight -= 3 // Make room for tag filter.
 	}
 
 	// Update component sizes.
 	s.list.SetSize(panelWidth-4, listHeight)
 	s.viewer.SetSize(panelWidth-4, contentHeight-4)
 	s.searchBar.SetWidth(panelWidth - 4)
+	s.tagFilter.SetWidth(panelWidth - 4)
 
 	// Build left panel content.
 	leftContent := s.list.View()
 	if s.searchBar.IsActive() {
 		leftContent = lipgloss.JoinVertical(lipgloss.Left, leftContent, s.searchBar.View())
+	}
+	if s.tagFilter.IsActive() {
+		leftContent = lipgloss.JoinVertical(lipgloss.Left, leftContent, s.tagFilter.View())
 	}
 
 	leftPanel := s.borderStyle.
@@ -402,11 +534,23 @@ func (s *PlansScreen) SetSize(width, height int) {
 func (s *PlansScreen) ShortHelp() string {
 	switch s.focus {
 	case FocusList:
-		searchHelp := "/: search"
-		if s.searchQuery != "" {
-			searchHelp = fmt.Sprintf("/: search | c: clear [%s]", s.searchQuery)
+		searchHelp := "/: search | T: tags"
+		if s.searchQuery != "" || len(s.tagFilters) > 0 {
+			activeFilters := ""
+			if s.searchQuery != "" {
+				activeFilters = s.searchQuery
+			}
+			if len(s.tagFilters) > 0 {
+				tagStr := fmt.Sprintf("tags:%v", s.tagFilters)
+				if activeFilters != "" {
+					activeFilters += " | " + tagStr
+				} else {
+					activeFilters = tagStr
+				}
+			}
+			searchHelp = fmt.Sprintf("/: search | T: tags | c: clear [%s]", activeFilters)
 		}
-		return fmt.Sprintf("j/k: navigate | tab: content | v: fullscreen | e: edit | s: sync | S: settings | r: rsync | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
+		return fmt.Sprintf("j/k: navigate | m: manage tags | tab: content | v: fullscreen | e: edit | s: sync | S: settings | r: rsync | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
 	case FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeHTML {
@@ -424,22 +568,69 @@ func (s *PlansScreen) ShortHelp() string {
 		return fmt.Sprintf("ctrl+s: save | esc: cancel%s", modified)
 	case FocusSearch:
 		return "enter: search | esc: cancel"
+	case FocusTagFilter:
+		mode := "OR"
+		if s.tagFilter.MatchAll() {
+			mode = "AND"
+		}
+		return fmt.Sprintf("enter: filter | ctrl+t: toggle mode (%s) | esc: cancel", mode)
 	}
 	return ""
 }
 
 // IsInputMode returns true when capturing text input.
 func (s *PlansScreen) IsInputMode() bool {
-	return s.focus == FocusEditor || s.focus == FocusSearch
+	return s.focus == FocusEditor || s.focus == FocusSearch || s.focus == FocusTagFilter || s.showingModal
+}
+
+// overlayContent overlays the modal on top of the main content.
+func (s *PlansScreen) overlayContent(base, overlay string) string {
+	baseLines := strings.Split(base, "\n")
+	overlayLines := strings.Split(overlay, "\n")
+
+	// Ensure both have the same number of lines
+	maxLines := len(baseLines)
+	if len(overlayLines) > maxLines {
+		maxLines = len(overlayLines)
+	}
+
+	result := make([]string, maxLines)
+	for i := 0; i < maxLines; i++ {
+		var baseLine, overlayLine string
+		if i < len(baseLines) {
+			baseLine = baseLines[i]
+		}
+		if i < len(overlayLines) {
+			overlayLine = overlayLines[i]
+		}
+
+		// If overlay line is not empty/whitespace, use it; otherwise use base
+		if strings.TrimSpace(overlayLine) != "" {
+			result[i] = overlayLine
+		} else {
+			result[i] = baseLine
+		}
+	}
+
+	return strings.Join(result, "\n")
 }
 
 // updateListItems updates the list with current plans.
 func (s *PlansScreen) updateListItems() {
 	items := make([]components.ListItem, len(s.plans))
 	for i, plan := range s.plans {
+		// Build description with tags.
+		desc := fmt.Sprintf("%s | %d min read", plan.ModifiedAt.Format("2006-01-02"), plan.ReadingTime)
+		if len(plan.Tags) > 0 {
+			tagNames := make([]string, len(plan.Tags))
+			for j, tag := range plan.Tags {
+				tagNames[j] = tag.Name
+			}
+			desc += fmt.Sprintf(" | [%s]", strings.Join(tagNames, ", "))
+		}
 		items[i] = components.NewListItem(
 			plan.Title,
-			fmt.Sprintf("%s | %d min read", plan.ModifiedAt.Format("2006-01-02"), plan.ReadingTime),
+			desc,
 			plan,
 		)
 	}
@@ -558,4 +749,46 @@ type SendToConnectorMsg struct {
 type SendToConnectorResultMsg struct {
 	Success bool
 	Error   error
+}
+
+// OpenTagModalMsg requests opening the tag modal for a plan.
+type OpenTagModalMsg struct {
+	FileName string
+}
+
+// LoadTagsForModalMsg requests loading tags for the modal.
+type LoadTagsForModalMsg struct {
+	FileName string
+}
+
+// TagsLoadedMsg contains loaded tags for the modal.
+type TagsLoadedMsg struct {
+	FileName string
+	PlanTags []dto.Tag
+	AllTags  []dto.Tag
+}
+
+// SavePlanTagsMsg requests saving tags for a plan.
+type SavePlanTagsMsg struct {
+	FileName string
+	Tags     []string
+}
+
+// SetPlanTagsMsg requests setting tags via service layer.
+type SetPlanTagsMsg struct {
+	FileName string
+	Tags     []string
+}
+
+// FilterByTagsMsg requests filtering plans by tags.
+type FilterByTagsMsg struct {
+	Tags     []string
+	MatchAll bool
+}
+
+// SearchPlansWithTagsMsg requests searching plans with tag filter.
+type SearchPlansWithTagsMsg struct {
+	Query    string
+	Tags     []string
+	MatchAll bool
 }

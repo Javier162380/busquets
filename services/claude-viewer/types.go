@@ -4,7 +4,12 @@ import (
 	"math"
 	"time"
 	"unicode"
+
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
+
+// Tag is an alias for dto.Tag to expose in the service layer.
+type Tag = dto.Tag
 
 const (
 	AverageReadingSpeed    = 200
@@ -20,6 +25,7 @@ type PlanSummary struct {
 	ModifiedAt  time.Time
 	FileSize    int64
 	ReadingTime int
+	Tags        []dto.Tag
 }
 
 // PlanDetail represents detailed plan information with rendered HTML.

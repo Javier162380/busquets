@@ -6,10 +6,6 @@ import (
 )
 
 // ExtractTagsFromContent parses plan content for inline tags.
-// Supports multiple formats:
-// - #tag (hashtags)
-// - Tags: tag1, tag2, tag3
-// - tags: tag1, tag2
 func ExtractTagsFromContent(content string) []string {
 	tags := make(map[string]struct{})
 
@@ -22,8 +18,7 @@ func ExtractTagsFromContent(content string) []string {
 		}
 	}
 
-	// Extract from "Tags:" or "tags:" metadata line
-	// Match lines like: "Tags: tag1, tag2, tag3" or "tags: foo, bar"
+	// Extract from "Tags:" or "tags:" metadata line.
 	tagsLineRegex := regexp.MustCompile(`(?i)^tags?:\s*(.+)$`)
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
@@ -51,27 +46,15 @@ func ExtractTagsFromContent(content string) []string {
 }
 
 // NormalizeTags validates and normalizes tag names.
-// Rules:
-// - Convert to lowercase
-// - Trim whitespace
-// - Remove duplicates
-// - Remove empty strings
-// - Remove invalid characters (keep only alphanumeric, dash, underscore)
 func NormalizeTags(tags []string) []string {
 	seen := make(map[string]struct{})
 	result := make([]string, 0, len(tags))
 
-	// Regex to keep only alphanumeric, dash, and underscore
 	validCharsRegex := regexp.MustCompile(`[^a-z0-9_-]+`)
 
 	for _, tag := range tags {
-		// Convert to lowercase and trim
 		normalized := strings.ToLower(strings.TrimSpace(tag))
-
-		// Remove invalid characters
 		normalized = validCharsRegex.ReplaceAllString(normalized, "")
-
-		// Skip empty strings or already seen tags
 		if normalized == "" {
 			continue
 		}

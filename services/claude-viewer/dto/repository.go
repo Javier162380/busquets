@@ -15,6 +15,7 @@ type Repository interface {
 	ListAllPlansWithPagination(ctx context.Context, params PaginationParams) ([]PlanSummary, error)
 	SearchPlans(ctx context.Context, params SearchParams) ([]PlanSummary, error)
 	SearchPlansWithPagination(ctx context.Context, params SearchPaginationParams) ([]PlanSummary, error)
+	SearchPlansWithTags(ctx context.Context, params SearchParams) ([]PlanSummary, error)
 
 	// Plan version operations
 	InsertPlanVersion(ctx context.Context, params InsertPlanVersionParams) error
@@ -55,8 +56,8 @@ type Repository interface {
 	DeleteTag(ctx context.Context, id int64) error
 
 	// Plan-Tag associations
-	AddTagToPlan(ctx context.Context, planID int64, tagID int64) error
-	RemoveTagFromPlan(ctx context.Context, planID int64, tagID int64) error
+	AddTagToPlan(ctx context.Context, planID, tagID int64) error
+	RemoveTagFromPlan(ctx context.Context, planID, tagID int64) error
 	RemoveAllTagsFromPlan(ctx context.Context, planID int64) error
 	GetPlanTags(ctx context.Context, planID int64) ([]Tag, error)
 	SetPlanTags(ctx context.Context, planID int64, tagIDs []int64) error

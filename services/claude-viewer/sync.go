@@ -176,6 +176,10 @@ func (s *Service) syncSinglePlan(ctx context.Context, fileName string) (bool, er
 	title := extractTitle(string(content))
 	wordCount := CountWords(string(content))
 
+	// Extract tags from content
+	tags := ExtractTagsFromContent(string(content))
+	normalizedTags := NormalizeTags(tags)
+
 	// Determine what to store in content field
 	contentToStore := string(content)
 	if !s.indexFullContent {
@@ -204,6 +208,12 @@ func (s *Service) syncSinglePlan(ctx context.Context, fileName string) (bool, er
 		if err != nil {
 			return false, fmt.Errorf("failed to update plan: %w", err)
 		}
+
+		// Update tags
+		if err := s.SetPlanTags(ctx, fileName, normalizedTags); err != nil {
+			return false, fmt.Errorf("failed to set plan tags: %w", err)
+		}
+
 		return true, nil
 	}
 
@@ -222,6 +232,12 @@ func (s *Service) syncSinglePlan(ctx context.Context, fileName string) (bool, er
 	if err != nil {
 		return false, fmt.Errorf("failed to insert plan: %w", err)
 	}
+
+	// Set tags for new plan
+	if err := s.SetPlanTags(ctx, fileName, normalizedTags); err != nil {
+		return false, fmt.Errorf("failed to set plan tags: %w", err)
+	}
+
 	return true, nil
 }
 

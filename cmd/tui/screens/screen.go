@@ -38,8 +38,9 @@ const (
 type Focus int
 
 const (
-	FocusList    Focus = iota // Navigating a list.
-	FocusContent              // Viewing content.
-	FocusEditor               // Editing content.
-	FocusSearch               // Search input.
+	FocusList      Focus = iota // Navigating a list.
+	FocusContent                // Viewing content.
+	FocusEditor                 // Editing content.
+	FocusSearch                 // Search input.
+	FocusTagFilter              // Tag filter input.
 )
