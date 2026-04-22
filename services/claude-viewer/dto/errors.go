@@ -70,49 +70,13 @@ func (e *Error) Is(target error) bool {
 
 // Sentinel errors - base errors without operation context.
 var (
-	// NotFound errors (404).
-	ErrNotFound = &Error{Category: CategoryNotFound, Message: "not found"}
-
-	// Validation errors (400).
-	ErrValidation        = &Error{Category: CategoryValidation, Message: "validation failed"}
-	ErrInvalidFormat     = &Error{Category: CategoryValidation, Message: "invalid format"}
-	ErrInvalidDateFormat = &Error{Category: CategoryValidation, Message: "invalid datetime format"}
-	ErrInvalidNumber     = &Error{Category: CategoryValidation, Message: "invalid number value"}
-	ErrInvalidToken      = &Error{Category: CategoryValidation, Message: "invalid pagination token"}
-	ErrNoValue           = &Error{Category: CategoryValidation, Message: "no value provided"}
-
-	// Conflict errors (409).
-	ErrConflict = &Error{Category: CategoryConflict, Message: "conflict detected"}
-
-	// Unavailable errors (503).
-	ErrUnavailable        = &Error{Category: CategoryUnavailable, Message: "service unavailable"}
+	ErrNotFound           = &Error{Category: CategoryNotFound, Message: "not found"}
+	ErrInvalidDateFormat  = &Error{Category: CategoryValidation, Message: "invalid datetime format"}
+	ErrInvalidNumber      = &Error{Category: CategoryValidation, Message: "invalid number value"}
+	ErrNoValue            = &Error{Category: CategoryValidation, Message: "no value provided"}
 	ErrConnectorDisabled  = &Error{Category: CategoryUnavailable, Message: "connector not initialized"}
 	ErrNoConnectorEnabled = &Error{Category: CategoryUnavailable, Message: "no connector enabled"}
-
-	// Internal errors (500).
-	ErrInternal = &Error{Category: CategoryInternal, Message: "internal error"}
 )
-
-// E creates a new error with operation context.
-// Usage: dto.E(dto.ErrPlanNotFound, "GetPlanByFileName", err).
-func E(sentinel *Error, op string, cause error) *Error {
-	return &Error{
-		Category: sentinel.Category,
-		Op:       op,
-		Message:  sentinel.Message,
-		Err:      cause,
-	}
-}
-
-// Wrap wraps an error with a sentinel error type.
-// Usage: dto.Wrap(dto.ErrInternal, err).
-func Wrap(sentinel *Error, cause error) *Error {
-	return &Error{
-		Category: sentinel.Category,
-		Message:  sentinel.Message,
-		Err:      cause,
-	}
-}
 
 // GetCategory extracts the error category, defaulting to Internal.
 func GetCategory(err error) Category {
@@ -129,24 +93,4 @@ func GetCategory(err error) Category {
 // IsNotFound checks if error is a not-found error.
 func IsNotFound(err error) bool {
 	return GetCategory(err) == CategoryNotFound
-}
-
-// IsValidation checks if error is a validation error.
-func IsValidation(err error) bool {
-	return GetCategory(err) == CategoryValidation
-}
-
-// IsConflict checks if error is a conflict error.
-func IsConflict(err error) bool {
-	return GetCategory(err) == CategoryConflict
-}
-
-// IsUnavailable checks if error is an unavailable error.
-func IsUnavailable(err error) bool {
-	return GetCategory(err) == CategoryUnavailable
-}
-
-// IsInternal checks if error is an internal error.
-func IsInternal(err error) bool {
-	return GetCategory(err) == CategoryInternal
 }
