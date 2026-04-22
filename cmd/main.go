@@ -77,7 +77,7 @@ func initRepository(ctx context.Context, cfg *config.Config) (dto.Repository, fu
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to initialize SQLite: %w", err)
 		}
-		repo := sqlite.NewRepository(db)
+		repo := sqlite.NewRepository(db.DB())
 		cleanup := func() { _ = db.Close() }
 		return repo, cleanup, nil
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func newTestRepository(ctx context.Context, dbPath string) (*sqlite.Repository, 
 	if err != nil {
 		return nil, err
 	}
-	return sqlite.NewRepository(db), nil
+	return sqlite.NewRepository(db.DB()), nil
 }
 
 type mockNowProvider struct {
@@ -1341,18 +1342,6 @@ func TestVersionOperations(t *testing.T) {
 	})
 }
 
-// setupMockConnector creates a gomock MockConnector with standard expectations.
-func setupMockConnector(ctrl *gomock.Controller, name, displayName string) *connectors_test.MockConnector {
-	mock := connectors_test.NewMockConnector(ctrl)
-	mock.EXPECT().Name().Return(name).AnyTimes()
-	mock.EXPECT().DisplayName().Return(displayName).AnyTimes()
-	mock.EXPECT().RequiredSettings().Return([]connectors.SettingDefinition{
-		{Key: "api_token", DisplayName: "API Token", Required: true, Sensitive: true},
-		{Key: "channel_id", DisplayName: "Channel ID", Required: true, Sensitive: false},
-	}).AnyTimes()
-	return mock
-}
-
 func TestConnectorManager(t *testing.T) {
 	t.Run("GetEnabledConnector returns nil when none enabled", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
@@ -2005,4 +1994,273 @@ func TestConcurrentVersionSaves(t *testing.T) {
 
 		service.nowProvider = originalProvider
 	})
+}
+
+func TestTagOperations(t *testing.T) {
+	service, _, _, cleanup := setupTestService(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	t.Run("CreateTag with name only", func(t *testing.T) {
+		tag, err := service.CreateTag(ctx, "backend", nil, nil)
+		require.NoError(t, err)
+		require.Equal(t, "backend", tag.Name)
+		require.Nil(t, tag.Description)
+		require.Nil(t, tag.Color)
+	})
+
+	t.Run("CreateTag with name description and color", func(t *testing.T) {
+		desc := "Frontend development tasks"
+		color := "#FF5733"
+		tag, err := service.CreateTag(ctx, "frontend", &desc, &color)
+		require.NoError(t, err)
+		require.Equal(t, "frontend", tag.Name)
+		require.NotNil(t, tag.Description)
+		require.Equal(t, desc, *tag.Description)
+		require.NotNil(t, tag.Color)
+		require.Equal(t, color, *tag.Color)
+	})
+
+	t.Run("CreateTag normalizes tag name", func(t *testing.T) {
+		tag, err := service.CreateTag(ctx, "  Database  ", nil, nil)
+		require.NoError(t, err)
+		require.Equal(t, "database", tag.Name)
+	})
+
+	t.Run("CreateTag fails with empty tag name", func(t *testing.T) {
+		_, err := service.CreateTag(ctx, "   ", nil, nil)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid tag name")
+	})
+
+	t.Run("GetAllTags returns empty list when no tags", func(t *testing.T) {
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+
+		tags, err := service.GetAllTags(ctx)
+		require.NoError(t, err)
+		require.Empty(t, tags)
+	})
+
+	t.Run("GetAllTags returns all tags sorted by name", func(t *testing.T) {
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+
+		_, err := service.CreateTag(ctx, "zebra", nil, nil)
+		require.NoError(t, err)
+		_, err = service.CreateTag(ctx, "alpha", nil, nil)
+		require.NoError(t, err)
+		_, err = service.CreateTag(ctx, "charlie", nil, nil)
+		require.NoError(t, err)
+
+		tags, err := service.GetAllTags(ctx)
+		require.NoError(t, err)
+		require.Len(t, tags, 3)
+		require.Equal(t, "alpha", tags[0].Name)
+		require.Equal(t, "charlie", tags[1].Name)
+		require.Equal(t, "zebra", tags[2].Name)
+	})
+
+	t.Run("DeleteTag removes tag by ID", func(t *testing.T) {
+		service, _, _, cleanup := setupTestService(t)
+		defer cleanup()
+
+		tag, err := service.CreateTag(ctx, "temporary", nil, nil)
+		require.NoError(t, err)
+
+		err = service.DeleteTag(ctx, tag.ID)
+		require.NoError(t, err)
+
+		tags, err := service.GetAllTags(ctx)
+		require.NoError(t, err)
+		require.Empty(t, tags)
+	})
+}
+
+func TestPlanTagRelationship(t *testing.T) {
+	service, sourcePlansDir, _, cleanup := setupTestService(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+
+	t.Run("GetPlanTags returns empty list for plan with no tags", func(t *testing.T) {
+		tags, err := service.GetPlanTags(ctx, "test-plan.md")
+		require.NoError(t, err)
+		require.Empty(t, tags)
+	})
+
+	t.Run("SetPlanTags creates new tags and associates with plan", func(t *testing.T) {
+		err := service.SetPlanTags(ctx, "test-plan.md", []string{"api", "database"})
+		require.NoError(t, err)
+
+		tags, err := service.GetPlanTags(ctx, "test-plan.md")
+		require.NoError(t, err)
+		require.Len(t, tags, 2)
+
+		tagNames := []string{tags[0].Name, tags[1].Name}
+		sort.Strings(tagNames)
+		require.Equal(t, tagNames[0], "api")
+		require.Equal(t, tagNames[1], "database")
+	})
+
+	t.Run("SetPlanTags normalizes tag names", func(t *testing.T) {
+		createTestPlanFile(t, sourcePlansDir, "normalize-test.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		err = service.SetPlanTags(ctx, "normalize-test.md", []string{"  Frontend  ", "BACKEND"})
+		require.NoError(t, err)
+
+		tags, err := service.GetPlanTags(ctx, "normalize-test.md")
+		require.NoError(t, err)
+		require.Len(t, tags, 2)
+
+		tagNames := []string{tags[0].Name, tags[1].Name}
+		require.Contains(t, tagNames, "frontend")
+		require.Contains(t, tagNames, "backend")
+	})
+
+	t.Run("SetPlanTags replaces existing tags", func(t *testing.T) {
+		createTestPlanFile(t, sourcePlansDir, "replace-test.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		err = service.SetPlanTags(ctx, "replace-test.md", []string{"old-tag"})
+		require.NoError(t, err)
+
+		err = service.SetPlanTags(ctx, "replace-test.md", []string{"new-tag1", "new-tag2"})
+		require.NoError(t, err)
+
+		tags, err := service.GetPlanTags(ctx, "replace-test.md")
+		require.NoError(t, err)
+		require.Len(t, tags, 2)
+
+		tagNames := []string{tags[0].Name, tags[1].Name}
+		sort.Strings(tagNames)
+		require.Equal(t, tagNames[0], "new-tag1")
+		require.Equal(t, tagNames[1], "new-tag2")
+		require.NotContains(t, tagNames, "old-tag")
+	})
+
+	t.Run("SetPlanTags reuses existing tags", func(t *testing.T) {
+		createTestPlanFile(t, sourcePlansDir, "plan1.md", sampleMarkdown)
+		createTestPlanFile(t, sourcePlansDir, "plan2.md", sampleMarkdownUpdated)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		err = service.SetPlanTags(ctx, "plan1.md", []string{"shared-tag"})
+		require.NoError(t, err)
+
+		allTagsBefore, err := service.GetAllTags(ctx)
+		require.NoError(t, err)
+		initialTagCount := len(allTagsBefore)
+
+		err = service.SetPlanTags(ctx, "plan2.md", []string{"shared-tag"})
+		require.NoError(t, err)
+
+		allTagsAfter, err := service.GetAllTags(ctx)
+		require.NoError(t, err)
+		require.Equal(t, initialTagCount, len(allTagsAfter))
+
+		tags1, err := service.GetPlanTags(ctx, "plan1.md")
+		require.NoError(t, err)
+		tags2, err := service.GetPlanTags(ctx, "plan2.md")
+		require.NoError(t, err)
+
+		require.Equal(t, tags1[0].ID, tags2[0].ID)
+	})
+
+	t.Run("SetPlanTags fails for non-existent plan", func(t *testing.T) {
+		err := service.SetPlanTags(ctx, "non-existent.md", []string{"tag"})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to get plan")
+	})
+
+	t.Run("GetPlanTags fails for non-existent plan", func(t *testing.T) {
+		_, err := service.GetPlanTags(ctx, "non-existent.md")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to get plan")
+	})
+
+	t.Run("DeleteTag removes tag from all plans", func(t *testing.T) {
+		createTestPlanFile(t, sourcePlansDir, "delete-test.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		tag, err := service.CreateTag(ctx, "to-delete", nil, nil)
+		require.NoError(t, err)
+
+		err = service.SetPlanTags(ctx, "delete-test.md", []string{"to-delete", "keep-tag"})
+		require.NoError(t, err)
+
+		err = service.DeleteTag(ctx, tag.ID)
+		require.NoError(t, err)
+
+		tags, err := service.GetPlanTags(ctx, "delete-test.md")
+		require.NoError(t, err)
+		require.Len(t, tags, 1)
+		require.Equal(t, "keep-tag", tags[0].Name)
+	})
+
+	t.Run("SetPlanTags with empty list removes all tags", func(t *testing.T) {
+		createTestPlanFile(t, sourcePlansDir, "clear-test.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		err = service.SetPlanTags(ctx, "clear-test.md", []string{"tag1", "tag2"})
+		require.NoError(t, err)
+
+		err = service.SetPlanTags(ctx, "clear-test.md", []string{})
+		require.NoError(t, err)
+
+		tags, err := service.GetPlanTags(ctx, "clear-test.md")
+		require.NoError(t, err)
+		require.Empty(t, tags)
+	})
+
+	t.Run("Multiple plans can have different tags", func(t *testing.T) {
+		createTestPlanFile(t, sourcePlansDir, "backend-plan.md", sampleMarkdown)
+		createTestPlanFile(t, sourcePlansDir, "frontend-plan.md", sampleMarkdownUpdated)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		err = service.SetPlanTags(ctx, "backend-plan.md", []string{"api", "database"})
+		require.NoError(t, err)
+
+		err = service.SetPlanTags(ctx, "frontend-plan.md", []string{"ui", "react"})
+		require.NoError(t, err)
+
+		backendTags, err := service.GetPlanTags(ctx, "backend-plan.md")
+		require.NoError(t, err)
+		require.Len(t, backendTags, 2)
+
+		frontendTags, err := service.GetPlanTags(ctx, "frontend-plan.md")
+		require.NoError(t, err)
+		require.Len(t, frontendTags, 2)
+
+		backendTagNames := []string{backendTags[0].Name, backendTags[1].Name}
+		sort.Strings(backendTagNames)
+		frontendTagNames := []string{frontendTags[0].Name, frontendTags[1].Name}
+		sort.Strings(frontendTagNames)
+
+		require.Equal(t, backendTagNames[0], "api")
+		require.Equal(t, backendTagNames[1], "database")
+		require.Equal(t, frontendTagNames[0], "react")
+		require.Equal(t, frontendTagNames[1], "ui")
+	})
+}
+
+// setupMockConnector creates a gomock MockConnector with standard expectations.
+func setupMockConnector(ctrl *gomock.Controller, name, displayName string) *connectors_test.MockConnector {
+	mock := connectors_test.NewMockConnector(ctrl)
+	mock.EXPECT().Name().Return(name).AnyTimes()
+	mock.EXPECT().DisplayName().Return(displayName).AnyTimes()
+	mock.EXPECT().RequiredSettings().Return([]connectors.SettingDefinition{
+		{Key: "api_token", DisplayName: "API Token", Required: true, Sensitive: true},
+		{Key: "channel_id", DisplayName: "Channel ID", Required: true, Sensitive: false},
+	}).AnyTimes()
+	return mock
 }

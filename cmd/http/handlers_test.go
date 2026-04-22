@@ -22,7 +22,7 @@ func newTestRepository(ctx context.Context, dbPath string) (*sqlite.Repository, 
 	if err != nil {
 		return nil, err
 	}
-	return sqlite.NewRepository(db), nil
+	return sqlite.NewRepository(db.DB()), nil
 }
 
 func setupTestServer(t *testing.T) (*Server, string, func()) {
