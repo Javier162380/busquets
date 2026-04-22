@@ -15,6 +15,7 @@ Go application that syncs Claude AI plans from `~/.claude/plans/` to a searchabl
 ```bash
 make build       # Build binary
 make generate    # Regenerate SQLC code (after SQL changes)
+make lint        # Lint the project according to GolangCI lint best practices.
 make test        # Run tests
 make sync        # Sync plans
 make tui         # Launch terminal UI
@@ -25,6 +26,7 @@ make serve       # Start web server (:8081)
 1. Modify SQL → `make generate` → update DTO/repository → service layer → tests
 2. Never edit SQLC-generated files (queries.sql.go, models.go, db.go)
 3. Always run tests before committing
+4. Always lint your code before committing
 
 ## Architecture Patterns
 
@@ -105,7 +107,7 @@ internal/
 - Main file: `services/claude-viewer/service_test.go`
 - Pattern: Root test with subtests (`t.Run()`)
 - Uses gomock for connectors, mock time provider
-- Tests always use SQLite (even for Postgres features)
+- Tests always use SQLite (even for Postgres features) TODO: We will change this.
 
 ## Common Tasks
 

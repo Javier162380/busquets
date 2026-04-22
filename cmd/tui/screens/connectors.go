@@ -365,7 +365,7 @@ func (s *ConnectorsScreen) renderRightPanel(width, height int) string {
 					label = styles.ActiveStyle.Render(label)
 				}
 
-				content.WriteString(fmt.Sprintf("%s%s\n", cursor, label))
+				content.WriteString(fmt.Sprintf("%s%s\n", cursor, label)) //nolint:staticcheck // convenient.
 
 				if i == s.selectedSetting && s.editing {
 					content.WriteString("   " + s.input.View() + "\n")

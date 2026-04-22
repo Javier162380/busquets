@@ -71,7 +71,7 @@ This is a test plan for version control API testing.`
 
 	t.Run("GET /api/plan/:planName/versions returns empty list for new plan", func(t *testing.T) {
 		e := server.Server()
-		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions", nil)
+		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 		c.SetParamNames("planName")
@@ -88,7 +88,7 @@ This is a test plan for version control API testing.`
 
 	t.Run("POST /api/plan/:planName/restore/:versionNumber fails for non-existent version", func(t *testing.T) {
 		e := server.Server()
-		req := httptest.NewRequest("POST", "/api/plan/api-test.md/restore/999", nil)
+		req := httptest.NewRequest("POST", "/api/plan/api-test.md/restore/999", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 		c.SetParamNames("planName", "versionNumber")
@@ -115,7 +115,7 @@ This is a test plan for version control API testing.`
 
 		// Test: GET /api/plan/:planName/versions
 		e := server.Server()
-		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions", nil)
+		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 		c.SetParamNames("planName")
@@ -130,7 +130,7 @@ This is a test plan for version control API testing.`
 		require.False(t, historyResp.HasMore)
 
 		// Test: GET /api/plan/:planName/versions/:versionNumber
-		req = httptest.NewRequest("GET", "/api/plan/api-test.md/versions/1", nil)
+		req = httptest.NewRequest("GET", "/api/plan/api-test.md/versions/1", nil) //nolint:noctx // its a test all good
 		rec = httptest.NewRecorder()
 		c = e.NewContext(req, rec)
 		c.SetParamNames("planName", "versionNumber")
@@ -145,7 +145,7 @@ This is a test plan for version control API testing.`
 		require.Equal(t, version1Content, versionResp.Content)
 
 		// Test: POST /api/plan/:planName/restore/:versionNumber
-		req = httptest.NewRequest("POST", "/api/plan/api-test.md/restore/1", nil)
+		req = httptest.NewRequest("POST", "/api/plan/api-test.md/restore/1", nil) //nolint:noctx // its a test all good
 		rec = httptest.NewRecorder()
 		c = e.NewContext(req, rec)
 		c.SetParamNames("planName", "versionNumber")
@@ -177,7 +177,7 @@ This is a test plan for version control API testing.`
 		e := server.Server()
 
 		// Get first page
-		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions?pageSize=10", nil)
+		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions?pageSize=10", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 		c.SetParamNames("planName")
@@ -193,7 +193,7 @@ This is a test plan for version control API testing.`
 		require.NotEmpty(t, page1.NextToken)
 
 		// Get second page
-		req = httptest.NewRequest("GET", "/api/plan/api-test.md/versions?pageToken="+page1.NextToken, nil)
+		req = httptest.NewRequest("GET", "/api/plan/api-test.md/versions?pageToken="+page1.NextToken, nil) //nolint:noctx // its a test all good
 		rec = httptest.NewRecorder()
 		c = e.NewContext(req, rec)
 		c.SetParamNames("planName")
@@ -209,7 +209,7 @@ This is a test plan for version control API testing.`
 
 	t.Run("Invalid version number returns bad request", func(t *testing.T) {
 		e := server.Server()
-		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions/invalid", nil)
+		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions/invalid", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 		c.SetParamNames("planName", "versionNumber")
@@ -221,7 +221,7 @@ This is a test plan for version control API testing.`
 
 	t.Run("Non-existent plan returns 404", func(t *testing.T) {
 		e := server.Server()
-		req := httptest.NewRequest("GET", "/api/plan/non-existent.md/versions", nil)
+		req := httptest.NewRequest("GET", "/api/plan/non-existent.md/versions", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 		c.SetParamNames("planName")
@@ -233,7 +233,7 @@ This is a test plan for version control API testing.`
 
 	t.Run("Search versions returns matching results", func(t *testing.T) {
 		e := server.Server()
-		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions/search?q=architecture", nil)
+		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions/search?q=architecture", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 		c.SetParamNames("planName")
@@ -251,7 +251,7 @@ This is a test plan for version control API testing.`
 
 	t.Run("Search versions with empty query returns error", func(t *testing.T) {
 		e := server.Server()
-		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions/search?q=", nil)
+		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions/search?q=", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
 		c.SetParamNames("planName")

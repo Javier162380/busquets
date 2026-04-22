@@ -37,6 +37,10 @@ test: ## Run tests
 	@echo "Running tests..."
 	go test -v ./...
 
+lint: ## Lint project
+	 @echo "Linting project..."
+	 golangci-lint run -c .golangci.yml
+
 clean: ## Clean build artifacts
 	rm -rf bin/
 	rm -rf services/claude-viewer/repository/
