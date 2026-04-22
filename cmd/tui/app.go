@@ -75,6 +75,8 @@ type App struct {
 	service UnifiedService
 
 	dump io.Writer
+
+	isDarkModeEnabled bool
 }
 
 // New creates a new TUI application.
@@ -100,9 +102,10 @@ func (a *App) Init() tea.Cmd {
 		darkMode = setting.GetBooleanValue()
 	}
 	styles.SetDarkMode(darkMode)
+	a.isDarkModeEnabled = darkMode
 
 	// Create initial plans screen.
-	plansScreen := screens.NewPlansScreen(a.width, a.height)
+	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode)
 	a.stack = append(a.stack, plansScreen)
 
 	// Start watching for watch results and load initial plans.
@@ -474,7 +477,7 @@ func (a *App) popScreen() tea.Cmd { //nolint:unparam // ok for now.
 }
 
 func (a *App) pushVersionsScreenWithData(planName string, versions []claudeviewer.PlanVersionDetail) tea.Cmd {
-	versionsScreen := screens.NewVersionsScreenWithData(planName, versions, a.width, a.height)
+	versionsScreen := screens.NewVersionsScreenWithData(planName, versions, a.width, a.height, a.isDarkModeEnabled)
 	a.stack = append(a.stack, versionsScreen)
 	return versionsScreen.Init()
 }

@@ -134,6 +134,7 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName string, versionNu
 	if err != nil {
 		return nil, err
 	}
+
 	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
 	readingTime := s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
 

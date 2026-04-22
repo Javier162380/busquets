@@ -26,14 +26,14 @@ func (s systemTimeProvider) Now() time.Time {
 
 // Service represents the Claude Plan Viewer service.
 type Service struct {
-	db               dto.Repository
-	viewerDir        string
-	sourcePlansDir   string
-	indexFullContent bool
-	markdown         goldmark.Markdown
-	nowProvider      NowProvider
-	connectorManager *connectors.Manager
-	watchManager     *WatchManager
+	db                   dto.Repository
+	viewerDir            string
+	sourcePlansDir       string
+	indexFullContent     bool
+	markdownHTMLRendered goldmark.Markdown
+	nowProvider          NowProvider
+	connectorManager     *connectors.Manager
+	watchManager         *WatchManager
 }
 
 // SetConnectorManager sets the connector manager for the service.
@@ -55,12 +55,12 @@ func New(db dto.Repository, viewerDir, sourcePlansDir string, indexFullContent b
 	)
 
 	svc := &Service{
-		db:               db,
-		viewerDir:        viewerDir,
-		sourcePlansDir:   sourcePlansDir,
-		indexFullContent: indexFullContent,
-		markdown:         md,
-		nowProvider:      systemTimeProvider{},
+		db:                   db,
+		viewerDir:            viewerDir,
+		sourcePlansDir:       sourcePlansDir,
+		indexFullContent:     indexFullContent,
+		markdownHTMLRendered: md,
+		nowProvider:          systemTimeProvider{},
 	}
 
 	// Initialize watch manager

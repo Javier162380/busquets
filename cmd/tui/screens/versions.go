@@ -33,10 +33,12 @@ type VersionsScreen struct {
 
 	// Styles.
 	borderStyle lipgloss.Style
+
+	isDarkModeEnabled bool
 }
 
 // NewVersionsScreen creates a new versions screen.
-func NewVersionsScreen(planName string, width, height int) *VersionsScreen {
+func NewVersionsScreen(planName string, width, height int, isDarkModeEnabled bool) *VersionsScreen {
 	panelWidth := (width - 3) / 2
 	contentHeight := height - 4
 
@@ -52,17 +54,18 @@ func NewVersionsScreen(planName string, width, height int) *VersionsScreen {
 		borderStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(styles.BorderColor),
+		isDarkModeEnabled: isDarkModeEnabled,
 	}
 }
 
 // NewVersionsScreenWithData creates a versions screen with pre-loaded data.
-func NewVersionsScreenWithData(planName string, versions []claudeviewer.PlanVersionDetail, width, height int) *VersionsScreen {
-	s := NewVersionsScreen(planName, width, height)
+func NewVersionsScreenWithData(planName string, versions []claudeviewer.PlanVersionDetail, width, height int, isDarkModeEnabled bool) *VersionsScreen {
+	s := NewVersionsScreen(planName, width, height, isDarkModeEnabled)
 	s.versions = versions
 	s.updateListItems()
 	if len(versions) > 0 {
 		s.current = &s.versions[0]
-		s.viewer.SetContent(content.NewVersionContent(s.current))
+		s.viewer.SetContent(content.NewVersionContent(s.current, isDarkModeEnabled))
 	}
 	return s
 }
@@ -89,7 +92,7 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.updateListItems()
 		if len(s.versions) > 0 {
 			s.current = &s.versions[0]
-			s.viewer.SetContent(content.NewVersionContent(s.current))
+			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled))
 		}
 		return s, nil
 	}
@@ -171,7 +174,7 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 		if item := s.list.SelectedItem(); item != nil {
 			if version, ok := item.Data().(claudeviewer.PlanVersionDetail); ok {
 				s.current = &version
-				s.viewer.SetContent(content.NewVersionContent(s.current))
+				s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled))
 			}
 		}
 		return s, cmd

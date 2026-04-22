@@ -19,7 +19,7 @@ func (s *Service) GetPlanByFileName(ctx context.Context, fileName string) (*dto.
 
 func (s *Service) RenderMarkdown(content string) (string, error) {
 	var buf bytes.Buffer
-	if err := s.markdown.Convert([]byte(content), &buf); err != nil {
+	if err := s.markdownHTMLRendered.Convert([]byte(content), &buf); err != nil {
 		return "", fmt.Errorf("failed to render markdown: %w", err)
 	}
 

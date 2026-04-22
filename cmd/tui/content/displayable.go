@@ -6,6 +6,13 @@ import (
 	"time"
 
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+
+	"charm.land/glamour/v2"
+)
+
+const (
+	GlamourDarkMode  = "dark"
+	GlamourTokyoMode = "tokyo-night"
 )
 
 // Displayable is the interface for content that can be displayed in the viewer.
@@ -30,11 +37,12 @@ type Metadata struct {
 // PlanContent wraps PlanDetail to implement Displayable.
 type PlanContent struct {
 	*claudeviewer.PlanDetail
+	darkModeEnabled bool
 }
 
 // NewPlanContent creates a new PlanContent from a PlanDetail.
-func NewPlanContent(plan *claudeviewer.PlanDetail) *PlanContent {
-	return &PlanContent{PlanDetail: plan}
+func NewPlanContent(plan *claudeviewer.PlanDetail, darkModeEnabled bool) *PlanContent {
+	return &PlanContent{PlanDetail: plan, darkModeEnabled: darkModeEnabled}
 }
 
 func (p *PlanContent) GetTitle() string {
@@ -46,7 +54,12 @@ func (p *PlanContent) GetContent() string {
 }
 
 func (p *PlanContent) GetRenderedHTML() string {
-	return p.RenderedHTML
+	style := GlamourTokyoMode
+	if p.darkModeEnabled {
+		style = GlamourDarkMode
+	}
+	rendered, _ := glamour.Render(p.Content, style)
+	return rendered
 }
 
 func (p *PlanContent) GetReadingTime() int {
@@ -73,11 +86,12 @@ func (p *PlanContent) GetIdentifier() string {
 // VersionContent wraps PlanVersionDetail to implement Displayable.
 type VersionContent struct {
 	*claudeviewer.PlanVersionDetail
+	darkModeEnabled bool
 }
 
 // NewVersionContent creates a new VersionContent from a PlanVersionDetail.
-func NewVersionContent(version *claudeviewer.PlanVersionDetail) *VersionContent {
-	return &VersionContent{PlanVersionDetail: version}
+func NewVersionContent(version *claudeviewer.PlanVersionDetail, darkModeEnabled bool) *VersionContent {
+	return &VersionContent{PlanVersionDetail: version, darkModeEnabled: darkModeEnabled}
 }
 
 func (v *VersionContent) GetTitle() string {
@@ -89,7 +103,12 @@ func (v *VersionContent) GetContent() string {
 }
 
 func (v *VersionContent) GetRenderedHTML() string {
-	return v.RenderedHTML
+	style := GlamourTokyoMode
+	if v.darkModeEnabled {
+		style = GlamourDarkMode
+	}
+	rendered, _ := glamour.Render(v.Content, style)
+	return rendered
 }
 
 func (v *VersionContent) GetReadingTime() int {

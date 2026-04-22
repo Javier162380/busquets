@@ -16,7 +16,7 @@ type RenderMode int
 
 const (
 	RenderModeRaw RenderMode = iota
-	RenderModeHTML
+	RenderModeGlamour
 )
 
 // Viewer displays scrollable content.
@@ -59,7 +59,7 @@ func (v *Viewer) SetSize(width, height int) {
 // ToggleRenderMode switches between raw and HTML rendering.
 func (v *Viewer) ToggleRenderMode() {
 	if v.renderMode == RenderModeRaw {
-		v.renderMode = RenderModeHTML
+		v.renderMode = RenderModeGlamour
 	} else {
 		v.renderMode = RenderModeRaw
 	}
@@ -128,7 +128,7 @@ func (v *Viewer) updateViewportContent() {
 
 	// Add content based on render mode.
 	var contentText string
-	if v.renderMode == RenderModeHTML {
+	if v.renderMode == RenderModeGlamour {
 		contentText = stripHTMLTags(v.content.GetRenderedHTML())
 	} else {
 		contentText = v.content.GetContent()

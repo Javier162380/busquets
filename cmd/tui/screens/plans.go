@@ -40,10 +40,13 @@ type PlansScreen struct {
 
 	// Styles.
 	borderStyle lipgloss.Style
+
+	// Theme
+	isDarkModeEnabled bool
 }
 
 // NewPlansScreen creates a new plans screen.
-func NewPlansScreen(width, height int) *PlansScreen {
+func NewPlansScreen(width, height int, isDarkModeEnabled bool) *PlansScreen {
 	panelWidth := (width - 3) / 2
 	contentHeight := height - 4
 
@@ -61,6 +64,7 @@ func NewPlansScreen(width, height int) *PlansScreen {
 		borderStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(styles.BorderColor),
+		isDarkModeEnabled: isDarkModeEnabled,
 	}
 }
 
@@ -103,7 +107,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 
 	case PlanDetailLoadedMsg:
 		s.current = msg.Detail
-		s.viewer.SetContent(content.NewPlanContent(msg.Detail))
+		s.viewer.SetContent(content.NewPlanContent(msg.Detail, s.isDarkModeEnabled))
 		s.editor.SetContent(msg.Detail.Content)
 		return s, nil
 
@@ -553,11 +557,11 @@ func (s *PlansScreen) ShortHelp() string {
 		return fmt.Sprintf("j/k: navigate | m: manage tags | tab: content | v: fullscreen | e: edit | s: sync | S: settings | r: rsync | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
 	case FocusContent:
 		mode := "RAW"
-		if s.viewer.RenderMode() == components.RenderModeHTML {
-			mode = "HTML"
+		if s.viewer.RenderMode() == components.RenderModeGlamour {
+			mode = "RENDERED"
 		}
 		if s.layout == LayoutSplit {
-			return fmt.Sprintf("j/k: scroll | g/G: top/bottom | r: render (%s) | tab: list | esc: back", mode)
+			return fmt.Sprintf("j/k: scroll | g/G: top/bottom | r: render (%s)	 | tab: list | esc: back", mode)
 		}
 		return fmt.Sprintf("j/k: scroll | g/G: top/bottom | r: render (%s) | e: edit | v: versions | t: transmit | esc: back", mode)
 	case FocusEditor:
