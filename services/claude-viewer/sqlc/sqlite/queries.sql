@@ -15,6 +15,29 @@ SELECT id, file_name, title, created_at, modified_at, file_size, word_count
 FROM plans
 ORDER BY modified_at DESC;
 
+-- name: ListAllPlansWithTags :many
+SELECT
+    p.id,
+    p.file_name,
+    p.title,
+    p.created_at,
+    p.modified_at,
+    p.file_size,
+    p.word_count,
+    COALESCE(t.tag_ids, '') AS tag_ids,
+    COALESCE(t.tag_names, '') AS tag_names
+FROM plans p
+LEFT JOIN (
+    SELECT
+        pt.plan_id,
+        GROUP_CONCAT(DISTINCT t.id) AS tag_ids,
+        GROUP_CONCAT(DISTINCT t.name) AS tag_names
+    FROM plan_tags pt
+    JOIN tags t ON pt.tag_id = t.id
+    GROUP BY pt.plan_id
+) t ON t.plan_id = p.id
+ORDER BY p.modified_at DESC;
+
 -- name: ListAllPlansWithPagination :many
 SELECT id, file_name, title, created_at, modified_at, file_size, word_count
 FROM plans
@@ -26,6 +49,30 @@ SELECT id, file_name, title, created_at, modified_at, file_size, word_count
 FROM plans
 WHERE title LIKE ? OR content LIKE ?
 ORDER BY modified_at DESC;
+
+-- name: SearchPlansWithTags :many
+SELECT
+    p.id,
+    p.file_name,
+    p.title,
+    p.created_at,
+    p.modified_at,
+    p.file_size,
+    p.word_count,
+    COALESCE(t.tag_ids, '') AS tag_ids,
+    COALESCE(t.tag_names, '') AS tag_names
+FROM plans p
+LEFT JOIN (
+    SELECT
+        pt.plan_id,
+        GROUP_CONCAT(DISTINCT t.id) AS tag_ids,
+        GROUP_CONCAT(DISTINCT t.name) AS tag_names
+    FROM plan_tags pt
+    JOIN tags t ON pt.tag_id = t.id
+    GROUP BY pt.plan_id
+) t ON t.plan_id = p.id
+WHERE p.title LIKE ? OR p.content LIKE ?
+ORDER BY p.modified_at DESC;
 
 -- name: SearchPlansWithPagination :many
 SELECT id, file_name, title, created_at, modified_at, file_size, word_count

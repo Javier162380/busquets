@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -93,6 +94,40 @@ func ptrToNullTime(t *time.Time) sql.NullTime {
 	return sql.NullTime{Time: *t, Valid: true}
 }
 
+// parseCommaSeparatedTags converts GROUP_CONCAT results into []dto.Tag
+func parseCommaSeparatedTags(tagIdsStr, tagNamesStr string) []dto.Tag {
+	// Handle empty case (plan with no tags)
+	if tagIdsStr == "" || tagNamesStr == "" {
+		return []dto.Tag{}
+	}
+
+	// Split comma-separated strings
+	idStrings := strings.Split(tagIdsStr, ",")
+	names := strings.Split(tagNamesStr, ",")
+
+	// Ensure arrays have same length
+	minLen := len(idStrings)
+	if len(names) < minLen {
+		minLen = len(names)
+	}
+
+	tags := make([]dto.Tag, 0, minLen)
+	for i := 0; i < minLen; i++ {
+		// Parse ID from string to int64
+		id, err := strconv.ParseInt(strings.TrimSpace(idStrings[i]), 10, 64)
+		if err != nil {
+			continue // Skip invalid IDs
+		}
+
+		tags = append(tags, dto.Tag{
+			ID:   id,
+			Name: strings.TrimSpace(names[i]),
+		})
+	}
+
+	return tags
+}
+
 // Model conversions: SQLC types -> domain types
 
 func planToDomain(p Plan) dto.Plan {
@@ -155,6 +190,32 @@ func planSummaryFromSearchPaginationRow(r SearchPlansWithPaginationRow) dto.Plan
 		ModifiedAt: r.ModifiedAt,
 		FileSize:   r.FileSize,
 		WordCount:  r.WordCount,
+	}
+}
+
+func planSummaryFromListWithTagsRow(r ListAllPlansWithTagsRow) dto.PlanSummary {
+	return dto.PlanSummary{
+		ID:         r.ID,
+		FileName:   r.FileName,
+		Title:      r.Title,
+		CreatedAt:  r.CreatedAt,
+		ModifiedAt: r.ModifiedAt,
+		FileSize:   r.FileSize,
+		WordCount:  r.WordCount,
+		Tags:       parseCommaSeparatedTags(r.TagIds, r.TagNames),
+	}
+}
+
+func planSummaryFromSearchWithTagsRow(r SearchPlansWithTagsRow) dto.PlanSummary {
+	return dto.PlanSummary{
+		ID:         r.ID,
+		FileName:   r.FileName,
+		Title:      r.Title,
+		CreatedAt:  r.CreatedAt,
+		ModifiedAt: r.ModifiedAt,
+		FileSize:   r.FileSize,
+		WordCount:  r.WordCount,
+		Tags:       parseCommaSeparatedTags(r.TagIds, r.TagNames),
 	}
 }
 
@@ -286,19 +347,13 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
 }
 
 func (r *Repository) ListAllPlans(ctx context.Context) ([]dto.PlanSummary, error) {
-	rows, err := r.q.ListAllPlans(ctx)
+	rows, err := r.q.ListAllPlansWithTags(ctx)
 	if err != nil {
 		return nil, err
 	}
 	result := make([]dto.PlanSummary, len(rows))
 	for i, row := range rows {
-		result[i] = planSummaryFromListRow(row)
-		// Load tags for this plan
-		tags, err := r.GetPlanTags(ctx, result[i].ID)
-		if err != nil {
-			return nil, err
-		}
-		result[i].Tags = tags
+		result[i] = planSummaryFromListWithTagsRow(row)
 	}
 	return result, nil
 }
@@ -320,7 +375,7 @@ func (r *Repository) ListAllPlansWithPagination(ctx context.Context, params dto.
 
 func (r *Repository) SearchPlans(ctx context.Context, params dto.SearchParams) ([]dto.PlanSummary, error) {
 	searchPattern := "%" + params.Query + "%"
-	rows, err := r.q.SearchPlans(ctx, SearchPlansParams{
+	rows, err := r.q.SearchPlansWithTags(ctx, SearchPlansWithTagsParams{
 		Title:   searchPattern,
 		Content: searchPattern,
 	})
@@ -329,13 +384,7 @@ func (r *Repository) SearchPlans(ctx context.Context, params dto.SearchParams) (
 	}
 	result := make([]dto.PlanSummary, len(rows))
 	for i, row := range rows {
-		result[i] = planSummaryFromSearchRow(row)
-		// Load tags for this plan
-		tags, err := r.GetPlanTags(ctx, result[i].ID)
-		if err != nil {
-			return nil, err
-		}
-		result[i].Tags = tags
+		result[i] = planSummaryFromSearchWithTagsRow(row)
 	}
 	return result, nil
 }

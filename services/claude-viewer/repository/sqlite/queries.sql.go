@@ -633,6 +633,75 @@ func (q *Queries) ListAllPlansWithPagination(ctx context.Context, arg ListAllPla
 	return items, nil
 }
 
+const listAllPlansWithTags = `-- name: ListAllPlansWithTags :many
+SELECT
+    p.id,
+    p.file_name,
+    p.title,
+    p.created_at,
+    p.modified_at,
+    p.file_size,
+    p.word_count,
+    COALESCE(t.tag_ids, '') AS tag_ids,
+    COALESCE(t.tag_names, '') AS tag_names
+FROM plans p
+LEFT JOIN (
+    SELECT
+        pt.plan_id,
+        GROUP_CONCAT(DISTINCT t.id) AS tag_ids,
+        GROUP_CONCAT(DISTINCT t.name) AS tag_names
+    FROM plan_tags pt
+    JOIN tags t ON pt.tag_id = t.id
+    GROUP BY pt.plan_id
+) t ON t.plan_id = p.id
+ORDER BY p.modified_at DESC
+`
+
+type ListAllPlansWithTagsRow struct {
+	ID         int64     `json:"id"`
+	FileName   string    `json:"file_name"`
+	Title      string    `json:"title"`
+	CreatedAt  time.Time `json:"created_at"`
+	ModifiedAt time.Time `json:"modified_at"`
+	FileSize   int64     `json:"file_size"`
+	WordCount  int64     `json:"word_count"`
+	TagIds     string    `json:"tag_ids"`
+	TagNames   string    `json:"tag_names"`
+}
+
+func (q *Queries) ListAllPlansWithTags(ctx context.Context) ([]ListAllPlansWithTagsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAllPlansWithTags)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllPlansWithTagsRow{}
+	for rows.Next() {
+		var i ListAllPlansWithTagsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FileName,
+			&i.Title,
+			&i.CreatedAt,
+			&i.ModifiedAt,
+			&i.FileSize,
+			&i.WordCount,
+			&i.TagIds,
+			&i.TagNames,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAllTags = `-- name: ListAllTags :many
 SELECT id, name, description, color, created_at, updated_at FROM tags ORDER BY name ASC
 `
@@ -865,6 +934,81 @@ func (q *Queries) SearchPlansWithPagination(ctx context.Context, arg SearchPlans
 			&i.ModifiedAt,
 			&i.FileSize,
 			&i.WordCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchPlansWithTags = `-- name: SearchPlansWithTags :many
+SELECT
+    p.id,
+    p.file_name,
+    p.title,
+    p.created_at,
+    p.modified_at,
+    p.file_size,
+    p.word_count,
+    COALESCE(t.tag_ids, '') AS tag_ids,
+    COALESCE(t.tag_names, '') AS tag_names
+FROM plans p
+LEFT JOIN (
+    SELECT
+        pt.plan_id,
+        GROUP_CONCAT(DISTINCT t.id) AS tag_ids,
+        GROUP_CONCAT(DISTINCT t.name) AS tag_names
+    FROM plan_tags pt
+    JOIN tags t ON pt.tag_id = t.id
+    GROUP BY pt.plan_id
+) t ON t.plan_id = p.id
+WHERE p.title LIKE ? OR p.content LIKE ?
+ORDER BY p.modified_at DESC
+`
+
+type SearchPlansWithTagsParams struct {
+	Title   string `json:"title"`
+	Content string `json:"content"`
+}
+
+type SearchPlansWithTagsRow struct {
+	ID         int64     `json:"id"`
+	FileName   string    `json:"file_name"`
+	Title      string    `json:"title"`
+	CreatedAt  time.Time `json:"created_at"`
+	ModifiedAt time.Time `json:"modified_at"`
+	FileSize   int64     `json:"file_size"`
+	WordCount  int64     `json:"word_count"`
+	TagIds     string    `json:"tag_ids"`
+	TagNames   string    `json:"tag_names"`
+}
+
+func (q *Queries) SearchPlansWithTags(ctx context.Context, arg SearchPlansWithTagsParams) ([]SearchPlansWithTagsRow, error) {
+	rows, err := q.db.QueryContext(ctx, searchPlansWithTags, arg.Title, arg.Content)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchPlansWithTagsRow{}
+	for rows.Next() {
+		var i SearchPlansWithTagsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FileName,
+			&i.Title,
+			&i.CreatedAt,
+			&i.ModifiedAt,
+			&i.FileSize,
+			&i.WordCount,
+			&i.TagIds,
+			&i.TagNames,
 		); err != nil {
 			return nil, err
 		}

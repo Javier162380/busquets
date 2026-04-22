@@ -184,6 +184,30 @@ func planSummaryFromSearchPaginationRow(r SearchPlansWithPaginationRow) dto.Plan
 	}
 }
 
+func planSummaryFromSearchWithTagsRow(r SearchPlansWithTagsRow) dto.PlanSummary {
+	planSummaryDto := dto.PlanSummary{
+		ID:         int64(r.ID),
+		FileName:   r.FileName,
+		Title:      r.Title,
+		CreatedAt:  timestamptzToTime(r.CreatedAt),
+		ModifiedAt: timestamptzToTime(r.ModifiedAt),
+		FileSize:   r.FileSize,
+		WordCount:  r.WordCount,
+	}
+
+	tags := make([]dto.Tag, len(r.TagIds))
+	for i, tagID := range r.TagIds {
+		tags[i] = dto.Tag{
+			ID: int64(tagID),
+		}
+		if i < len(r.TagNames) {
+			tags[i].Name = r.TagNames[i]
+		}
+	}
+	planSummaryDto.Tags = tags
+	return planSummaryDto
+}
+
 func planVersionToDomain(pv PlanVersion) dto.PlanVersion {
 	return dto.PlanVersion{
 		ID:            int64(pv.ID),
@@ -340,7 +364,7 @@ func (r *Repository) ListAllPlansWithPagination(ctx context.Context, params dto.
 
 func (r *Repository) SearchPlans(ctx context.Context, params dto.SearchParams) ([]dto.PlanSummary, error) {
 	searchPattern := "%" + params.Query + "%"
-	rows, err := r.q.SearchPlans(ctx, SearchPlansParams{
+	rows, err := r.q.SearchPlansWithTags(ctx, SearchPlansWithTagsParams{
 		Title:   searchPattern,
 		Content: searchPattern,
 	})
@@ -349,13 +373,7 @@ func (r *Repository) SearchPlans(ctx context.Context, params dto.SearchParams) (
 	}
 	result := make([]dto.PlanSummary, len(rows))
 	for i, row := range rows {
-		result[i] = planSummaryFromSearchRow(row)
-		// Load tags for this plan
-		tags, err := r.GetPlanTags(ctx, result[i].ID)
-		if err != nil {
-			return nil, err
-		}
-		result[i].Tags = tags
+		result[i] = planSummaryFromSearchWithTagsRow(row)
 	}
 	return result, nil
 }
