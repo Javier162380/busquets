@@ -686,6 +686,8 @@ func (r *Repository) InsertTag(ctx context.Context, params dto.InsertTagParams) 
 		Name:        params.Name,
 		Description: ptrToText(params.Description),
 		Color:       ptrToText(params.Color),
+		CreatedAt:   pgtype.Timestamptz{Time: params.CreatedAt, Valid: true},
+		UpdatedAt:   pgtype.Timestamptz{Time: params.ModifiedAt, Valid: true},
 	})
 	if err != nil {
 		return dto.Tag{}, err
@@ -773,10 +775,11 @@ func (r *Repository) DeleteTag(ctx context.Context, id int64) error {
 
 // Plan-Tag associations
 
-func (r *Repository) AddTagToPlan(ctx context.Context, planID, tagID int64) error {
+func (r *Repository) AddTagToPlan(ctx context.Context, planID, tagID int64, assignedAt time.Time) error {
 	return r.q.AddTagToPlan(ctx, AddTagToPlanParams{
-		PlanID: planID,
-		TagID:  tagID,
+		PlanID:     planID,
+		TagID:      tagID,
+		AssignedAt: pgtype.Timestamptz{Time: assignedAt, Valid: true},
 	})
 }
 
@@ -803,36 +806,32 @@ func (r *Repository) GetPlanTags(ctx context.Context, planID int64) ([]dto.Tag, 
 	return result, nil
 }
 
-func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int64) error {
+func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int64, assignedAt time.Time) error {
 	if r.pool == nil {
 		return errors.New("transaction support not available")
 	}
 
-	// Begin transaction
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Create queries with transaction
 	qtx := r.q.WithTx(tx)
 
-	// Remove all existing tags
 	if err := qtx.RemoveAllTagsFromPlan(ctx, planID); err != nil {
 		return err
 	}
 
-	// Insert new tags
 	for _, tagID := range tagIDs {
 		if err := qtx.AddTagToPlan(ctx, AddTagToPlanParams{
-			PlanID: planID,
-			TagID:  tagID,
+			PlanID:     planID,
+			TagID:      tagID,
+			AssignedAt: pgtype.Timestamptz{Time: assignedAt, Valid: true},
 		}); err != nil {
 			return err
 		}
 	}
 
-	// Commit transaction
 	err = tx.Commit(ctx)
 	if err != nil {
 		rollBarErr := tx.Rollback(ctx)

@@ -164,8 +164,8 @@ DELETE FROM connector_settings WHERE connector_name = $1;
 -- Tag queries
 
 -- name: InsertTag :one
-INSERT INTO tags (name, description, color)
-VALUES ($1, $2, $3)
+INSERT INTO tags (name, description, color, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: GetTagByName :one
@@ -188,8 +188,8 @@ DELETE FROM tags WHERE id = $1;
 -- Plan-Tag association queries
 
 -- name: AddTagToPlan :exec
-INSERT INTO plan_tags (plan_id, tag_id)
-VALUES ($1, $2);
+INSERT INTO plan_tags (plan_id, tag_id, assigned_at)
+VALUES ($1, $2, $3);
 
 -- name: RemoveTagFromPlan :exec
 DELETE FROM plan_tags WHERE plan_id = $1 AND tag_id = $2;

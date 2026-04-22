@@ -120,16 +120,18 @@ func (s *Service) UpdateWatchInterval(intervalSeconds float64) {
 
 // CreateTag creates a new tag with the given name, description, and color.
 func (s *Service) CreateTag(ctx context.Context, name string, description, color *string) (dto.Tag, error) {
-	// Normalize tag name
 	normalized := NormalizeTags([]string{name})
 	if len(normalized) == 0 {
 		return dto.Tag{}, fmt.Errorf("invalid tag name: %s", name)
 	}
 
+	now := s.nowProvider.Now()
 	return s.db.InsertTag(ctx, dto.InsertTagParams{
 		Name:        normalized[0],
 		Description: description,
 		Color:       color,
+		CreatedAt:   now,
+		ModifiedAt:  now,
 	})
 }
 
@@ -157,14 +159,15 @@ func (s *Service) SetPlanTags(ctx context.Context, fileName string, tagNames []s
 		return fmt.Errorf("failed to get plan: %w", err)
 	}
 
-	// Get or create tags and collect IDs
 	tagIDs := make([]int64, 0, len(tagNames))
+	now := s.nowProvider.Now()
 	for _, tagName := range tagNames {
 		tag, err := s.db.GetTagByName(ctx, tagName)
 		if dto.IsNotFound(err) {
-			// Create new tag
 			tag, err = s.db.InsertTag(ctx, dto.InsertTagParams{
-				Name: tagName,
+				Name:       tagName,
+				CreatedAt:  now,
+				ModifiedAt: now,
 			})
 		}
 		if err != nil {
@@ -173,8 +176,7 @@ func (s *Service) SetPlanTags(ctx context.Context, fileName string, tagNames []s
 		tagIDs = append(tagIDs, tag.ID)
 	}
 
-	// Set plan tags (atomic operation)
-	return s.db.SetPlanTags(ctx, plan.ID, tagIDs)
+	return s.db.SetPlanTags(ctx, plan.ID, tagIDs, now)
 }
 
 // GetPlanTags returns all tags associated with a plan.

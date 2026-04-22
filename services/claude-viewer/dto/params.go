@@ -107,6 +107,8 @@ type InsertTagParams struct {
 	Name        string
 	Description *string
 	Color       *string
+	CreatedAt   time.Time
+	ModifiedAt  time.Time
 }
 
 // UpdateTagParams contains parameters for updating an existing tag.

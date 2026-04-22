@@ -6,7 +6,7 @@ Quick reference for understanding the codebase architecture and development work
 
 Go application that syncs Claude AI plans from `~/.claude/plans/` to a searchable database, providing TUI, Web UI, and CLI interfaces.
 
-**Core Features**: Plan sync/search, version tracking, multi-database support (SQLite/PostgreSQL), connector system (Telegram), markdown rendering
+**Core Features**: Plan sync/search, version tracking, multi-database support (SQLite/PostgreSQL), connector system, markdown rendering
 
 **Main Commands**: `sync`, `tui`, `serve`, `migrate`
 

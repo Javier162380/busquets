@@ -13,18 +13,19 @@ import (
 
 const addTagToPlan = `-- name: AddTagToPlan :exec
 
-INSERT INTO plan_tags (plan_id, tag_id)
-VALUES (?, ?)
+INSERT INTO plan_tags (plan_id, tag_id, assigned_at)
+VALUES (?, ?, ?)
 `
 
 type AddTagToPlanParams struct {
-	PlanID int64 `json:"plan_id"`
-	TagID  int64 `json:"tag_id"`
+	PlanID     int64     `json:"plan_id"`
+	TagID      int64     `json:"tag_id"`
+	AssignedAt time.Time `json:"assigned_at"`
 }
 
 // Plan-Tag association queries
 func (q *Queries) AddTagToPlan(ctx context.Context, arg AddTagToPlanParams) error {
-	_, err := q.db.ExecContext(ctx, addTagToPlan, arg.PlanID, arg.TagID)
+	_, err := q.db.ExecContext(ctx, addTagToPlan, arg.PlanID, arg.TagID, arg.AssignedAt)
 	return err
 }
 
@@ -498,8 +499,8 @@ func (q *Queries) InsertPlanVersion(ctx context.Context, arg InsertPlanVersionPa
 
 const insertTag = `-- name: InsertTag :one
 
-INSERT INTO tags (name, description, color)
-VALUES (?, ?, ?)
+INSERT INTO tags (name, description, color, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?)
 RETURNING id, name, description, color, created_at, updated_at
 `
 
@@ -507,11 +508,19 @@ type InsertTagParams struct {
 	Name        string         `json:"name"`
 	Description sql.NullString `json:"description"`
 	Color       sql.NullString `json:"color"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 // Tag queries
 func (q *Queries) InsertTag(ctx context.Context, arg InsertTagParams) (Tag, error) {
-	row := q.db.QueryRowContext(ctx, insertTag, arg.Name, arg.Description, arg.Color)
+	row := q.db.QueryRowContext(ctx, insertTag,
+		arg.Name,
+		arg.Description,
+		arg.Color,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
 	var i Tag
 	err := row.Scan(
 		&i.ID,

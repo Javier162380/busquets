@@ -13,18 +13,19 @@ import (
 
 const addTagToPlan = `-- name: AddTagToPlan :exec
 
-INSERT INTO plan_tags (plan_id, tag_id)
-VALUES ($1, $2)
+INSERT INTO plan_tags (plan_id, tag_id, assigned_at)
+VALUES ($1, $2, $3)
 `
 
 type AddTagToPlanParams struct {
-	PlanID int64 `json:"plan_id"`
-	TagID  int64 `json:"tag_id"`
+	PlanID     int64              `json:"plan_id"`
+	TagID      int64              `json:"tag_id"`
+	AssignedAt pgtype.Timestamptz `json:"assigned_at"`
 }
 
 // Plan-Tag association queries
 func (q *Queries) AddTagToPlan(ctx context.Context, arg AddTagToPlanParams) error {
-	_, err := q.db.Exec(ctx, addTagToPlan, arg.PlanID, arg.TagID)
+	_, err := q.db.Exec(ctx, addTagToPlan, arg.PlanID, arg.TagID, arg.AssignedAt)
 	return err
 }
 
@@ -489,20 +490,28 @@ func (q *Queries) InsertPlanVersion(ctx context.Context, arg InsertPlanVersionPa
 
 const insertTag = `-- name: InsertTag :one
 
-INSERT INTO tags (name, description, color)
-VALUES ($1, $2, $3)
+INSERT INTO tags (name, description, color, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING id, name, description, color, created_at, updated_at
 `
 
 type InsertTagParams struct {
-	Name        string      `json:"name"`
-	Description pgtype.Text `json:"description"`
-	Color       pgtype.Text `json:"color"`
+	Name        string             `json:"name"`
+	Description pgtype.Text        `json:"description"`
+	Color       pgtype.Text        `json:"color"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
 // Tag queries
 func (q *Queries) InsertTag(ctx context.Context, arg InsertTagParams) (Tag, error) {
-	row := q.db.QueryRow(ctx, insertTag, arg.Name, arg.Description, arg.Color)
+	row := q.db.QueryRow(ctx, insertTag,
+		arg.Name,
+		arg.Description,
+		arg.Color,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
 	var i Tag
 	err := row.Scan(
 		&i.ID,

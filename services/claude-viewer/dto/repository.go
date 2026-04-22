@@ -1,6 +1,9 @@
 package dto
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Repository defines the interface for data persistence operations.
 // Both SQLite and PostgreSQL implementations must satisfy this interface.
@@ -56,9 +59,9 @@ type Repository interface {
 	DeleteTag(ctx context.Context, id int64) error
 
 	// Plan-Tag associations
-	AddTagToPlan(ctx context.Context, planID, tagID int64) error
+	AddTagToPlan(ctx context.Context, planID, tagID int64, assignedAt time.Time) error
 	RemoveTagFromPlan(ctx context.Context, planID, tagID int64) error
 	RemoveAllTagsFromPlan(ctx context.Context, planID int64) error
 	GetPlanTags(ctx context.Context, planID int64) ([]Tag, error)
-	SetPlanTags(ctx context.Context, planID int64, tagIDs []int64) error
+	SetPlanTags(ctx context.Context, planID int64, tagIDs []int64, assignedAt time.Time) error
 }
