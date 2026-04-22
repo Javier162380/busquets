@@ -108,7 +108,8 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 
 	case PlanDetailLoadedMsg:
 		s.current = msg.Detail
-		s.viewer.SetContent(content.NewPlanContent(msg.Detail, s.isDarkModeEnabled, s.focus))
+		viewerWidth := s.getViewerWidth()
+		s.viewer.SetContent(content.NewPlanContent(msg.Detail, s.isDarkModeEnabled, s.focus, viewerWidth))
 		s.editor.SetContent(msg.Detail.Content)
 		return s, nil
 
@@ -228,6 +229,9 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		if s.current != nil {
 			s.layout = types.LayoutFullscreen
 			s.focus = types.FocusContent
+			// Regenerate content with fullscreen width
+			viewerWidth := s.getViewerWidth()
+			s.viewer.SetContent(content.NewPlanContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
 		}
 		return s, nil
 
@@ -291,6 +295,11 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 			s.layout = types.LayoutSplit
 			s.focus = types.FocusList
 			s.viewer.GotoTop()
+			// Regenerate content with split view width
+			if s.current != nil {
+				viewerWidth := s.getViewerWidth()
+				s.viewer.SetContent(content.NewPlanContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
+			}
 		} else {
 			s.focus = types.FocusList
 		}
@@ -533,6 +542,27 @@ func (s *PlansScreen) renderDivider(height int) string {
 func (s *PlansScreen) SetSize(width, height int) {
 	s.width = width
 	s.height = height
+}
+
+// UpdateDarkMode updates the dark mode setting and regenerates content.
+func (s *PlansScreen) UpdateDarkMode(enabled bool) {
+	s.isDarkModeEnabled = enabled
+	// Regenerate current content with new theme
+	if s.current != nil {
+		viewerWidth := s.getViewerWidth()
+		s.viewer.SetContent(content.NewPlanContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
+	}
+}
+
+// getViewerWidth calculates the current viewer width based on layout.
+func (s *PlansScreen) getViewerWidth() int {
+	if s.layout == types.LayoutFullscreen {
+		// Fullscreen: full width minus border padding
+		return s.width - 4
+	}
+	// Split view: half width minus divider and border padding
+	panelWidth := (s.width - 3) / 2
+	return panelWidth - 4
 }
 
 // ShortHelp returns key binding help.

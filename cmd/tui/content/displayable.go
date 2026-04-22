@@ -40,11 +40,12 @@ type PlanContent struct {
 	*claudeviewer.PlanDetail
 	darkModeEnabled bool
 	focus           types.Focus
+	width           int
 }
 
 // NewPlanContent creates a new PlanContent from a PlanDetail.
-func NewPlanContent(plan *claudeviewer.PlanDetail, darkModeEnabled bool, focus types.Focus) *PlanContent {
-	return &PlanContent{PlanDetail: plan, darkModeEnabled: darkModeEnabled, focus: focus}
+func NewPlanContent(plan *claudeviewer.PlanDetail, darkModeEnabled bool, focus types.Focus, width int) *PlanContent {
+	return &PlanContent{PlanDetail: plan, darkModeEnabled: darkModeEnabled, focus: focus, width: width}
 }
 
 func (p *PlanContent) GetTitle() string {
@@ -56,7 +57,7 @@ func (p *PlanContent) GetContent() string {
 }
 
 func (p *PlanContent) GetRenderedHTML() string {
-	return renderMarkdown(p.Content, p.darkModeEnabled, p.focus)
+	return renderMarkdown(p.Content, p.darkModeEnabled, p.width)
 }
 
 func (p *PlanContent) GetReadingTime() int {
@@ -85,11 +86,12 @@ type VersionContent struct {
 	*claudeviewer.PlanVersionDetail
 	darkModeEnabled bool
 	focus           types.Focus
+	width           int
 }
 
 // NewVersionContent creates a new VersionContent from a PlanVersionDetail.
-func NewVersionContent(version *claudeviewer.PlanVersionDetail, darkModeEnabled bool, focus types.Focus) *VersionContent {
-	return &VersionContent{PlanVersionDetail: version, darkModeEnabled: darkModeEnabled, focus: focus}
+func NewVersionContent(version *claudeviewer.PlanVersionDetail, darkModeEnabled bool, focus types.Focus, width int) *VersionContent {
+	return &VersionContent{PlanVersionDetail: version, darkModeEnabled: darkModeEnabled, focus: focus, width: width}
 }
 
 func (v *VersionContent) GetTitle() string {
@@ -101,7 +103,7 @@ func (v *VersionContent) GetContent() string {
 }
 
 func (v *VersionContent) GetRenderedHTML() string {
-	return renderMarkdown(v.Content, v.darkModeEnabled, v.focus)
+	return renderMarkdown(v.Content, v.darkModeEnabled, v.width)
 }
 
 func (v *VersionContent) GetReadingTime() int {
@@ -120,18 +122,19 @@ func (v *VersionContent) GetIdentifier() string {
 	return fmt.Sprintf("%s@v%d", v.FilePath, v.VersionNumber)
 }
 
-func renderMarkdown(content string, darkModeEnabled bool, focus types.Focus) string {
-	style := GlamourTokyoMode
+func renderMarkdown(content string, darkModeEnabled bool, width int) string {
+	style := GlamourDarkMode
 	if darkModeEnabled {
-		style = GlamourDarkMode
+		style = GlamourTokyoMode
 	}
-	wordWith := 70
-	if focus == types.FocusContent {
-		wordWith = 140
+	// Use the actual width provided, or default to 40 if width is too small
+	wordWidth := width
+	if wordWidth < 40 {
+		wordWidth = 40
 	}
 	r, _ := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(style),
-		glamour.WithWordWrap(wordWith),
+		glamour.WithWordWrap(wordWidth),
 	)
 	rendered, _ := r.Render(content)
 	return rendered

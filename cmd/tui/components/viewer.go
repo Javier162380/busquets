@@ -58,9 +58,10 @@ func (v *Viewer) SetSize(width, height int) {
 
 // ToggleRenderMode switches between raw and HTML rendering.
 func (v *Viewer) ToggleRenderMode() {
-	if v.renderMode == RenderModeRaw {
+	switch v.renderMode {
+	case RenderModeRaw:
 		v.renderMode = RenderModeGlamour
-	} else {
+	case RenderModeGlamour:
 		v.renderMode = RenderModeRaw
 	}
 	v.updateViewportContent()
@@ -107,8 +108,8 @@ func (v *Viewer) updateViewportContent() {
 
 	var lines []string
 
-	// Add title.
-	lines = append(lines, styles.TitleStyle.Render(v.content.GetTitle()))
+	// DO NOT ADD the title as the markdown already holds the title please.
+	/*lines = append(lines, styles.TitleStyle.Render(v.content.GetTitle()))*/
 
 	// Add metadata.
 	meta := v.content.GetMetadata()

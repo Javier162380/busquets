@@ -414,13 +414,25 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, SearchPlansWithTagsCmd(a.ctx, a.service, msg.Query, msg.Tags, msg.MatchAll)
 
 	case screens.ThemeChangedMsg:
+
 		// Get current dark mode setting and apply theme.
 		setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingDarkModeEnabled)
 		darkMode := true // default
 		if exists && setting.IsBoolean() {
 			darkMode = setting.GetBooleanValue()
 		}
+		a.isDarkModeEnabled = darkMode
 		styles.SetDarkMode(darkMode)
+
+		// Update all screens in the stack that support dark mode.
+		for _, screen := range a.stack {
+			switch s := screen.(type) {
+			case *screens.PlansScreen:
+				s.UpdateDarkMode(darkMode)
+			case *screens.VersionsScreen:
+				s.UpdateDarkMode(darkMode)
+			}
+		}
 		return a, nil
 	}
 

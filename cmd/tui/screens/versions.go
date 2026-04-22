@@ -66,7 +66,8 @@ func NewVersionsScreenWithData(planName string, versions []claudeviewer.PlanVers
 	s.updateListItems()
 	if len(versions) > 0 {
 		s.current = &s.versions[0]
-		s.viewer.SetContent(content.NewVersionContent(s.current, isDarkModeEnabled, s.focus))
+		viewerWidth := s.getViewerWidth()
+		s.viewer.SetContent(content.NewVersionContent(s.current, isDarkModeEnabled, s.focus, viewerWidth))
 	}
 	return s
 }
@@ -93,7 +94,8 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.updateListItems()
 		if len(s.versions) > 0 {
 			s.current = &s.versions[0]
-			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus))
+			viewerWidth := s.getViewerWidth()
+			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
 		}
 		return s, nil
 	}
@@ -146,12 +148,6 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 			}
 		}
 		return s, nil
-	case "tab":
-		// Switch to content panel (right side) in split view.
-		if s.current != nil {
-			s.focus = types.FocusContent
-		}
-		return s, nil
 	case "esc":
 		return s, func() tea.Msg {
 			return PopScreenMsg{}
@@ -160,14 +156,19 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 		if s.current != nil {
 			s.layout = types.LayoutFullscreen
 			s.focus = types.FocusContent
+			// Regenerate content with fullscreen width
+			viewerWidth := s.getViewerWidth()
+			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
 		}
 		return s, nil
-	case "r":
+	case "R":
 		// Restore selected version.
 		if s.current != nil {
 			return s, s.restoreVersion()
 		}
 		return s, nil
+	case "r":
+		s.viewer.ToggleRenderMode()
 	case "j", "down", "k", "up":
 		// Navigate list.
 		cmd := s.list.Update(msg)
@@ -175,13 +176,13 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 		if item := s.list.SelectedItem(); item != nil {
 			if version, ok := item.Data().(claudeviewer.PlanVersionDetail); ok {
 				s.current = &version
-				s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus))
+				viewerWidth := s.getViewerWidth()
+				s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
 			}
 		}
 		return s, cmd
-	default:
-		return s, s.list.Update(msg)
 	}
+	return s, s.list.Update(msg)
 }
 
 // handleContentKey handles keys in content view mode.
@@ -192,27 +193,23 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 		s.layout = types.LayoutSplit
 		s.focus = types.FocusList
 		s.viewer.GotoTop()
+		// Regenerate content with split view width
+		if s.current != nil {
+			viewerWidth := s.getViewerWidth()
+			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
+		}
 		return s, nil
-
-	case "r":
+	case "R":
 		// Restore selected version.
 		if s.current != nil {
 			return s, s.restoreVersion()
 		}
 		return s, nil
-
+	case "r":
+		s.viewer.ToggleRenderMode()
 	case "g":
 		s.viewer.GotoTop()
 		return s, nil
-
-	case "tab":
-		// Switch back to list panel (left side) in split view.
-		if s.layout == types.LayoutSplit {
-			s.focus = types.FocusList
-			return s, nil
-		}
-		return s, nil
-
 	case "G":
 		s.viewer.GotoBottom()
 		return s, nil
@@ -325,17 +322,42 @@ func (s *VersionsScreen) SetSize(width, height int) {
 	s.height = height
 }
 
+// UpdateDarkMode updates the dark mode setting and regenerates content.
+func (s *VersionsScreen) UpdateDarkMode(enabled bool) {
+	s.isDarkModeEnabled = enabled
+	// Regenerate current content with new theme
+	if s.current != nil {
+		viewerWidth := s.getViewerWidth()
+		s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
+	}
+}
+
+// getViewerWidth calculates the current viewer width based on layout.
+func (s *VersionsScreen) getViewerWidth() int {
+	if s.layout == types.LayoutFullscreen {
+		// Fullscreen: full width minus border padding
+		return s.width - 4
+	}
+	// Split view: half width minus divider and border padding
+	panelWidth := (s.width - 3) / 2
+	return panelWidth - 4
+}
+
 // ShortHelp returns key binding help.
 func (s *VersionsScreen) ShortHelp() string {
+	mode := "RAW"
+	if s.viewer.RenderMode() == components.RenderModeGlamour {
+		mode = "RENDERED"
+	}
 	switch s.focus {
 	case types.FocusList:
 		searchHelp := "/: search"
 		if s.searchQuery != "" {
 			searchHelp = fmt.Sprintf("/: search | c: clear [%s]", s.searchQuery)
 		}
-		return fmt.Sprintf("j/k: navigate | v: view | r: restore | %s | tab: switch | esc: back | Versions: %d", searchHelp, len(s.versions))
+		return fmt.Sprintf("j/k: navigate | v: view | R: restore | r: render (%s) | %s | esc: back | Versions: %d", mode, searchHelp, len(s.versions))
 	case types.FocusContent:
-		return "j/k: scroll | g/G: top/bottom | r: restore | esc: back"
+		return fmt.Sprintf("j/k: scroll | g/G: top/bottom | R: restore | r: render (%s) | esc: back", mode)
 	case types.FocusSearch:
 		return "enter: search | esc: cancel"
 	default:
