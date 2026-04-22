@@ -6,6 +6,7 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -20,8 +21,8 @@ type VersionsScreen struct {
 	searchBar *components.SearchBar
 
 	// State.
-	layout      Layout
-	focus       Focus
+	layout      types.Layout
+	focus       types.Focus
 	planName    string
 	searchQuery string
 	versions    []claudeviewer.PlanVersionDetail
@@ -46,8 +47,8 @@ func NewVersionsScreen(planName string, width, height int, isDarkModeEnabled boo
 		list:      components.NewList(nil, panelWidth, contentHeight),
 		viewer:    components.NewViewer(panelWidth, contentHeight),
 		searchBar: components.NewSearchBar(panelWidth),
-		layout:    LayoutSplit,
-		focus:     FocusList,
+		layout:    types.LayoutSplit,
+		focus:     types.FocusList,
 		planName:  planName,
 		width:     width,
 		height:    height,
@@ -65,7 +66,7 @@ func NewVersionsScreenWithData(planName string, versions []claudeviewer.PlanVers
 	s.updateListItems()
 	if len(versions) > 0 {
 		s.current = &s.versions[0]
-		s.viewer.SetContent(content.NewVersionContent(s.current, isDarkModeEnabled))
+		s.viewer.SetContent(content.NewVersionContent(s.current, isDarkModeEnabled, s.focus))
 	}
 	return s
 }
@@ -92,7 +93,7 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.updateListItems()
 		if len(s.versions) > 0 {
 			s.current = &s.versions[0]
-			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled))
+			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus))
 		}
 		return s, nil
 	}
@@ -100,11 +101,11 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	// Update active component.
 	var cmd tea.Cmd
 	switch s.focus {
-	case FocusList:
+	case types.FocusList:
 		cmd = s.list.Update(msg)
-	case FocusContent:
+	case types.FocusContent:
 		cmd = s.viewer.Update(msg)
-	case FocusSearch:
+	case types.FocusSearch:
 		cmd = s.searchBar.Update(msg)
 	default:
 		return s, cmd
@@ -118,11 +119,11 @@ func (s *VersionsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 	key := msg.String()
 
 	switch s.focus {
-	case FocusList:
+	case types.FocusList:
 		return s.handleListKey(key, msg)
-	case FocusContent:
+	case types.FocusContent:
 		return s.handleContentKey(key, msg)
-	case FocusSearch:
+	case types.FocusSearch:
 		return s.handleSearchKey(key, msg)
 	default:
 		return s, nil
@@ -133,7 +134,7 @@ func (s *VersionsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
 	case "/":
-		s.focus = FocusSearch
+		s.focus = types.FocusSearch
 		return s, s.searchBar.Focus()
 	case "c":
 		// Clear search and reload all versions.
@@ -148,7 +149,7 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 	case "tab":
 		// Switch to content panel (right side) in split view.
 		if s.current != nil {
-			s.focus = FocusContent
+			s.focus = types.FocusContent
 		}
 		return s, nil
 	case "esc":
@@ -157,8 +158,8 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 		}
 	case "v":
 		if s.current != nil {
-			s.layout = LayoutFullscreen
-			s.focus = FocusContent
+			s.layout = types.LayoutFullscreen
+			s.focus = types.FocusContent
 		}
 		return s, nil
 	case "r":
@@ -174,7 +175,7 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 		if item := s.list.SelectedItem(); item != nil {
 			if version, ok := item.Data().(claudeviewer.PlanVersionDetail); ok {
 				s.current = &version
-				s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled))
+				s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus))
 			}
 		}
 		return s, cmd
@@ -188,8 +189,8 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 	switch key {
 	case "esc":
 		// Back to split view.
-		s.layout = LayoutSplit
-		s.focus = FocusList
+		s.layout = types.LayoutSplit
+		s.focus = types.FocusList
 		s.viewer.GotoTop()
 		return s, nil
 
@@ -206,8 +207,8 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 
 	case "tab":
 		// Switch back to list panel (left side) in split view.
-		if s.layout == LayoutSplit {
-			s.focus = FocusList
+		if s.layout == types.LayoutSplit {
+			s.focus = types.FocusList
 			return s, nil
 		}
 		return s, nil
@@ -225,7 +226,7 @@ func (s *VersionsScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, te
 	switch key {
 	case "esc":
 		// Cancel search input, back to list.
-		s.focus = FocusList
+		s.focus = types.FocusList
 		s.searchBar.Blur()
 		return s, nil
 
@@ -233,7 +234,7 @@ func (s *VersionsScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, te
 		// Execute search.
 		query := s.searchBar.Value()
 		s.searchQuery = query
-		s.focus = FocusList
+		s.focus = types.FocusList
 		s.searchBar.Blur()
 		return s, func() tea.Msg {
 			return SearchVersionsMsg{Query: query, PlanName: s.planName}
@@ -249,7 +250,7 @@ func (s *VersionsScreen) View() string {
 	var mainContent string
 
 	switch s.layout {
-	case LayoutFullscreen:
+	case types.LayoutFullscreen:
 		mainContent = s.renderFullscreenViewer()
 	default:
 		mainContent = s.renderSplitView()
@@ -327,15 +328,15 @@ func (s *VersionsScreen) SetSize(width, height int) {
 // ShortHelp returns key binding help.
 func (s *VersionsScreen) ShortHelp() string {
 	switch s.focus {
-	case FocusList:
+	case types.FocusList:
 		searchHelp := "/: search"
 		if s.searchQuery != "" {
 			searchHelp = fmt.Sprintf("/: search | c: clear [%s]", s.searchQuery)
 		}
 		return fmt.Sprintf("j/k: navigate | v: view | r: restore | %s | tab: switch | esc: back | Versions: %d", searchHelp, len(s.versions))
-	case FocusContent:
+	case types.FocusContent:
 		return "j/k: scroll | g/G: top/bottom | r: restore | esc: back"
-	case FocusSearch:
+	case types.FocusSearch:
 		return "enter: search | esc: cancel"
 	default:
 		return ""
@@ -344,7 +345,7 @@ func (s *VersionsScreen) ShortHelp() string {
 
 // IsInputMode returns true when capturing text input.
 func (s *VersionsScreen) IsInputMode() bool {
-	return s.focus == FocusSearch
+	return s.focus == types.FocusSearch
 }
 
 // updateListItems updates the list with current versions.

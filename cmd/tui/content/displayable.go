@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
 	"charm.land/glamour/v2"
@@ -38,11 +39,12 @@ type Metadata struct {
 type PlanContent struct {
 	*claudeviewer.PlanDetail
 	darkModeEnabled bool
+	focus           types.Focus
 }
 
 // NewPlanContent creates a new PlanContent from a PlanDetail.
-func NewPlanContent(plan *claudeviewer.PlanDetail, darkModeEnabled bool) *PlanContent {
-	return &PlanContent{PlanDetail: plan, darkModeEnabled: darkModeEnabled}
+func NewPlanContent(plan *claudeviewer.PlanDetail, darkModeEnabled bool, focus types.Focus) *PlanContent {
+	return &PlanContent{PlanDetail: plan, darkModeEnabled: darkModeEnabled, focus: focus}
 }
 
 func (p *PlanContent) GetTitle() string {
@@ -54,12 +56,7 @@ func (p *PlanContent) GetContent() string {
 }
 
 func (p *PlanContent) GetRenderedHTML() string {
-	style := GlamourTokyoMode
-	if p.darkModeEnabled {
-		style = GlamourDarkMode
-	}
-	rendered, _ := glamour.Render(p.Content, style)
-	return rendered
+	return renderMarkdown(p.Content, p.darkModeEnabled, p.focus)
 }
 
 func (p *PlanContent) GetReadingTime() int {
@@ -87,11 +84,12 @@ func (p *PlanContent) GetIdentifier() string {
 type VersionContent struct {
 	*claudeviewer.PlanVersionDetail
 	darkModeEnabled bool
+	focus           types.Focus
 }
 
 // NewVersionContent creates a new VersionContent from a PlanVersionDetail.
-func NewVersionContent(version *claudeviewer.PlanVersionDetail, darkModeEnabled bool) *VersionContent {
-	return &VersionContent{PlanVersionDetail: version, darkModeEnabled: darkModeEnabled}
+func NewVersionContent(version *claudeviewer.PlanVersionDetail, darkModeEnabled bool, focus types.Focus) *VersionContent {
+	return &VersionContent{PlanVersionDetail: version, darkModeEnabled: darkModeEnabled, focus: focus}
 }
 
 func (v *VersionContent) GetTitle() string {
@@ -103,12 +101,7 @@ func (v *VersionContent) GetContent() string {
 }
 
 func (v *VersionContent) GetRenderedHTML() string {
-	style := GlamourTokyoMode
-	if v.darkModeEnabled {
-		style = GlamourDarkMode
-	}
-	rendered, _ := glamour.Render(v.Content, style)
-	return rendered
+	return renderMarkdown(v.Content, v.darkModeEnabled, v.focus)
 }
 
 func (v *VersionContent) GetReadingTime() int {
@@ -125,4 +118,21 @@ func (v *VersionContent) GetMetadata() Metadata {
 
 func (v *VersionContent) GetIdentifier() string {
 	return fmt.Sprintf("%s@v%d", v.FilePath, v.VersionNumber)
+}
+
+func renderMarkdown(content string, darkModeEnabled bool, focus types.Focus) string {
+	style := GlamourTokyoMode
+	if darkModeEnabled {
+		style = GlamourDarkMode
+	}
+	wordWith := 70
+	if focus == types.FocusContent {
+		wordWith = 140
+	}
+	r, _ := glamour.NewTermRenderer(
+		glamour.WithStandardStyle(style),
+		glamour.WithWordWrap(wordWith),
+	)
+	rendered, _ := r.Render(content)
+	return rendered
 }

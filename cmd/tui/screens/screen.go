@@ -25,22 +25,3 @@ type Screen interface {
 	// IsInputMode returns true when the screen is capturing text input.
 	IsInputMode() bool
 }
-
-// Layout determines how content is displayed.
-type Layout int
-
-const (
-	LayoutSplit      Layout = iota // Two panels side-by-side.
-	LayoutFullscreen               // Single content area.
-)
-
-// Focus determines where user attention is.
-type Focus int
-
-const (
-	FocusList      Focus = iota // Navigating a list.
-	FocusContent                // Viewing content.
-	FocusEditor                 // Editing content.
-	FocusSearch                 // Search input.
-	FocusTagFilter              // Tag filter input.
-)

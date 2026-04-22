@@ -8,6 +8,7 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
@@ -26,8 +27,8 @@ type PlansScreen struct {
 	tagFilter *components.TagFilter
 
 	// State.
-	layout       Layout
-	focus        Focus
+	layout       types.Layout
+	focus        types.Focus
 	plans        []claudeviewer.PlanSummary
 	current      *claudeviewer.PlanDetail
 	searchQuery  string   // Current active search query (empty = show all).
@@ -57,8 +58,8 @@ func NewPlansScreen(width, height int, isDarkModeEnabled bool) *PlansScreen {
 		searchBar: components.NewSearchBar(panelWidth),
 		tagModal:  components.NewTagModal(),
 		tagFilter: components.NewTagFilter(panelWidth),
-		layout:    LayoutSplit,
-		focus:     FocusList,
+		layout:    types.LayoutSplit,
+		focus:     types.FocusList,
 		width:     width,
 		height:    height,
 		borderStyle: lipgloss.NewStyle().
@@ -107,13 +108,13 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 
 	case PlanDetailLoadedMsg:
 		s.current = msg.Detail
-		s.viewer.SetContent(content.NewPlanContent(msg.Detail, s.isDarkModeEnabled))
+		s.viewer.SetContent(content.NewPlanContent(msg.Detail, s.isDarkModeEnabled, s.focus))
 		s.editor.SetContent(msg.Detail.Content)
 		return s, nil
 
 	case SaveResultMsg:
 		if msg.Error == nil && msg.Result.Success && !msg.Result.HasConflict {
-			s.focus = FocusContent
+			s.focus = types.FocusContent
 			s.editor.Blur()
 			// Reload the plan.
 			if s.current != nil {
@@ -157,11 +158,11 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	// Update active component.
 	var cmd tea.Cmd
 	switch s.focus {
-	case FocusList:
+	case types.FocusList:
 		cmd = s.list.Update(msg)
-	case FocusContent:
+	case types.FocusContent:
 		cmd = s.viewer.Update(msg)
-	case FocusEditor:
+	case types.FocusEditor:
 		cmd = s.editor.Update(msg)
 	default:
 		return s, cmd
@@ -174,15 +175,15 @@ func (s *PlansScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 	key := msg.String()
 
 	switch s.focus {
-	case FocusList:
+	case types.FocusList:
 		return s.handleListKey(key, msg)
-	case FocusContent:
+	case types.FocusContent:
 		return s.handleContentKey(key, msg)
-	case FocusEditor:
+	case types.FocusEditor:
 		return s.handleEditorKey(key, msg)
-	case FocusSearch:
+	case types.FocusSearch:
 		return s.handleSearchKey(key, msg)
-	case FocusTagFilter:
+	case types.FocusTagFilter:
 		return s.handleTagFilterKey(key, msg)
 	}
 
@@ -193,12 +194,12 @@ func (s *PlansScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
 	case "/":
-		s.focus = FocusSearch
+		s.focus = types.FocusSearch
 		return s, s.searchBar.Focus()
 
 	case "T":
 		// Open tag filter.
-		s.focus = FocusTagFilter
+		s.focus = types.FocusTagFilter
 		return s, s.tagFilter.Focus()
 
 	case "m":
@@ -225,15 +226,15 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 
 	case "v":
 		if s.current != nil {
-			s.layout = LayoutFullscreen
-			s.focus = FocusContent
+			s.layout = types.LayoutFullscreen
+			s.focus = types.FocusContent
 		}
 		return s, nil
 
 	case "e":
 		if s.current != nil {
-			s.layout = LayoutFullscreen
-			s.focus = FocusEditor
+			s.layout = types.LayoutFullscreen
+			s.focus = types.FocusEditor
 			return s, s.editor.Focus()
 		}
 		return s, nil
@@ -256,7 +257,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 
 	case "tab":
 		if s.current != nil {
-			s.focus = FocusContent
+			s.focus = types.FocusContent
 		}
 		return s, nil
 
@@ -278,27 +279,27 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 	switch key {
 	case "tab":
 		// Switch back to list panel (left side) in split view.
-		if s.layout == LayoutSplit {
-			s.focus = FocusList
+		if s.layout == types.LayoutSplit {
+			s.focus = types.FocusList
 			return s, nil
 		}
 		return s, nil
 
 	case "esc":
 		// Back to list (split view) or back to split view (fullscreen).
-		if s.layout == LayoutFullscreen {
-			s.layout = LayoutSplit
-			s.focus = FocusList
+		if s.layout == types.LayoutFullscreen {
+			s.layout = types.LayoutSplit
+			s.focus = types.FocusList
 			s.viewer.GotoTop()
 		} else {
-			s.focus = FocusList
+			s.focus = types.FocusList
 		}
 		return s, nil
 
 	case "e":
 		// Enter edit mode.
 		if s.current != nil {
-			s.focus = FocusEditor
+			s.focus = types.FocusEditor
 			return s, s.editor.Focus()
 		}
 		return s, nil
@@ -343,7 +344,7 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 	switch key {
 	case "esc":
 		// Cancel editing, back to content view.
-		s.focus = FocusContent
+		s.focus = types.FocusContent
 		s.editor.Blur()
 		s.editor.Reset()
 		return s, nil
@@ -364,7 +365,7 @@ func (s *PlansScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, tea.C
 	switch key {
 	case "esc":
 		// Cancel search input, back to list.
-		s.focus = FocusList
+		s.focus = types.FocusList
 		s.searchBar.Blur()
 		return s, nil
 
@@ -372,7 +373,7 @@ func (s *PlansScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		// Execute search.
 		query := s.searchBar.Value()
 		s.searchQuery = query
-		s.focus = FocusList
+		s.focus = types.FocusList
 		s.searchBar.Blur()
 		return s, func() tea.Msg {
 			return SearchPlansMsg{Query: query}
@@ -388,7 +389,7 @@ func (s *PlansScreen) handleTagFilterKey(key string, msg tea.KeyMsg) (Screen, te
 	switch key {
 	case "esc":
 		// Cancel tag filter input, back to list.
-		s.focus = FocusList
+		s.focus = types.FocusList
 		s.tagFilter.Blur()
 		return s, nil
 
@@ -396,7 +397,7 @@ func (s *PlansScreen) handleTagFilterKey(key string, msg tea.KeyMsg) (Screen, te
 		// Apply tag filter.
 		tags := s.tagFilter.Tags()
 		s.tagFilters = tags
-		s.focus = FocusList
+		s.focus = types.FocusList
 		s.tagFilter.Blur()
 		return s, func() tea.Msg {
 			return FilterByTagsMsg{
@@ -420,8 +421,8 @@ func (s *PlansScreen) View() string {
 	var mainContent string
 
 	switch s.layout {
-	case LayoutFullscreen:
-		if s.focus == FocusEditor {
+	case types.LayoutFullscreen:
+		if s.focus == types.FocusEditor {
 			mainContent = s.renderFullscreenEditor()
 		} else {
 			mainContent = s.renderFullscreenViewer()
@@ -537,7 +538,7 @@ func (s *PlansScreen) SetSize(width, height int) {
 // ShortHelp returns key binding help.
 func (s *PlansScreen) ShortHelp() string {
 	switch s.focus {
-	case FocusList:
+	case types.FocusList:
 		searchHelp := "/: search | T: tags"
 		if s.searchQuery != "" || len(s.tagFilters) > 0 {
 			activeFilters := ""
@@ -555,24 +556,24 @@ func (s *PlansScreen) ShortHelp() string {
 			searchHelp = fmt.Sprintf("/: search | T: tags | c: clear [%s]", activeFilters)
 		}
 		return fmt.Sprintf("j/k: navigate | m: manage tags | tab: content | v: fullscreen | e: edit | s: sync | S: settings | r: rsync | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
-	case FocusContent:
+	case types.FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeGlamour {
 			mode = "RENDERED"
 		}
-		if s.layout == LayoutSplit {
+		if s.layout == types.LayoutSplit {
 			return fmt.Sprintf("j/k: scroll | g/G: top/bottom | r: render (%s)	 | tab: list | esc: back", mode)
 		}
 		return fmt.Sprintf("j/k: scroll | g/G: top/bottom | r: render (%s) | e: edit | v: versions | t: transmit | esc: back", mode)
-	case FocusEditor:
+	case types.FocusEditor:
 		modified := ""
 		if s.editor.IsModified() {
 			modified = " [MODIFIED]"
 		}
 		return fmt.Sprintf("ctrl+s: save | esc: cancel%s", modified)
-	case FocusSearch:
+	case types.FocusSearch:
 		return "enter: search | esc: cancel"
-	case FocusTagFilter:
+	case types.FocusTagFilter:
 		mode := "OR"
 		if s.tagFilter.MatchAll() {
 			mode = "AND"
@@ -584,7 +585,7 @@ func (s *PlansScreen) ShortHelp() string {
 
 // IsInputMode returns true when capturing text input.
 func (s *PlansScreen) IsInputMode() bool {
-	return s.focus == FocusEditor || s.focus == FocusSearch || s.focus == FocusTagFilter || s.showingModal
+	return s.focus == types.FocusEditor || s.focus == types.FocusSearch || s.focus == types.FocusTagFilter || s.showingModal
 }
 
 // overlayContent overlays the modal on top of the main content.
