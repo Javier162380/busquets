@@ -568,6 +568,20 @@ func (s *PlansScreen) UpdateDarkMode(enabled bool) {
 	}
 }
 
+// RenderedMarkdownByDefault upddates the renderned markdown by default mesasage.
+func (s *PlansScreen) RenderedMarkdownByDefault(enabled bool) {
+	renderMode := components.RenderModeRaw
+	if enabled {
+		renderMode = components.RenderModeGlamour
+	}
+
+	if s.viewer.RenderMode() != renderMode {
+		viewerWidth := s.getViewerWidth()
+		s.viewer.SetRenderMode(renderMode)
+		s.viewer.SetContent(content.NewPlanContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
+	}
+}
+
 // getViewerWidth calculates the current viewer width based on layout.
 func (s *PlansScreen) getViewerWidth() int {
 	if s.layout == types.LayoutFullscreen {

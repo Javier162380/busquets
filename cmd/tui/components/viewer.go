@@ -51,6 +51,10 @@ func (v *Viewer) SetRenderMode(m RenderMode) {
 	v.renderMode = m
 }
 
+func (v *Viewer) GetRenderMode() RenderMode {
+	return v.renderMode
+}
+
 // SetSize updates the viewer dimensions.
 func (v *Viewer) SetSize(width, height int) {
 	v.width = width

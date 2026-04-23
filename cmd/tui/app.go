@@ -110,6 +110,7 @@ func (a *App) Init() tea.Cmd {
 	if exists && setting.IsBoolean() {
 		renderMarkDownByDefault = setting.GetBooleanValue()
 	}
+	a.renderMarkDownByDefault = renderMarkDownByDefault
 
 	// Create initial plans screen.
 	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault)
@@ -421,7 +422,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, SearchPlansWithTagsCmd(a.ctx, a.service, msg.Query, msg.Tags, msg.MatchAll)
 
 	case screens.ThemeChangedMsg:
-
 		// Get current dark mode setting and apply theme.
 		setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingDarkModeEnabled)
 		darkMode := true // default
@@ -438,6 +438,24 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				s.UpdateDarkMode(darkMode)
 			case *screens.VersionsScreen:
 				s.UpdateDarkMode(darkMode)
+			}
+		}
+		return a, nil
+	case screens.RenderMarkDownByDefaultMsg:
+		// Get current render markdown by default setting.
+		setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingRenderMarkdownByDefault)
+		renderMarkDownByDefault := false
+		if exists && setting.IsBoolean() {
+			renderMarkDownByDefault = setting.GetBooleanValue()
+		}
+		a.renderMarkDownByDefault = renderMarkDownByDefault
+
+		for _, screen := range a.stack {
+			switch s := screen.(type) {
+			case *screens.PlansScreen:
+				s.RenderedMarkdownByDefault(renderMarkDownByDefault)
+			case *screens.VersionsScreen:
+				s.RenderedMarkdownByDefault(renderMarkDownByDefault)
 			}
 		}
 		return a, nil
@@ -496,7 +514,7 @@ func (a *App) popScreen() tea.Cmd { //nolint:unparam // ok for now.
 }
 
 func (a *App) pushVersionsScreenWithData(planName string, versions []claudeviewer.PlanVersionDetail) tea.Cmd {
-	versionsScreen := screens.NewVersionsScreenWithData(planName, versions, a.width, a.height, a.isDarkModeEnabled)
+	versionsScreen := screens.NewVersionsScreenWithData(planName, versions, a.width, a.height, a.isDarkModeEnabled, a.renderMarkDownByDefault)
 	a.stack = append(a.stack, versionsScreen)
 	return versionsScreen.Init()
 }

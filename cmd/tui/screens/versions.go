@@ -39,11 +39,11 @@ type VersionsScreen struct {
 }
 
 // NewVersionsScreen creates a new versions screen.
-func NewVersionsScreen(planName string, width, height int, isDarkModeEnabled bool) *VersionsScreen {
+func NewVersionsScreen(planName string, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
 	panelWidth := (width - 3) / 2
 	contentHeight := height - 4
 
-	return &VersionsScreen{
+	v := &VersionsScreen{
 		list:      components.NewList(nil, panelWidth, contentHeight),
 		viewer:    components.NewViewer(panelWidth, contentHeight),
 		searchBar: components.NewSearchBar(panelWidth),
@@ -57,11 +57,17 @@ func NewVersionsScreen(planName string, width, height int, isDarkModeEnabled boo
 			BorderForeground(styles.BorderColor),
 		isDarkModeEnabled: isDarkModeEnabled,
 	}
+
+	if renderMarkdownByDefault {
+		v.viewer.SetRenderMode(components.RenderModeGlamour)
+	}
+
+	return v
 }
 
 // NewVersionsScreenWithData creates a versions screen with pre-loaded data.
-func NewVersionsScreenWithData(planName string, versions []claudeviewer.PlanVersionDetail, width, height int, isDarkModeEnabled bool) *VersionsScreen {
-	s := NewVersionsScreen(planName, width, height, isDarkModeEnabled)
+func NewVersionsScreenWithData(planName string, versions []claudeviewer.PlanVersionDetail, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
+	s := NewVersionsScreen(planName, width, height, isDarkModeEnabled, renderMarkdownByDefault)
 	s.versions = versions
 	s.updateListItems()
 	if len(versions) > 0 {
@@ -341,6 +347,20 @@ func (s *VersionsScreen) UpdateDarkMode(enabled bool) {
 	// Regenerate current content with new theme
 	if s.current != nil {
 		viewerWidth := s.getViewerWidth()
+		s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
+	}
+}
+
+// RenderedMarkdownByDefault upddates the renderned markdown by default mesasage.
+func (s *VersionsScreen) RenderedMarkdownByDefault(enabled bool) {
+	renderMode := components.RenderModeRaw
+	if enabled {
+		renderMode = components.RenderModeGlamour
+	}
+
+	if s.viewer.RenderMode() != renderMode {
+		viewerWidth := s.getViewerWidth()
+		s.viewer.SetRenderMode(renderMode)
 		s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
 	}
 }

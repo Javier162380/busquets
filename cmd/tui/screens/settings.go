@@ -122,11 +122,17 @@ func (s *SettingsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.editing = false
 		s.settings[s.cursor].Editing = false
 
-		if s.settings[s.cursor].Definition.RequiresThemeRefresh {
+		switch {
+		case s.settings[s.cursor].Definition.RequiresThemeRefresh && s.settings[s.cursor].Definition.Name == claudeviewer.SettingDarkModeEnabled:
 			return s, func() tea.Msg {
 				return ThemeChangedMsg{}
 			}
+		case s.settings[s.cursor].Definition.RequiresThemeRefresh && s.settings[s.cursor].Definition.Name == claudeviewer.SettingRenderMarkdownByDefault:
+			return s, func() tea.Msg {
+				return RenderMarkDownByDefaultMsg{}
+			}
 		}
+
 		return s, nil
 	}
 
@@ -336,5 +342,7 @@ type SettingUpdateResultMsg struct {
 }
 
 type ThemeChangedMsg struct{}
+
+type RenderMarkDownByDefaultMsg struct{}
 
 type OpenSettingsMsg struct{}

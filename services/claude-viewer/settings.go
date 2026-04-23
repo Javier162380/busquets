@@ -143,25 +143,6 @@ func (s *Service) GetReadingSpeedForDisplay(ctx context.Context) int {
 	return int(setting.GetNumberValue())
 }
 
-// IsDarkModeEnabled returns whether dark mode is enabled.
-// Returns true (default) if not set or on error.
-func (s *Service) IsDarkModeEnabled(ctx context.Context) bool {
-	setting, exists, err := s.GetSetting(ctx, SettingDarkModeEnabled)
-	if err != nil || !exists || !setting.IsBoolean() {
-		return true // Default to dark mode
-	}
-	return setting.GetBooleanValue()
-}
-
-// RenderMarkDownByDefaul return wether we should render markdown by default or not.
-func (s *Service) RenderMarkdownByDefault(ctx context.Context) bool {
-	setting, exists, err := s.GetSetting(ctx, SettingRenderMarkdownByDefault)
-	if err != nil || !exists || !setting.IsBoolean() {
-		return false
-	}
-	return setting.GetBooleanValue()
-}
-
 // ValidateDateTimeValue validates ISO 8601 format datetime strings.
 // Returns parsed time.Time or error.
 func ValidateDateTimeValue(value string) (time.Time, error) {
