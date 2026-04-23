@@ -76,7 +76,8 @@ type App struct {
 
 	dump io.Writer
 
-	isDarkModeEnabled bool
+	isDarkModeEnabled       bool
+	renderMarkDownByDefault bool
 }
 
 // New creates a new TUI application.
@@ -104,8 +105,14 @@ func (a *App) Init() tea.Cmd {
 	styles.SetDarkMode(darkMode)
 	a.isDarkModeEnabled = darkMode
 
+	setting, exists, _ = a.service.GetSetting(a.ctx, claudeviewer.SettingRenderMarkdownByDefault)
+	renderMarkDownByDefault := false
+	if exists && setting.IsBoolean() {
+		renderMarkDownByDefault = setting.GetBooleanValue()
+	}
+
 	// Create initial plans screen.
-	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode)
+	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault)
 	a.stack = append(a.stack, plansScreen)
 
 	// Start watching for watch results and load initial plans.

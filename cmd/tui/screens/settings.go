@@ -24,31 +24,35 @@ var KnownSettings = []SettingDefinition{
 		Name:        claudeviewer.SettingReadingSpeedWPM,
 		Description: "Words per minute for reading time estimates",
 		Type:        claudeviewer.SettingTypeNumber,
-		Default:     claudeviewer.SettingValues{NumberValue: floatPtr(200)},
+		Default:     claudeviewer.SettingValues{NumberValue: new(float64(200))},
 	},
 	{
 		Name:                 claudeviewer.SettingDarkModeEnabled,
 		Description:          "Enable dark mode theme",
 		Type:                 claudeviewer.SettingTypeBoolean,
-		Default:              claudeviewer.SettingValues{BooleanValue: boolPtr(true)},
+		Default:              claudeviewer.SettingValues{BooleanValue: new(true)},
+		RequiresThemeRefresh: true,
+	},
+	{
+		Name:                 claudeviewer.SettingRenderMarkdownByDefault,
+		Description:          "Automatically render markdown by default, using the selected theme",
+		Type:                 claudeviewer.SettingTypeBoolean,
+		Default:              claudeviewer.SettingValues{BooleanValue: new(false)},
 		RequiresThemeRefresh: true,
 	},
 	{
 		Name:        claudeviewer.SettingWatchModeEnabled,
 		Description: "Automatically sync plans in the background",
 		Type:        claudeviewer.SettingTypeBoolean,
-		Default:     claudeviewer.SettingValues{BooleanValue: boolPtr(false)},
+		Default:     claudeviewer.SettingValues{BooleanValue: new(false)},
 	},
 	{
 		Name:        claudeviewer.SettingWatchIntervalSeconds,
 		Description: "Watch mode sync interval (seconds)",
 		Type:        claudeviewer.SettingTypeNumber,
-		Default:     claudeviewer.SettingValues{NumberValue: floatPtr(5)},
+		Default:     claudeviewer.SettingValues{NumberValue: new(float64(5))},
 	},
 }
-
-func floatPtr(v float64) *float64 { return &v }
-func boolPtr(v bool) *bool        { return &v }
 
 type SettingItem struct {
 	Definition SettingDefinition

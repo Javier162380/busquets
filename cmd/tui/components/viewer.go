@@ -47,6 +47,10 @@ func (v *Viewer) SetContent(c content.Displayable) {
 	v.updateViewportContent()
 }
 
+func (v *Viewer) SetRenderMode(m RenderMode) {
+	v.renderMode = m
+}
+
 // SetSize updates the viewer dimensions.
 func (v *Viewer) SetSize(width, height int) {
 	v.width = width

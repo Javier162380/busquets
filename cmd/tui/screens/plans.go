@@ -47,11 +47,11 @@ type PlansScreen struct {
 }
 
 // NewPlansScreen creates a new plans screen.
-func NewPlansScreen(width, height int, isDarkModeEnabled bool) *PlansScreen {
+func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *PlansScreen {
 	panelWidth := (width - 3) / 2
 	contentHeight := height - 4
 
-	return &PlansScreen{
+	p := PlansScreen{
 		list:      components.NewList(nil, panelWidth, contentHeight),
 		viewer:    components.NewViewer(panelWidth, contentHeight),
 		editor:    components.NewEditor(width-4, contentHeight),
@@ -67,6 +67,12 @@ func NewPlansScreen(width, height int, isDarkModeEnabled bool) *PlansScreen {
 			BorderForeground(styles.BorderColor),
 		isDarkModeEnabled: isDarkModeEnabled,
 	}
+
+	if renderMarkdownByDefault {
+		p.viewer.SetRenderMode(components.RenderModeGlamour)
+	}
+
+	return &p
 }
 
 // Init initializes the screen.

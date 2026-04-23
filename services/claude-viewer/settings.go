@@ -18,10 +18,11 @@ const (
 
 // Known setting name constants.
 const (
-	SettingReadingSpeedWPM      = "reading_speed_wpm"
-	SettingDarkModeEnabled      = "dark_mode_enabled"
-	SettingWatchModeEnabled     = "watch_mode_enabled"
-	SettingWatchIntervalSeconds = "watch_interval_seconds"
+	SettingReadingSpeedWPM         = "reading_speed_wpm"
+	SettingDarkModeEnabled         = "dark_mode_enabled"
+	SettingRenderMarkdownByDefault = "render_markdown_by_default"
+	SettingWatchModeEnabled        = "watch_mode_enabled"
+	SettingWatchIntervalSeconds    = "watch_interval_seconds"
 )
 
 type Setting struct {
@@ -148,6 +149,15 @@ func (s *Service) IsDarkModeEnabled(ctx context.Context) bool {
 	setting, exists, err := s.GetSetting(ctx, SettingDarkModeEnabled)
 	if err != nil || !exists || !setting.IsBoolean() {
 		return true // Default to dark mode
+	}
+	return setting.GetBooleanValue()
+}
+
+// RenderMarkDownByDefaul return wether we should render markdown by default or not.
+func (s *Service) RenderMarkdownByDefault(ctx context.Context) bool {
+	setting, exists, err := s.GetSetting(ctx, SettingRenderMarkdownByDefault)
+	if err != nil || !exists || !setting.IsBoolean() {
+		return false
 	}
 	return setting.GetBooleanValue()
 }
