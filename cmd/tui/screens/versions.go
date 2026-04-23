@@ -138,6 +138,11 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 	case "/":
 		s.focus = types.FocusSearch
 		return s, s.searchBar.Focus()
+	case "tab":
+		if s.current != nil {
+			s.focus = types.FocusContent
+		}
+		return s, nil
 	case "c":
 		// Clear search and reload all versions.
 		if s.searchQuery != "" {
@@ -199,6 +204,13 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
 		}
 		return s, nil
+	case "tab":
+		// Switch back to list panel (left side) in split view.
+		if s.layout == types.LayoutSplit {
+			s.focus = types.FocusList
+			return s, nil
+		}
+		return s, nil
 	case "R":
 		// Restore selected version.
 		if s.current != nil {
@@ -207,6 +219,7 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 		return s, nil
 	case "r":
 		s.viewer.ToggleRenderMode()
+		return s, nil
 	case "g":
 		s.viewer.GotoTop()
 		return s, nil
@@ -355,9 +368,9 @@ func (s *VersionsScreen) ShortHelp() string {
 		if s.searchQuery != "" {
 			searchHelp = fmt.Sprintf("/: search | c: clear [%s]", s.searchQuery)
 		}
-		return fmt.Sprintf("j/k: navigate | v: view | R: restore | r: render (%s) | %s | esc: back | Versions: %d", mode, searchHelp, len(s.versions))
+		return fmt.Sprintf("j/k: navigate | g/G: top/bottom | tab: content | v: view | R: restore | r: render (%s) | %s | esc: back | Versions: %d", mode, searchHelp, len(s.versions))
 	case types.FocusContent:
-		return fmt.Sprintf("j/k: scroll | g/G: top/bottom | R: restore | r: render (%s) | esc: back", mode)
+		return fmt.Sprintf("j/k: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | esc: back", mode)
 	case types.FocusSearch:
 		return "enter: search | esc: cancel"
 	default:
