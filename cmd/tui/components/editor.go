@@ -34,6 +34,8 @@ func NewEditor(width, height int) *Editor {
 func (e *Editor) SetContent(content string) {
 	e.original = content
 	e.textarea.SetValue(content)
+	// Move cursor to beginning of document (row 0, col 0)
+	e.moveCursorToStart()
 	e.modified = false
 }
 
@@ -57,7 +59,10 @@ func (e *Editor) SetSize(width, height int) {
 
 // Focus gives focus to the editor.
 func (e *Editor) Focus() tea.Cmd {
-	return e.textarea.Focus()
+	// Move cursor to beginning of document before focusing
+	e.textarea.Focus()
+	e.moveCursorToStart()
+	return nil
 }
 
 // Blur removes focus from the editor.
@@ -91,5 +96,42 @@ func (e *Editor) View() string {
 // Reset restores the original content.
 func (e *Editor) Reset() {
 	e.textarea.SetValue(e.original)
+	// Move cursor to beginning of document
+	e.moveCursorToStart()
 	e.modified = false
+}
+
+// MoveCursorToFirstRow moves the cursor to the very beginning of the document (row 0, col 0).
+func (e *Editor) MoveCursorToFirstRow() {
+	e.moveCursorToStart()
+}
+
+// MoveCursorToLastRow moves the cursor to the very end of the document.
+func (e *Editor) MoveCursorToLastRow() {
+	e.moveCursorToEnd()
+}
+
+// moveCursorToStart moves the cursor to the very beginning (row 0, col 0).
+// This simulates pressing alt+< which triggers the InputBegin keybinding.
+func (e *Editor) moveCursorToStart() {
+	// Simulate alt+< key press to trigger moveToBegin() internally
+	altLessThanMsg := tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune{'<'},
+		Alt:   true,
+	}
+	e.textarea, _ = e.textarea.Update(altLessThanMsg)
+}
+
+// moveCursorToEnd moves the cursor to the very end of the document.
+// This simulates pressing alt+> which triggers the InputEnd keybinding.
+func (e *Editor) moveCursorToEnd() {
+	// Simulate alt+> key press to trigger moveToEnd() internally
+	altGreaterThanMsg := tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune{'>'},
+		Alt:   true,
+	}
+	e.textarea, _ = e.textarea.Update(altGreaterThanMsg)
+	e.textarea.CursorStart()
 }
