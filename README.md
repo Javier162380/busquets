@@ -55,7 +55,7 @@ Claude Plan Viewer provides a centralized solution for managing Claude Code plan
 
 ## Prerequisites
 
-- **Go 1.21+** for building from source
+- **Go 1.26+** for building from source
 - **SQLC** (optional, for development): `go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest`
 - **PostgreSQL** (optional): If using PostgreSQL backend instead of SQLite
 
