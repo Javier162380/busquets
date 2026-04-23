@@ -153,14 +153,3 @@ func (c *Config) Validate() error {
 
 	return nil
 }
-
-// GetDBPath returns the database path based on the backend type.
-// For SQLite, returns the file path. For Postgres, returns the connection string.
-func (c *Config) GetDBPath() string {
-	switch c.Database.Backend {
-	case BackendPostgres:
-		return c.Database.Postgres.ConnectionString
-	default:
-		return c.Database.SQLite.Path
-	}
-}

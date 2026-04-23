@@ -119,10 +119,10 @@ func (v *Viewer) updateViewportContent() {
 		v.content.GetReadingTime(),
 		meta.SecondaryInfo)
 	if len(meta.TagNames) <= 2 && len(meta.TagNames) > 0 {
-		metaLine = fmt.Sprintf("%s | Tags: %s", metaLine, strings.Join(meta.TagNames, ","))
+		metaLine += fmt.Sprintf(" | Tags: %s", strings.Join(meta.TagNames, ","))
 	}
 	if len(meta.TagNames) > 2 {
-		metaLine = fmt.Sprintf("%s | Tags: %s+%v", metaLine, meta.TagNames[:2], len(meta.TagNames))
+		metaLine += fmt.Sprintf(" | Tags: %s+%d", strings.Join(meta.TagNames[:2], ","), len(meta.TagNames)-2)
 	}
 	lines = append(lines, styles.MetaStyle.Render(metaLine))
 	lines = append(lines, "")

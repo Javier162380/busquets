@@ -57,6 +57,7 @@ type PlanVersionDetail struct {
 	PlanVersion
 	ReadingTime  int
 	RenderedHTML string
+	Tags         []dto.Tag
 }
 
 func CalculateReadingTime(wordCount int) int {

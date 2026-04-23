@@ -160,18 +160,6 @@ func planSummaryFromPaginationRow(r ListAllPlansWithPaginationRow) dto.PlanSumma
 	}
 }
 
-func planSummaryFromSearchRow(r SearchPlansRow) dto.PlanSummary {
-	return dto.PlanSummary{
-		ID:         int64(r.ID),
-		FileName:   r.FileName,
-		Title:      r.Title,
-		CreatedAt:  timestamptzToTime(r.CreatedAt),
-		ModifiedAt: timestamptzToTime(r.ModifiedAt),
-		FileSize:   r.FileSize,
-		WordCount:  r.WordCount,
-	}
-}
-
 func planSummaryFromSearchPaginationRow(r SearchPlansWithPaginationRow) dto.PlanSummary {
 	return dto.PlanSummary{
 		ID:         int64(r.ID),

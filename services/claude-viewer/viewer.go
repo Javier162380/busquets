@@ -14,6 +14,14 @@ func (s *Service) GetPlanByFileName(ctx context.Context, fileName string) (*dto.
 	if err != nil {
 		return nil, err
 	}
+	// Get tags for the plan
+	tags, err := s.db.GetPlanTags(ctx, plan.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plan tags: %w", err)
+	}
+
+	plan.Tags = tags
+
 	return &plan, nil
 }
 
@@ -30,6 +38,12 @@ func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName string) 
 	plan, err := s.GetPlanByFileName(ctx, fileName)
 	if err != nil {
 		return nil, err
+	}
+
+	// Get tags for the plan
+	tags, err := s.db.GetPlanTags(ctx, plan.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plan tags: %w", err)
 	}
 
 	renderedHTML, err := s.RenderMarkdown(plan.Content)
@@ -49,6 +63,7 @@ func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName string) 
 			ModifiedAt:  plan.ModifiedAt,
 			FileSize:    plan.FileSize,
 			ReadingTime: readingTime,
+			Tags:        tags,
 		},
 		Content:      plan.Content,
 		RenderedHTML: renderedHTML,

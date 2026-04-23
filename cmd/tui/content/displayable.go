@@ -111,10 +111,15 @@ func (v *VersionContent) GetReadingTime() int {
 }
 
 func (v *VersionContent) GetMetadata() Metadata {
+	tagNames := make([]string, len(v.Tags))
+	for i, tag := range v.Tags {
+		tagNames[i] = tag.Name
+	}
 	return Metadata{
 		PrimaryLabel:  "Created",
 		PrimaryTime:   v.CreatedAt,
 		SecondaryInfo: fmt.Sprintf("Version: %d", v.VersionNumber),
+		TagNames:      tagNames,
 	}
 }
 

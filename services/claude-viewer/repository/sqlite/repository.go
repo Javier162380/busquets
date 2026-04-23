@@ -94,7 +94,7 @@ func ptrToNullTime(t *time.Time) sql.NullTime {
 	return sql.NullTime{Time: *t, Valid: true}
 }
 
-// parseCommaSeparatedTags converts GROUP_CONCAT results into []dto.Tag
+// parseCommaSeparatedTags converts GROUP_CONCAT results into []dto.Tag.
 func parseCommaSeparatedTags(tagIdsStr, tagNamesStr string) []dto.Tag {
 	// Handle empty case (plan with no tags)
 	if tagIdsStr == "" || tagNamesStr == "" {
@@ -145,31 +145,7 @@ func planToDomain(p Plan) dto.Plan {
 	}
 }
 
-func planSummaryFromListRow(r ListAllPlansRow) dto.PlanSummary {
-	return dto.PlanSummary{
-		ID:         r.ID,
-		FileName:   r.FileName,
-		Title:      r.Title,
-		CreatedAt:  r.CreatedAt,
-		ModifiedAt: r.ModifiedAt,
-		FileSize:   r.FileSize,
-		WordCount:  r.WordCount,
-	}
-}
-
 func planSummaryFromPaginationRow(r ListAllPlansWithPaginationRow) dto.PlanSummary {
-	return dto.PlanSummary{
-		ID:         r.ID,
-		FileName:   r.FileName,
-		Title:      r.Title,
-		CreatedAt:  r.CreatedAt,
-		ModifiedAt: r.ModifiedAt,
-		FileSize:   r.FileSize,
-		WordCount:  r.WordCount,
-	}
-}
-
-func planSummaryFromSearchRow(r SearchPlansRow) dto.PlanSummary {
 	return dto.PlanSummary{
 		ID:         r.ID,
 		FileName:   r.FileName,

@@ -89,6 +89,12 @@ func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, of
 		return nil, fmt.Errorf("failed to get version history: %w", err)
 	}
 
+	// Get tags for the parent plan
+	tags, err := s.db.GetPlanTags(ctx, plan.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plan tags: %w", err)
+	}
+
 	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
 	readingTime := s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
 
@@ -112,6 +118,7 @@ func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, of
 			PlanVersion:  planVersion,
 			RenderedHTML: renderedHTML,
 			ReadingTime:  readingTime,
+			Tags:         tags,
 		}
 	}
 
@@ -128,6 +135,12 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName string, versionNu
 	version, err := s.db.GetPlanVersionByNumber(ctx, plan.ID, versionNumber)
 	if err != nil {
 		return nil, fmt.Errorf("version not found: %w", err)
+	}
+
+	// Get tags for the parent plan
+	tags, err := s.db.GetPlanTags(ctx, plan.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plan tags: %w", err)
 	}
 
 	renderedHTML, err := s.RenderMarkdown(plan.Content)
@@ -152,6 +165,7 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName string, versionNu
 		PlanVersion:  planVersion,
 		RenderedHTML: renderedHTML,
 		ReadingTime:  readingTime,
+		Tags:         tags,
 	}, nil
 }
 
@@ -274,6 +288,12 @@ func (s *Service) SearchVersions(ctx context.Context, planName, query string) ([
 		return nil, fmt.Errorf("search failed: %w", err)
 	}
 
+	// Get tags for the parent plan
+	tags, err := s.db.GetPlanTags(ctx, plan.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plan tags: %w", err)
+	}
+
 	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
 	readingTime := s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
 
@@ -297,6 +317,7 @@ func (s *Service) SearchVersions(ctx context.Context, planName, query string) ([
 			PlanVersion:  planVersion,
 			RenderedHTML: renderedHTML,
 			ReadingTime:  readingTime,
+			Tags:         tags,
 		}
 	}
 
