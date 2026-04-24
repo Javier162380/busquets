@@ -31,9 +31,11 @@ type PlansScreen struct {
 	focus        types.Focus
 	plans        []claudeviewer.PlanSummary
 	current      *claudeviewer.PlanDetail
-	searchQuery  string   // Current active search query (empty = show all).
-	tagFilters   []string // Active tag filters.
-	showingModal bool     // Whether tag modal is shown.
+	searchQuery  string    // Current active search query (empty = show all).
+	tagFilters   []string  // Active tag filters.
+	showingModal bool      // Whether tag modal is shown.
+	lastKey      string    // Last key pressed in editor (for double-key detection).
+	lastKeyTime  time.Time // Time of last key press in editor.
 
 	// Dimensions.
 	width  int
@@ -362,6 +364,7 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		s.focus = types.FocusContent
 		s.editor.Blur()
 		s.editor.Reset()
+		s.lastKey = ""
 		return s, nil
 
 	case "ctrl+s":
@@ -371,16 +374,79 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		}
 		return s, nil
 
-	case "g":
-		s.editor.MoveCursorToFirstRow()
-		return s, nil
+	case "t", "b":
+		// Check for double-key press (tt = top, bb = bottom).
+		now := time.Now()
+		if s.lastKey == key && now.Sub(s.lastKeyTime) < 500*time.Millisecond {
+			// Double-key detected, remove the first typed character and trigger navigation.
+			s.lastKey = ""
+			// Simulate backspace to remove the first character.
+			backspaceMsg := tea.KeyMsg{
+				Type: tea.KeyBackspace,
+			}
+			s.editor.Update(backspaceMsg)
+			// Now jump to top or bottom.
+			if key == "t" {
+				s.editor.MoveCursorToFirstRow()
+			} else {
+				s.editor.MoveCursorToLastRow()
+			}
+			return s, nil
+		}
+		// First key press or timeout expired, record and pass to editor.
+		s.lastKey = key
+		s.lastKeyTime = now
+		return s, s.editor.Update(msg)
 
-	case "G":
-		s.editor.MoveCursorToLastRow()
-		return s, nil
+	case "d":
+		// Check for double-key press (dd = delete line).
+		now := time.Now()
+		if s.lastKey == key && now.Sub(s.lastKeyTime) < 500*time.Millisecond {
+			// Double-key detected, remove the first typed character.
+			s.lastKey = ""
+			// Simulate backspace to remove the first character.
+			backspaceMsg := tea.KeyMsg{
+				Type: tea.KeyBackspace,
+			}
+			s.editor.Update(backspaceMsg)
+
+			// Delete the current line using the editor's method.
+			s.editor.DeleteCurrentLine()
+
+			return s, nil
+		}
+		// First key press or timeout expired, record and pass to editor.
+		s.lastKey = key
+		s.lastKeyTime = now
+		return s, s.editor.Update(msg)
+
+	case "o":
+		// Check for double-key press (oo = new line below).
+		now := time.Now()
+		if s.lastKey == key && now.Sub(s.lastKeyTime) < 500*time.Millisecond {
+			// Double-key detected, remove the first typed character.
+			s.lastKey = ""
+			// Simulate backspace to remove the first character.
+			backspaceMsg := tea.KeyMsg{
+				Type: tea.KeyBackspace,
+			}
+			s.editor.Update(backspaceMsg)
+
+			// Insert new line below using the editor's method.
+			s.editor.InsertNewLineBelow()
+
+			return s, nil
+		}
+		// First key press or timeout expired, record and pass to editor.
+		s.lastKey = key
+		s.lastKeyTime = now
+		return s, s.editor.Update(msg)
+
+	default:
+		// Any other key clears the double-key tracking.
+		s.lastKey = ""
+		return s, s.editor.Update(msg)
 	}
-
-	return s, s.editor.Update(msg)
 }
 
 // handleSearchKey handles keys in search mode.
@@ -628,7 +694,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.editor.IsModified() {
 			modified = " [MODIFIED]"
 		}
-		return fmt.Sprintf("ctrl+s: save | g/G: top/bottom | esc: cancel%s", modified)
+		return fmt.Sprintf("ctrl+s: save | tt/bb: top/bottom | dd: delete line | oo: new line | esc: cancel%s", modified)
 	case types.FocusSearch:
 		return "enter: search | esc: cancel"
 	case types.FocusTagFilter:

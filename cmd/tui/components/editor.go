@@ -130,3 +130,34 @@ func (e *Editor) moveCursorToEnd() {
 	}
 	e.textarea, _ = e.textarea.Update(altGreaterThanMsg)
 }
+
+// DeleteCurrentLine deletes the entire line where the cursor is positioned.
+func (e *Editor) DeleteCurrentLine() {
+	// Go to start of current line
+	homeMsg := tea.KeyMsg{Type: tea.KeyHome}
+	e.textarea, _ = e.textarea.Update(homeMsg)
+
+	// Delete the newline character itself to remove the empty line
+	deleteMsg := tea.KeyMsg{Type: tea.KeyDelete}
+	e.textarea, _ = e.textarea.Update(deleteMsg)
+
+	// Mark as modified
+	e.modified = true
+}
+
+// InsertNewLineBelow inserts a new line below the current line and moves cursor to it.
+func (e *Editor) InsertNewLineBelow() {
+	// Go to end of current line
+	endMsg := tea.KeyMsg{Type: tea.KeyEnd}
+	e.textarea, _ = e.textarea.Update(endMsg)
+
+	// Insert newline by simulating Enter key
+	enterMsg := tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune{'\n'},
+	}
+	e.textarea, _ = e.textarea.Update(enterMsg)
+
+	// Mark as modified
+	e.modified = true
+}
