@@ -202,7 +202,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.delegateToCurrentScreen(msg)
 
 	case screens.SaveResultMsg:
-		return a.delegateToCurrentScreen(msg)
+		switch {
+		case msg.Error != nil:
+			a.statusBar.SetError("Unable to save result")
+		case msg.Result.Success:
+			a.statusBar.SetSuccess("Saved result")
+		case msg.Result.HasConflict:
+			a.statusBar.SetError(fmt.Sprintf("Unable to save result, conflict %s", msg.Result.ConflictInfo.Message))
+		}
+		return a, ClearStatusCmd(500 * time.Millisecond)
 
 	case screens.SyncResultMsg:
 		if msg.Error != nil {

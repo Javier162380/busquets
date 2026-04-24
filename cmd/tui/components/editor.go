@@ -34,8 +34,6 @@ func NewEditor(width, height int) *Editor {
 func (e *Editor) SetContent(content string) {
 	e.original = content
 	e.textarea.SetValue(content)
-	// Move cursor to beginning of document (row 0, col 0)
-	e.moveCursorToStart()
 	e.modified = false
 }
 
@@ -61,7 +59,7 @@ func (e *Editor) SetSize(width, height int) {
 func (e *Editor) Focus() tea.Cmd {
 	// Move cursor to beginning of document before focusing
 	e.textarea.Focus()
-	e.moveCursorToStart()
+	e.MoveCursorToFirstRow()
 	return nil
 }
 
@@ -96,8 +94,6 @@ func (e *Editor) View() string {
 // Reset restores the original content.
 func (e *Editor) Reset() {
 	e.textarea.SetValue(e.original)
-	// Move cursor to beginning of document
-	e.moveCursorToStart()
 	e.modified = false
 }
 
@@ -133,5 +129,35 @@ func (e *Editor) moveCursorToEnd() {
 		Alt:   true,
 	}
 	e.textarea, _ = e.textarea.Update(altGreaterThanMsg)
-	e.textarea.CursorStart()
+}
+
+// DeleteCurrentLine deletes the entire line where the cursor is positioned.
+func (e *Editor) DeleteCurrentLine() {
+	// Go to start of current line
+	homeMsg := tea.KeyMsg{Type: tea.KeyHome}
+	e.textarea, _ = e.textarea.Update(homeMsg)
+
+	// Delete the newline character itself to remove the empty line
+	deleteMsg := tea.KeyMsg{Type: tea.KeyDelete}
+	e.textarea, _ = e.textarea.Update(deleteMsg)
+
+	// Mark as modified
+	e.modified = true
+}
+
+// InsertNewLineBelow inserts a new line below the current line and moves cursor to it.
+func (e *Editor) InsertNewLineBelow() {
+	// Go to end of current line
+	endMsg := tea.KeyMsg{Type: tea.KeyEnd}
+	e.textarea, _ = e.textarea.Update(endMsg)
+
+	// Insert newline by simulating Enter key
+	enterMsg := tea.KeyMsg{
+		Type:  tea.KeyRunes,
+		Runes: []rune{'\n'},
+	}
+	e.textarea, _ = e.textarea.Update(enterMsg)
+
+	// Mark as modified
+	e.modified = true
 }
