@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	httpserver "github.com/Javier162380/claude-plan-viewer/cmd/http"
+	mcphandler "github.com/Javier162380/claude-plan-viewer/cmd/mcp"
 	tuiapp "github.com/Javier162380/claude-plan-viewer/cmd/tui"
 	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
@@ -18,6 +19,7 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/postgres"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 func main() {
@@ -54,6 +56,10 @@ func main() {
 	case "migrate":
 		if err := runMigrate(cfg); err != nil {
 			log.Fatalf("Migration failed: %v", err)
+		}
+	case "mcp":
+		if err := runMCP(cfg); err != nil {
+			log.Fatalf("MCP server failed: %v", err)
 		}
 	default:
 		fmt.Printf("Unknown command: %s\n", command)
@@ -249,6 +255,40 @@ func runMigrate(cfg *config.Config) error {
 	return nil
 }
 
+func runMCP(cfg *config.Config) error {
+	ctx := context.Background()
+
+	repo, cleanup, err := initRepository(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to initialize repository: %w", err)
+	}
+	defer cleanup()
+
+	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDir, true)
+	if err != nil {
+		return fmt.Errorf("failed to initialize service: %w", err)
+	}
+
+	// Create MCP server with config
+	mcpServer := mcp.NewServer(
+		&mcp.Implementation{
+			Name:    cfg.MCP.ServerName,
+			Version: cfg.MCP.Version,
+		}, nil,
+	)
+
+	handler := mcphandler.NewHandler(service, mcpServer)
+	if err := handler.Register(); err != nil {
+		return fmt.Errorf("failed to register MCP tools: %w", err)
+	}
+
+	log.Printf("Starting MCP server: %s v%s (backend: %s)", cfg.MCP.ServerName, cfg.MCP.Version, cfg.Database.Backend)
+
+	// Run with stdio transport
+	transport := &mcp.StdioTransport{}
+	return mcpServer.Run(ctx, transport)
+}
+
 func printUsage() {
 	fmt.Println(`Usage: plan-viewer <command>
 
@@ -256,6 +296,7 @@ Commands:
   sync                Copy and index plans from source directory
   serve [-addr :port] Start web server (default: :8081)
   tui                 Start terminal user interface
+  mcp                 Start MCP server for Claude integration
   migrate             Run database migrations
 
 Configuration:
@@ -276,6 +317,7 @@ Examples:
   plan-viewer serve
   plan-viewer serve -addr :3000
   plan-viewer tui
+  plan-viewer mcp
   plan-viewer migrate
   DEBUG=1 plan-viewer tui`)
 }
