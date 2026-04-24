@@ -371,11 +371,11 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		}
 		return s, nil
 
-	case "g":
+	case "ctrl+up":
 		s.editor.MoveCursorToFirstRow()
 		return s, nil
 
-	case "G":
+	case "ctrl+down":
 		s.editor.MoveCursorToLastRow()
 		return s, nil
 	}
@@ -628,7 +628,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.editor.IsModified() {
 			modified = " [MODIFIED]"
 		}
-		return fmt.Sprintf("ctrl+s: save | g/G: top/bottom | esc: cancel%s", modified)
+		return fmt.Sprintf("ctrl+s: save | ctrl+↑/↓: top/bottom | esc: cancel%s", modified)
 	case types.FocusSearch:
 		return "enter: search | esc: cancel"
 	case types.FocusTagFilter:
