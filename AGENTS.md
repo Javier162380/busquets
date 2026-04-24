@@ -6,9 +6,9 @@ Quick reference for understanding the codebase architecture and development work
 
 Go application that syncs Claude AI plans from `~/.claude/plans/` to a searchable database, providing TUI, Web UI, and CLI interfaces.
 
-**Core Features**: Plan sync/search, version tracking, multi-database support (SQLite/PostgreSQL), connector system, markdown rendering
+**Core Features**: Plan sync/search, version tracking, multi-database support (SQLite/PostgreSQL), connector system, markdown rendering, MCP integration
 
-**Main Commands**: `sync`, `tui`, `serve`, `migrate`
+**Main Commands**: `sync`, `tui`, `serve`, `mcp`, `migrate`
 
 ## Essential Workflow
 
@@ -58,6 +58,20 @@ Service → ConnectorManager → Registry + SettingGetter
 
 **Implementations**: Telegram connector stores settings in database, loaded via `SettingGetter`.
 
+### MCP Integration (Model Context Protocol)
+
+Adapter layer for Claude Code AI integration, following clean architecture principles.
+
+```
+Service Layer (claudeviewer.Service)
+    ↓
+MCP Handler (cmd/mcp) → TOON Formatter → MCP Tools
+    ↓
+Tools: search_plans, get_plan, list_tools
+```
+
+**Key Features**: Uses TOON format for 60% token reduction, no business logic in handlers, interface-based service dependency for testability.
+
 ### Service Layer
 
 Central orchestrator with injected dependencies:
@@ -72,6 +86,7 @@ Central orchestrator with injected dependencies:
 cmd/                        # Entry points
   ├── main.go               # Command routing
   ├── http/                 # Web server (Echo)
+  ├── mcp/                  # MCP server (Claude integration)
   └── tui/                  # Terminal UI (Bubble Tea)
 
 services/claude-viewer/     # Business logic
@@ -142,6 +157,10 @@ path = "~/.claude-viewer/plans.db"
 [paths]
 plans_dir = "~/.claude/plans"
 viewer_dir = "~/.claude-viewer"
+
+[mcp]
+server_name = "claude-plan-viewer"
+version = "1.0.0"
 ```
 
 **Environment Overrides**: `PLAN_VIEWER_DB_BACKEND`, `PLAN_VIEWER_POSTGRES_URL`, `DEBUG=1` (TUI)

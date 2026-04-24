@@ -13,6 +13,7 @@ A powerful Go application for indexing, searching, and viewing [Claude Code](htt
   - [Sync Plans](#sync-plans)
   - [Web Server](#web-server)
   - [Terminal UI (TUI)](#terminal-ui-tui)
+  - [MCP Server](#mcp-server)
   - [Database Migrations](#database-migrations)
 - [Architecture](#architecture)
 - [Development](#development)
@@ -40,6 +41,7 @@ Claude Plan Viewer provides a centralized solution for managing Claude Code plan
 ### User Interfaces
 - **Web Interface**: Clean, responsive UI with markdown rendering and syntax highlighting
 - **Terminal UI (TUI)**: Feature-rich terminal interface for command-line enthusiasts
+- **MCP Server**: Model Context Protocol integration for Claude Code AI assistant
 - **CLI Commands**: Direct command-line operations for scripting and automation
 
 ### Database Support
@@ -236,6 +238,38 @@ DEBUG=1 ./bin/plan-viewer tui
 
 **Keyboard Shortcuts:** Press `?` in the TUI for help.
 
+### MCP Server
+
+Enable Claude Code to directly search and retrieve your plans during coding sessions:
+
+```bash
+# Start MCP server
+./bin/plan-viewer mcp
+```
+
+**Configure Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
+```json
+{
+  "mcpServers": {
+    "claude-plans": {
+      "command": "/path/to/bin/plan-viewer",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+**MCP Features:**
+- `search_plans` - Search by text and/or tags with flexible filtering
+- `get_plan` - Retrieve full plan content and metadata
+- `list_tools` - Discover available MCP capabilities
+- TOON format responses (60% fewer tokens than JSON)
+
+**Use Cases:**
+- "Search my plans for authentication patterns"
+- "Show me the backend-api plan from last week"
+- "Find all plans tagged with #refactoring"
+
 ### Database Migrations
 
 Run database migrations manually:
@@ -260,6 +294,7 @@ claude-plan-viewer/
 │   ├── http/                   # Web server and handlers
 │   │   ├── templates/          # HTML templates
 │   │   └── static/             # CSS, JS assets
+│   ├── mcp/                    # MCP server (Claude integration)
 │   └── tui/                    # Terminal UI
 │       ├── screens/            # TUI screens
 │       ├── components/         # Reusable UI components

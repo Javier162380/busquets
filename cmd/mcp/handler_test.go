@@ -9,6 +9,7 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
+
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
