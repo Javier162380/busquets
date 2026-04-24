@@ -17,6 +17,7 @@ const (
 type Config struct {
 	Database DatabaseConfig `toml:"database"`
 	Paths    PathsConfig    `toml:"paths"`
+	MCP      MCPConfig      `toml:"mcp"`
 }
 
 // DatabaseConfig contains database-related configuration.
@@ -42,6 +43,12 @@ type PostgresConfig struct {
 type PathsConfig struct {
 	ViewerDir string `toml:"viewer_dir"`
 	PlansDir  string `toml:"plans_dir"`
+}
+
+// MCPConfig contains MCP server configuration.
+type MCPConfig struct {
+	ServerName string `toml:"server_name"`
+	Version    string `toml:"version"`
 }
 
 // LoadConfig loads configuration from the current working directory.
@@ -97,6 +104,10 @@ func DefaultConfig() *Config {
 			ViewerDir: filepath.Join(homeDir, ".claude-viewer"),
 			PlansDir:  filepath.Join(homeDir, ".claude", "plans"),
 		},
+		MCP: MCPConfig{
+			ServerName: "claude-plan-viewer",
+			Version:    "1.0.0",
+		},
 	}
 }
 
@@ -116,6 +127,12 @@ func (c *Config) applyEnvOverrides() {
 	}
 	if v := os.Getenv("PLAN_VIEWER_PLANS_DIR"); v != "" {
 		c.Paths.PlansDir = v
+	}
+	if v := os.Getenv("PLAN_VIEWER_MCP_SERVER_NAME"); v != "" {
+		c.MCP.ServerName = v
+	}
+	if v := os.Getenv("PLAN_VIEWER_MCP_VERSION"); v != "" {
+		c.MCP.Version = v
 	}
 }
 
@@ -137,6 +154,12 @@ func (c *Config) applyDefaults() {
 	}
 	if c.Paths.PlansDir == "" {
 		c.Paths.PlansDir = defaults.Paths.PlansDir
+	}
+	if c.MCP.ServerName == "" {
+		c.MCP.ServerName = defaults.MCP.ServerName
+	}
+	if c.MCP.Version == "" {
+		c.MCP.Version = defaults.MCP.Version
 	}
 }
 
