@@ -362,8 +362,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.statusBar.SetSuccess("Sent successfully!")
 		}
-		return a, nil
-
+		return a, ClearStatusCmd(1 * time.Second)
 	// Connector configuration messages.
 	case screens.OpenConnectorsMsg:
 		return a, a.pushConnectorsScreen()
