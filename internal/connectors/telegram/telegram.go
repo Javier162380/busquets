@@ -102,11 +102,11 @@ func (c *Connector) Validate() error {
 // Send transmits content to Telegram.
 func (c *Connector) Send(ctx context.Context, title, content string) (*connectors.SendResult, error) {
 	// Format message with title
-	message := fmt.Sprintf("*%s*\n\n%s", escapeMarkdown(title), content)
+	message := fmt.Sprintf("*%s*\n\n%s", escapeMarkdown(title), escapeMarkdown(content))
 
 	// Truncate if necessary (Telegram has 4096 char limit)
 	if len(message) > maxMessageLen {
-		message = message[:maxMessageLen-3] + "..."
+		message = message[:maxMessageLen-9] + "\\.\\.\\."
 	}
 
 	payload := map[string]interface{}{
