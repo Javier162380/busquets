@@ -10,6 +10,9 @@ WHERE file_name = $7;
 -- name: GetPlanByFileName :one
 SELECT * FROM plans WHERE file_name = $1 LIMIT 1;
 
+-- name: GetPlanByID :one
+SELECT * FROM plans WHERE id = $1 LIMIT 1;
+
 -- name: ListAllPlans :many
 SELECT id, file_name, title, created_at, modified_at, file_size, word_count
 FROM plans
@@ -236,3 +239,108 @@ FROM plans p
 JOIN plan_tags pt ON p.id = pt.plan_id
 WHERE pt.tag_id = $1
 ORDER BY p.modified_at DESC;
+
+-- Session queries
+
+-- name: InsertSession :one
+INSERT INTO sessions (session_uuid, project_path, project_name, jsonl_file_path, plan_id, status, message_count, first_message_at, last_message_at, created_at, updated_at, cwd, git_branch, slug)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+RETURNING id;
+
+-- name: UpdateSession :exec
+UPDATE sessions
+SET status = $1, message_count = $2, first_message_at = $3, last_message_at = $4, updated_at = $5, cwd = $6, git_branch = $7
+WHERE id = $8;
+
+-- name: GetSessionByUUID :one
+SELECT * FROM sessions WHERE session_uuid = $1 LIMIT 1;
+
+-- name: GetSessionByID :one
+SELECT * FROM sessions WHERE id = $1 LIMIT 1;
+
+-- name: ListAllSessions :many
+SELECT
+    s.id,
+    s.session_uuid,
+    s.project_name,
+    s.status,
+    s.message_count,
+    s.last_message_at,
+    s.slug,
+    p.title AS plan_title
+FROM sessions s
+LEFT JOIN plans p ON s.plan_id = p.id
+ORDER BY s.updated_at DESC;
+
+-- name: ListSessionsByPlanID :many
+SELECT
+    s.id,
+    s.session_uuid,
+    s.project_name,
+    s.status,
+    s.message_count,
+    s.last_message_at,
+    s.slug,
+    p.title AS plan_title
+FROM sessions s
+LEFT JOIN plans p ON s.plan_id = p.id
+WHERE s.plan_id = $1
+ORDER BY s.updated_at DESC;
+
+-- name: DeleteSession :exec
+DELETE FROM sessions WHERE id = $1;
+
+-- name: CountSessions :one
+SELECT COUNT(*) FROM sessions;
+
+-- Session message queries
+
+-- name: InsertSessionMessage :one
+INSERT INTO session_messages (session_id, message_uuid, parent_uuid, message_type, message_subtype, content, role, timestamp, cwd, git_branch, is_meta, is_sidechain, created_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+RETURNING id;
+
+-- name: GetSessionMessages :many
+SELECT * FROM session_messages
+WHERE session_id = $1
+ORDER BY timestamp ASC
+LIMIT $2 OFFSET $3;
+
+-- name: GetSessionMessageCount :one
+SELECT COUNT(*) FROM session_messages WHERE session_id = $1;
+
+-- name: DeleteSessionMessages :exec
+DELETE FROM session_messages WHERE session_id = $1;
+
+-- Session file change queries
+
+-- name: InsertSessionFileChange :exec
+INSERT INTO session_file_changes (session_id, message_id, file_path, change_type, detected_at)
+VALUES ($1, $2, $3, $4, $5);
+
+-- name: GetSessionFileChanges :many
+SELECT * FROM session_file_changes
+WHERE session_id = $1
+ORDER BY detected_at DESC;
+
+-- name: DeleteSessionFileChanges :exec
+DELETE FROM session_file_changes WHERE session_id = $1;
+
+-- Session todo queries
+
+-- name: InsertSessionTodo :exec
+INSERT INTO session_todos (session_id, message_id, content, status, active_form, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, $6, $7);
+
+-- name: UpdateSessionTodo :exec
+UPDATE session_todos
+SET status = $1, active_form = $2, updated_at = $3
+WHERE id = $4;
+
+-- name: GetSessionTodos :many
+SELECT * FROM session_todos
+WHERE session_id = $1
+ORDER BY created_at ASC;
+
+-- name: DeleteSessionTodos :exec
+DELETE FROM session_todos WHERE session_id = $1;

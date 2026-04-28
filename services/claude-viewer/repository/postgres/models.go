@@ -53,6 +53,61 @@ type PlanVersion struct {
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
 }
 
+type Session struct {
+	ID             int32              `json:"id"`
+	SessionUuid    string             `json:"session_uuid"`
+	ProjectPath    string             `json:"project_path"`
+	ProjectName    string             `json:"project_name"`
+	JsonlFilePath  string             `json:"jsonl_file_path"`
+	PlanID         pgtype.Int8        `json:"plan_id"`
+	Status         string             `json:"status"`
+	MessageCount   int64              `json:"message_count"`
+	FirstMessageAt pgtype.Timestamptz `json:"first_message_at"`
+	LastMessageAt  pgtype.Timestamptz `json:"last_message_at"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	Cwd            pgtype.Text        `json:"cwd"`
+	GitBranch      pgtype.Text        `json:"git_branch"`
+	Slug           pgtype.Text        `json:"slug"`
+}
+
+type SessionFileChange struct {
+	ID         int32              `json:"id"`
+	SessionID  int64              `json:"session_id"`
+	MessageID  pgtype.Int8        `json:"message_id"`
+	FilePath   string             `json:"file_path"`
+	ChangeType string             `json:"change_type"`
+	DetectedAt pgtype.Timestamptz `json:"detected_at"`
+}
+
+type SessionMessage struct {
+	ID             int32              `json:"id"`
+	SessionID      int64              `json:"session_id"`
+	MessageUuid    string             `json:"message_uuid"`
+	ParentUuid     pgtype.Text        `json:"parent_uuid"`
+	MessageType    string             `json:"message_type"`
+	MessageSubtype pgtype.Text        `json:"message_subtype"`
+	Content        pgtype.Text        `json:"content"`
+	Role           pgtype.Text        `json:"role"`
+	Timestamp      pgtype.Timestamptz `json:"timestamp"`
+	Cwd            pgtype.Text        `json:"cwd"`
+	GitBranch      pgtype.Text        `json:"git_branch"`
+	IsMeta         pgtype.Bool        `json:"is_meta"`
+	IsSidechain    pgtype.Bool        `json:"is_sidechain"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type SessionTodo struct {
+	ID         int32              `json:"id"`
+	SessionID  int64              `json:"session_id"`
+	MessageID  pgtype.Int8        `json:"message_id"`
+	Content    string             `json:"content"`
+	Status     string             `json:"status"`
+	ActiveForm pgtype.Text        `json:"active_form"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Setting struct {
 	VariableName  string             `json:"variable_name"`
 	VariableType  string             `json:"variable_type"`

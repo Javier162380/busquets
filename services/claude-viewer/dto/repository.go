@@ -11,6 +11,7 @@ type Repository interface {
 	// Plan operations
 	CountPlans(ctx context.Context) (int64, error)
 	GetPlanByFileName(ctx context.Context, fileName string) (Plan, error)
+	GetPlanByID(ctx context.Context, id int64) (Plan, error)
 	InsertPlan(ctx context.Context, params InsertPlanParams) error
 	UpdatePlan(ctx context.Context, params UpdatePlanParams) error
 	DeletePlan(ctx context.Context, fileName string) error
@@ -64,4 +65,31 @@ type Repository interface {
 	RemoveAllTagsFromPlan(ctx context.Context, planID int64) error
 	GetPlanTags(ctx context.Context, planID int64) ([]Tag, error)
 	SetPlanTags(ctx context.Context, planID int64, tagIDs []int64, assignedAt time.Time) error
+
+	// Session operations
+	InsertSession(ctx context.Context, params InsertSessionParams) (int64, error)
+	UpdateSession(ctx context.Context, params UpdateSessionParams) error
+	GetSessionByUUID(ctx context.Context, uuid string) (Session, error)
+	GetSessionByID(ctx context.Context, id int64) (Session, error)
+	ListAllSessions(ctx context.Context) ([]SessionSummary, error)
+	ListSessionsByPlanID(ctx context.Context, planID int64) ([]SessionSummary, error)
+	DeleteSession(ctx context.Context, id int64) error
+	CountSessions(ctx context.Context) (int64, error)
+
+	// Session message operations
+	InsertSessionMessage(ctx context.Context, params InsertSessionMessageParams) (int64, error)
+	GetSessionMessages(ctx context.Context, sessionID, limit, offset int64) ([]SessionMessage, error)
+	GetSessionMessageCount(ctx context.Context, sessionID int64) (int64, error)
+	DeleteSessionMessages(ctx context.Context, sessionID int64) error
+
+	// Session file change operations
+	InsertSessionFileChange(ctx context.Context, params InsertSessionFileChangeParams) error
+	GetSessionFileChanges(ctx context.Context, sessionID int64) ([]SessionFileChange, error)
+	DeleteSessionFileChanges(ctx context.Context, sessionID int64) error
+
+	// Session todo operations
+	InsertSessionTodo(ctx context.Context, params InsertSessionTodoParams) error
+	UpdateSessionTodo(ctx context.Context, params UpdateSessionTodoParams) error
+	GetSessionTodos(ctx context.Context, sessionID int64) ([]SessionTodo, error)
+	DeleteSessionTodos(ctx context.Context, sessionID int64) error
 }

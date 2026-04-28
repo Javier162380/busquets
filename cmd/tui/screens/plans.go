@@ -194,9 +194,9 @@ func (s *PlansScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		return s.handleSearchKey(key, msg)
 	case types.FocusTagFilter:
 		return s.handleTagFilterKey(key, msg)
+	default:
+		return s, nil
 	}
-
-	return s, nil
 }
 
 // handleListKey handles keys in list focus mode.
@@ -266,6 +266,21 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		return s, func() tea.Msg {
 			return OpenConnectorsMsg{}
 		}
+
+	case "w":
+		// Open sessions screen.
+		return s, func() tea.Msg {
+			return OpenSessionsMsg{}
+		}
+
+	case "N":
+		// Create session from current plan.
+		if s.current != nil {
+			return s, func() tea.Msg {
+				return CreateSessionFromPlanMsg{PlanFileName: s.current.FileName}
+			}
+		}
+		return s, nil
 
 	case "tab":
 		if s.current != nil {
@@ -679,7 +694,7 @@ func (s *PlansScreen) ShortHelp() string {
 			}
 			searchHelp = fmt.Sprintf("/: search | T: tags | c: clear [%s]", activeFilters)
 		}
-		return fmt.Sprintf("j/k: navigate | m: manage tags | tab: content | v: fullscreen | e: edit | s: sync | S: settings | r: rsync | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
+		return fmt.Sprintf("j/k: navigate | m: manage tags | tab: content | v: fullscreen | e: edit | s: sync | S: settings | r: rsync | C: connectors | w: sessions | N: new session | %s | Plans: %d", searchHelp, len(s.plans))
 	case types.FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeGlamour {
@@ -703,8 +718,9 @@ func (s *PlansScreen) ShortHelp() string {
 			mode = "AND"
 		}
 		return fmt.Sprintf("enter: filter | ctrl+t: toggle mode (%s) | esc: cancel", mode)
+	default:
+		return ""
 	}
-	return ""
 }
 
 // IsInputMode returns true when capturing text input.

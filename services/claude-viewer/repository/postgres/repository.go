@@ -107,6 +107,25 @@ func ptrToTimestamptz(t *time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: *t, Valid: true}
 }
 
+func pgBoolToBool(b pgtype.Bool) bool {
+	if !b.Valid {
+		return false
+	}
+	return b.Bool
+}
+
+func boolToPgBool(b bool) pgtype.Bool {
+	return pgtype.Bool{Bool: b, Valid: true}
+}
+
+func int64ToInt32(i int64) int32 {
+	return int32(i)
+}
+
+func int32ToInt64(i int32) int64 {
+	return int64(i)
+}
+
 // Model conversions: SQLC types -> domain types
 
 func planToDomain(p Plan) dto.Plan {
@@ -247,6 +266,17 @@ func (r *Repository) CountPlans(ctx context.Context) (int64, error) {
 
 func (r *Repository) GetPlanByFileName(ctx context.Context, fileName string) (dto.Plan, error) {
 	p, err := r.q.GetPlanByFileName(ctx, fileName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dto.Plan{}, dto.ErrNotFound
+	}
+	if err != nil {
+		return dto.Plan{}, err
+	}
+	return planToDomain(p), nil
+}
+
+func (r *Repository) GetPlanByID(ctx context.Context, id int64) (dto.Plan, error) {
+	p, err := r.q.GetPlanByID(ctx, int64ToInt32(id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return dto.Plan{}, dto.ErrNotFound
 	}
@@ -847,4 +877,304 @@ func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int
 	}
 
 	return err
+}
+
+// Additional type conversion helpers for int8
+
+func int8ToPtr(i pgtype.Int8) *int64 {
+	if !i.Valid {
+		return nil
+	}
+	return &i.Int64
+}
+
+func ptrToInt8(i *int64) pgtype.Int8 {
+	if i == nil {
+		return pgtype.Int8{}
+	}
+	return pgtype.Int8{Int64: *i, Valid: true}
+}
+
+// Session domain conversion helpers
+
+func sessionToDomain(s Session) dto.Session {
+	return dto.Session{
+		ID:             int32ToInt64(s.ID),
+		SessionUUID:    s.SessionUuid,
+		ProjectPath:    s.ProjectPath,
+		ProjectName:    s.ProjectName,
+		JSONLFilePath:  s.JsonlFilePath,
+		PlanID:         int8ToPtr(s.PlanID),
+		Status:         s.Status,
+		MessageCount:   s.MessageCount,
+		FirstMessageAt: timestamptzToPtr(s.FirstMessageAt),
+		LastMessageAt:  timestamptzToPtr(s.LastMessageAt),
+		CreatedAt:      timestamptzToTime(s.CreatedAt),
+		UpdatedAt:      timestamptzToTime(s.UpdatedAt),
+		CWD:            textToPtr(s.Cwd),
+		GitBranch:      textToPtr(s.GitBranch),
+		Slug:           textToPtr(s.Slug),
+	}
+}
+
+func sessionMessageToDomain(sm SessionMessage) dto.SessionMessage {
+	return dto.SessionMessage{
+		ID:             int32ToInt64(sm.ID),
+		SessionID:      sm.SessionID,
+		MessageUUID:    sm.MessageUuid,
+		ParentUUID:     textToPtr(sm.ParentUuid),
+		MessageType:    sm.MessageType,
+		MessageSubtype: textToPtr(sm.MessageSubtype),
+		Content:        textToPtr(sm.Content),
+		Role:           textToPtr(sm.Role),
+		Timestamp:      timestamptzToTime(sm.Timestamp),
+		CWD:            textToPtr(sm.Cwd),
+		GitBranch:      textToPtr(sm.GitBranch),
+		IsMeta:         pgBoolToBool(sm.IsMeta),
+		IsSidechain:    pgBoolToBool(sm.IsSidechain),
+		CreatedAt:      timestamptzToTime(sm.CreatedAt),
+	}
+}
+
+func sessionFileChangeToDomain(sfc SessionFileChange) dto.SessionFileChange {
+	return dto.SessionFileChange{
+		ID:         int32ToInt64(sfc.ID),
+		SessionID:  sfc.SessionID,
+		MessageID:  int8ToPtr(sfc.MessageID),
+		FilePath:   sfc.FilePath,
+		ChangeType: sfc.ChangeType,
+		DetectedAt: timestamptzToTime(sfc.DetectedAt),
+	}
+}
+
+func sessionTodoToDomain(st SessionTodo) dto.SessionTodo {
+	return dto.SessionTodo{
+		ID:         int32ToInt64(st.ID),
+		SessionID:  st.SessionID,
+		MessageID:  int8ToPtr(st.MessageID),
+		Content:    st.Content,
+		Status:     st.Status,
+		ActiveForm: textToPtr(st.ActiveForm),
+		CreatedAt:  timestamptzToTime(st.CreatedAt),
+		UpdatedAt:  timestamptzToTime(st.UpdatedAt),
+	}
+}
+
+// Session operations
+
+func (r *Repository) InsertSession(ctx context.Context, params dto.InsertSessionParams) (int64, error) {
+	id, err := r.q.InsertSession(ctx, InsertSessionParams{
+		SessionUuid:    params.SessionUUID,
+		ProjectPath:    params.ProjectPath,
+		ProjectName:    params.ProjectName,
+		JsonlFilePath:  params.JSONLFilePath,
+		PlanID:         ptrToInt8(params.PlanID),
+		Status:         params.Status,
+		MessageCount:   params.MessageCount,
+		FirstMessageAt: ptrToTimestamptz(params.FirstMessageAt),
+		LastMessageAt:  ptrToTimestamptz(params.LastMessageAt),
+		CreatedAt:      timeToTimestamptz(params.CreatedAt),
+		UpdatedAt:      timeToTimestamptz(params.UpdatedAt),
+		Cwd:            ptrToText(params.CWD),
+		GitBranch:      ptrToText(params.GitBranch),
+		Slug:           ptrToText(params.Slug),
+	})
+	return int32ToInt64(id), err
+}
+
+func (r *Repository) UpdateSession(ctx context.Context, params dto.UpdateSessionParams) error {
+	return r.q.UpdateSession(ctx, UpdateSessionParams{
+		Status:         params.Status,
+		MessageCount:   params.MessageCount,
+		FirstMessageAt: ptrToTimestamptz(params.FirstMessageAt),
+		LastMessageAt:  ptrToTimestamptz(params.LastMessageAt),
+		UpdatedAt:      timeToTimestamptz(params.UpdatedAt),
+		Cwd:            ptrToText(params.CWD),
+		GitBranch:      ptrToText(params.GitBranch),
+		ID:             int64ToInt32(params.ID),
+	})
+}
+
+func (r *Repository) GetSessionByUUID(ctx context.Context, uuid string) (dto.Session, error) {
+	s, err := r.q.GetSessionByUUID(ctx, uuid)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dto.Session{}, dto.ErrNotFound
+	}
+	if err != nil {
+		return dto.Session{}, err
+	}
+	return sessionToDomain(s), nil
+}
+
+func (r *Repository) GetSessionByID(ctx context.Context, id int64) (dto.Session, error) {
+	s, err := r.q.GetSessionByID(ctx, int64ToInt32(id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dto.Session{}, dto.ErrNotFound
+	}
+	if err != nil {
+		return dto.Session{}, err
+	}
+	return sessionToDomain(s), nil
+}
+
+func (r *Repository) ListAllSessions(ctx context.Context) ([]dto.SessionSummary, error) {
+	rows, err := r.q.ListAllSessions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.SessionSummary, len(rows))
+	for i, row := range rows {
+		result[i] = dto.SessionSummary{
+			ID:            int32ToInt64(row.ID),
+			SessionUUID:   row.SessionUuid,
+			ProjectName:   row.ProjectName,
+			Status:        row.Status,
+			MessageCount:  row.MessageCount,
+			LastMessageAt: timestamptzToPtr(row.LastMessageAt),
+			Slug:          textToPtr(row.Slug),
+			PlanTitle:     textToPtr(row.PlanTitle),
+		}
+	}
+	return result, nil
+}
+
+func (r *Repository) ListSessionsByPlanID(ctx context.Context, planID int64) ([]dto.SessionSummary, error) {
+	rows, err := r.q.ListSessionsByPlanID(ctx, pgtype.Int8{Int64: planID, Valid: true})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.SessionSummary, len(rows))
+	for i, row := range rows {
+		result[i] = dto.SessionSummary{
+			ID:            int32ToInt64(row.ID),
+			SessionUUID:   row.SessionUuid,
+			ProjectName:   row.ProjectName,
+			Status:        row.Status,
+			MessageCount:  row.MessageCount,
+			LastMessageAt: timestamptzToPtr(row.LastMessageAt),
+			Slug:          textToPtr(row.Slug),
+			PlanTitle:     textToPtr(row.PlanTitle),
+		}
+	}
+	return result, nil
+}
+
+func (r *Repository) DeleteSession(ctx context.Context, id int64) error {
+	return r.q.DeleteSession(ctx, int64ToInt32(id))
+}
+
+func (r *Repository) CountSessions(ctx context.Context) (int64, error) {
+	return r.q.CountSessions(ctx)
+}
+
+// Session message operations
+
+func (r *Repository) InsertSessionMessage(ctx context.Context, params dto.InsertSessionMessageParams) (int64, error) {
+	id, err := r.q.InsertSessionMessage(ctx, InsertSessionMessageParams{
+		SessionID:      params.SessionID,
+		MessageUuid:    params.MessageUUID,
+		ParentUuid:     ptrToText(params.ParentUUID),
+		MessageType:    params.MessageType,
+		MessageSubtype: ptrToText(params.MessageSubtype),
+		Content:        ptrToText(params.Content),
+		Role:           ptrToText(params.Role),
+		Timestamp:      timeToTimestamptz(params.Timestamp),
+		Cwd:            ptrToText(params.CWD),
+		GitBranch:      ptrToText(params.GitBranch),
+		IsMeta:         boolToPgBool(params.IsMeta),
+		IsSidechain:    boolToPgBool(params.IsSidechain),
+		CreatedAt:      timeToTimestamptz(params.CreatedAt),
+	})
+	return int32ToInt64(id), err
+}
+
+func (r *Repository) GetSessionMessages(ctx context.Context, sessionID, limit, offset int64) ([]dto.SessionMessage, error) {
+	rows, err := r.q.GetSessionMessages(ctx, GetSessionMessagesParams{
+		SessionID: sessionID,
+		Limit:     int32(limit),
+		Offset:    int32(offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.SessionMessage, len(rows))
+	for i, row := range rows {
+		result[i] = sessionMessageToDomain(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) GetSessionMessageCount(ctx context.Context, sessionID int64) (int64, error) {
+	return r.q.GetSessionMessageCount(ctx, sessionID)
+}
+
+func (r *Repository) DeleteSessionMessages(ctx context.Context, sessionID int64) error {
+	return r.q.DeleteSessionMessages(ctx, sessionID)
+}
+
+// Session file change operations
+
+func (r *Repository) InsertSessionFileChange(ctx context.Context, params dto.InsertSessionFileChangeParams) error {
+	return r.q.InsertSessionFileChange(ctx, InsertSessionFileChangeParams{
+		SessionID:  params.SessionID,
+		MessageID:  ptrToInt8(params.MessageID),
+		FilePath:   params.FilePath,
+		ChangeType: params.ChangeType,
+		DetectedAt: timeToTimestamptz(params.DetectedAt),
+	})
+}
+
+func (r *Repository) GetSessionFileChanges(ctx context.Context, sessionID int64) ([]dto.SessionFileChange, error) {
+	rows, err := r.q.GetSessionFileChanges(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.SessionFileChange, len(rows))
+	for i, row := range rows {
+		result[i] = sessionFileChangeToDomain(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) DeleteSessionFileChanges(ctx context.Context, sessionID int64) error {
+	return r.q.DeleteSessionFileChanges(ctx, sessionID)
+}
+
+// Session todo operations
+
+func (r *Repository) InsertSessionTodo(ctx context.Context, params dto.InsertSessionTodoParams) error {
+	return r.q.InsertSessionTodo(ctx, InsertSessionTodoParams{
+		SessionID:  params.SessionID,
+		MessageID:  ptrToInt8(params.MessageID),
+		Content:    params.Content,
+		Status:     params.Status,
+		ActiveForm: ptrToText(params.ActiveForm),
+		CreatedAt:  timeToTimestamptz(params.CreatedAt),
+		UpdatedAt:  timeToTimestamptz(params.UpdatedAt),
+	})
+}
+
+func (r *Repository) UpdateSessionTodo(ctx context.Context, params dto.UpdateSessionTodoParams) error {
+	return r.q.UpdateSessionTodo(ctx, UpdateSessionTodoParams{
+		Status:     params.Status,
+		ActiveForm: ptrToText(params.ActiveForm),
+		UpdatedAt:  timeToTimestamptz(params.UpdatedAt),
+		ID:         int64ToInt32(params.ID),
+	})
+}
+
+func (r *Repository) GetSessionTodos(ctx context.Context, sessionID int64) ([]dto.SessionTodo, error) {
+	rows, err := r.q.GetSessionTodos(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.SessionTodo, len(rows))
+	for i, row := range rows {
+		result[i] = sessionTodoToDomain(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) DeleteSessionTodos(ctx context.Context, sessionID int64) error {
+	return r.q.DeleteSessionTodos(ctx, sessionID)
 }

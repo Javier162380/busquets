@@ -10,6 +10,9 @@ WHERE file_name = ?;
 -- name: GetPlanByFileName :one
 SELECT * FROM plans WHERE file_name = ? LIMIT 1;
 
+-- name: GetPlanByID :one
+SELECT * FROM plans WHERE id = ? LIMIT 1;
+
 -- name: ListAllPlans :many
 SELECT id, file_name, title, created_at, modified_at, file_size, word_count
 FROM plans
@@ -235,3 +238,106 @@ FROM plans p
 JOIN plan_tags pt ON p.id = pt.plan_id
 WHERE pt.tag_id = ?
 ORDER BY p.modified_at DESC;
+
+-- Session queries
+
+-- name: InsertSession :execlastid
+INSERT INTO sessions (session_uuid, project_path, project_name, jsonl_file_path, plan_id, status, message_count, first_message_at, last_message_at, created_at, updated_at, cwd, git_branch, slug)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: UpdateSession :exec
+UPDATE sessions
+SET status = ?, message_count = ?, first_message_at = ?, last_message_at = ?, updated_at = ?, cwd = ?, git_branch = ?
+WHERE id = ?;
+
+-- name: GetSessionByUUID :one
+SELECT * FROM sessions WHERE session_uuid = ? LIMIT 1;
+
+-- name: GetSessionByID :one
+SELECT * FROM sessions WHERE id = ? LIMIT 1;
+
+-- name: ListAllSessions :many
+SELECT
+    s.id,
+    s.session_uuid,
+    s.project_name,
+    s.status,
+    s.message_count,
+    s.last_message_at,
+    s.slug,
+    p.title AS plan_title
+FROM sessions s
+LEFT JOIN plans p ON s.plan_id = p.id
+ORDER BY s.updated_at DESC;
+
+-- name: ListSessionsByPlanID :many
+SELECT
+    s.id,
+    s.session_uuid,
+    s.project_name,
+    s.status,
+    s.message_count,
+    s.last_message_at,
+    s.slug,
+    p.title AS plan_title
+FROM sessions s
+LEFT JOIN plans p ON s.plan_id = p.id
+WHERE s.plan_id = ?
+ORDER BY s.updated_at DESC;
+
+-- name: DeleteSession :exec
+DELETE FROM sessions WHERE id = ?;
+
+-- name: CountSessions :one
+SELECT COUNT(*) FROM sessions;
+
+-- Session message queries
+
+-- name: InsertSessionMessage :execlastid
+INSERT INTO session_messages (session_id, message_uuid, parent_uuid, message_type, message_subtype, content, role, timestamp, cwd, git_branch, is_meta, is_sidechain, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetSessionMessages :many
+SELECT * FROM session_messages
+WHERE session_id = ?
+ORDER BY timestamp ASC
+LIMIT ? OFFSET ?;
+
+-- name: GetSessionMessageCount :one
+SELECT COUNT(*) FROM session_messages WHERE session_id = ?;
+
+-- name: DeleteSessionMessages :exec
+DELETE FROM session_messages WHERE session_id = ?;
+
+-- Session file change queries
+
+-- name: InsertSessionFileChange :exec
+INSERT INTO session_file_changes (session_id, message_id, file_path, change_type, detected_at)
+VALUES (?, ?, ?, ?, ?);
+
+-- name: GetSessionFileChanges :many
+SELECT * FROM session_file_changes
+WHERE session_id = ?
+ORDER BY detected_at DESC;
+
+-- name: DeleteSessionFileChanges :exec
+DELETE FROM session_file_changes WHERE session_id = ?;
+
+-- Session todo queries
+
+-- name: InsertSessionTodo :exec
+INSERT INTO session_todos (session_id, message_id, content, status, active_form, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?);
+
+-- name: UpdateSessionTodo :exec
+UPDATE session_todos
+SET status = ?, active_form = ?, updated_at = ?
+WHERE id = ?;
+
+-- name: GetSessionTodos :many
+SELECT * FROM session_todos
+WHERE session_id = ?
+ORDER BY created_at ASC;
+
+-- name: DeleteSessionTodos :exec
+DELETE FROM session_todos WHERE session_id = ?;

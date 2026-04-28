@@ -47,6 +47,16 @@ type UnifiedService interface {
 	GetPlanTags(ctx context.Context, fileName string) ([]claudeviewer.Tag, error)
 	SetPlanTags(ctx context.Context, fileName string, tagNames []string) error
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]claudeviewer.PlanSummary, error)
+	// Session methods
+	ListAllSessions(ctx context.Context) ([]claudeviewer.SessionSummaryInfo, error)
+	GetSessionDetail(ctx context.Context, sessionUUID string) (*claudeviewer.SessionDetailInfo, error)
+	CreateSessionFromPlan(ctx context.Context, planFileName, initialPrompt string) (*claudeviewer.SessionInfo, error)
+	CreateStandaloneSession(ctx context.Context, projectPath, initialMessage string) (*claudeviewer.SessionInfo, error)
+	DiscoverSessions(ctx context.Context) (int, error)
+	SendMessage(ctx context.Context, sessionUUID, message string) error
+	StartSessionWatch(ctx context.Context, sessionUUID string) error
+	StopSessionWatch(ctx context.Context, sessionUUID string) error
+	GetSessionWatchResultChannel() <-chan claudeviewer.SessionWatchResult
 }
 
 // WatchResultMsg wraps watch sync results from service.
@@ -116,10 +126,11 @@ func (a *App) Init() tea.Cmd {
 	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault)
 	a.stack = append(a.stack, plansScreen)
 
-	// Start watching for watch results and load initial plans.
+	// Start watching for watch results, load initial plans, and discover sessions.
 	return tea.Batch(
 		LoadPlansCmd(a.ctx, a.service),
 		WatchChannelListenerCmd(a.ctx, a.service),
+		DiscoverSessionsCmd(a.ctx, a.service),
 	)
 }
 
@@ -368,6 +379,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.OpenConnectorsMsg:
 		return a, a.pushConnectorsScreen()
 
+	case screens.OpenSessionsMsg:
+		return a, a.pushSessionsScreen()
+
 	case screens.LoadConnectorsMsg:
 		return a, LoadConnectorsCmd(a.ctx, a.service)
 
@@ -428,6 +442,83 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.SearchPlansWithTagsMsg:
 		return a, SearchPlansWithTagsCmd(a.ctx, a.service, msg.Query, msg.Tags, msg.MatchAll)
+
+	// Session messages.
+	case screens.LoadSessionsMsg:
+		return a, LoadSessionsCmd(a.ctx, a.service)
+
+	case screens.SessionsLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.LoadSessionDetailMsg:
+		return a, LoadSessionDetailCmd(a.ctx, a.service, msg.SessionUUID)
+
+	case screens.SessionDetailLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.CreateStandaloneSessionMsg:
+		a.statusBar.SetLoading("Creating session...")
+		return a, CreateStandaloneSessionCmd(a.ctx, a.service, ".", "")
+
+	case screens.CreateSessionFromPlanMsg:
+		a.statusBar.SetLoading("Creating session from plan...")
+		return a, CreateSessionFromPlanCmd(a.ctx, a.service, msg.PlanFileName, "")
+
+	case screens.SessionCreatedMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError("Failed to create session: " + msg.Error.Error())
+		} else {
+			a.statusBar.SetSuccess("Session created!")
+		}
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.OpenSessionChatMsg:
+		return a, a.pushSessionChatScreen(msg.SessionUUID)
+
+	case screens.DiscoverSessionsMsg:
+		a.statusBar.SetLoading("Discovering sessions...")
+		return a, DiscoverSessionsCmd(a.ctx, a.service)
+
+	case screens.DiscoverResultMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError("Discovery failed: " + msg.Error.Error())
+		} else {
+			a.statusBar.SetSuccess(fmt.Sprintf("Discovered %d sessions", msg.Count))
+		}
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.SendSessionMessageMsg:
+		a.statusBar.SetLoading("Sending message...")
+		return a, SendSessionMessageCmd(a.ctx, a.service, msg.SessionUUID, msg.Content)
+
+	case screens.MessageSentMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError("Failed to send: " + msg.Error.Error())
+		} else {
+			a.statusBar.SetSuccess("Message sent!")
+		}
+		_, delegateCmd := a.delegateToCurrentScreen(msg)
+		return a, tea.Batch(
+			delegateCmd,
+			ClearStatusCmd(1*time.Second),
+		)
+
+	case screens.SessionMessagesUpdatedMsg:
+		// Delegate to current screen (likely SessionChatScreen).
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.SessionFileChangesUpdatedMsg:
+		// Delegate to current screen (likely SessionChatScreen).
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.StartSessionWatchMsg:
+		return a, tea.Batch(
+			StartSessionWatchCmd(a.ctx, a.service, msg.SessionUUID),
+			SessionWatchChannelListenerCmd(a.ctx, a.service),
+		)
+
+	case screens.StopSessionWatchMsg:
+		return a, StopSessionWatchCmd(a.ctx, a.service, msg.SessionUUID)
 
 	case screens.ThemeChangedMsg:
 		// Get current dark mode setting and apply theme.
@@ -537,4 +628,19 @@ func (a *App) pushConnectorsScreen() tea.Cmd {
 	connectorsScreen := screens.NewConnectorsScreen(a.width, a.height)
 	a.stack = append(a.stack, connectorsScreen)
 	return connectorsScreen.Init()
+}
+
+func (a *App) pushSessionsScreen() tea.Cmd {
+	sessionsScreen := screens.NewSessionsScreen(a.width, a.height, a.isDarkModeEnabled)
+	a.stack = append(a.stack, sessionsScreen)
+	return tea.Batch(
+		sessionsScreen.Init(),
+		LoadSessionsCmd(a.ctx, a.service),
+	)
+}
+
+func (a *App) pushSessionChatScreen(sessionUUID string) tea.Cmd {
+	sessionChatScreen := screens.NewSessionChatScreen(sessionUUID, a.width, a.height, a.isDarkModeEnabled)
+	a.stack = append(a.stack, sessionChatScreen)
+	return sessionChatScreen.Init()
 }

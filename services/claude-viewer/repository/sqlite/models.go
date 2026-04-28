@@ -54,6 +54,61 @@ type PlanVersion struct {
 	CreatedAt     time.Time `json:"created_at"`
 }
 
+type Session struct {
+	ID             int64          `json:"id"`
+	SessionUuid    string         `json:"session_uuid"`
+	ProjectPath    string         `json:"project_path"`
+	ProjectName    string         `json:"project_name"`
+	JsonlFilePath  string         `json:"jsonl_file_path"`
+	PlanID         sql.NullInt64  `json:"plan_id"`
+	Status         string         `json:"status"`
+	MessageCount   int64          `json:"message_count"`
+	FirstMessageAt sql.NullTime   `json:"first_message_at"`
+	LastMessageAt  sql.NullTime   `json:"last_message_at"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	Cwd            sql.NullString `json:"cwd"`
+	GitBranch      sql.NullString `json:"git_branch"`
+	Slug           sql.NullString `json:"slug"`
+}
+
+type SessionFileChange struct {
+	ID         int64         `json:"id"`
+	SessionID  int64         `json:"session_id"`
+	MessageID  sql.NullInt64 `json:"message_id"`
+	FilePath   string        `json:"file_path"`
+	ChangeType string        `json:"change_type"`
+	DetectedAt time.Time     `json:"detected_at"`
+}
+
+type SessionMessage struct {
+	ID             int64          `json:"id"`
+	SessionID      int64          `json:"session_id"`
+	MessageUuid    string         `json:"message_uuid"`
+	ParentUuid     sql.NullString `json:"parent_uuid"`
+	MessageType    string         `json:"message_type"`
+	MessageSubtype sql.NullString `json:"message_subtype"`
+	Content        sql.NullString `json:"content"`
+	Role           sql.NullString `json:"role"`
+	Timestamp      time.Time      `json:"timestamp"`
+	Cwd            sql.NullString `json:"cwd"`
+	GitBranch      sql.NullString `json:"git_branch"`
+	IsMeta         sql.NullBool   `json:"is_meta"`
+	IsSidechain    sql.NullBool   `json:"is_sidechain"`
+	CreatedAt      time.Time      `json:"created_at"`
+}
+
+type SessionTodo struct {
+	ID         int64          `json:"id"`
+	SessionID  int64          `json:"session_id"`
+	MessageID  sql.NullInt64  `json:"message_id"`
+	Content    string         `json:"content"`
+	Status     string         `json:"status"`
+	ActiveForm sql.NullString `json:"active_form"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
+}
+
 type Setting struct {
 	VariableName  string          `json:"variable_name"`
 	VariableType  string          `json:"variable_type"`

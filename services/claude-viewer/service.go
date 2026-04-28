@@ -34,6 +34,7 @@ type Service struct {
 	nowProvider          NowProvider
 	connectorManager     *connectors.Manager
 	watchManager         *WatchManager
+	sessionMgr           *sessionManager
 }
 
 // SetConnectorManager sets the connector manager for the service.
@@ -65,6 +66,11 @@ func New(db dto.Repository, viewerDir, sourcePlansDir string, indexFullContent b
 
 	// Initialize watch manager
 	svc.watchManager = NewWatchManager(svc)
+
+	// Initialize session manager
+	if err := svc.initSessionManager(); err != nil {
+		return nil, fmt.Errorf("failed to initialize session manager: %w", err)
+	}
 
 	return svc, nil
 }

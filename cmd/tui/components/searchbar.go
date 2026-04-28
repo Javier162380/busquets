@@ -92,3 +92,13 @@ func (s *SearchBar) SetWidth(width int) {
 	s.width = width
 	s.input.Width = width - 10
 }
+
+// SetSize updates the search bar width (alias for SetWidth).
+func (s *SearchBar) SetSize(width int) {
+	s.SetWidth(width)
+}
+
+// Clear clears the input value (alias for Reset).
+func (s *SearchBar) Clear() {
+	s.Reset()
+}

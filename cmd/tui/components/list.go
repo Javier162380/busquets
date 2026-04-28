@@ -145,6 +145,11 @@ func (l *List) SelectedIndex() int {
 	return l.model.Index()
 }
 
+// Index returns the index of the selected item (alias for SelectedIndex).
+func (l *List) Index() int {
+	return l.model.Index()
+}
+
 // SetItems replaces all items in the list.
 func (l *List) SetItems(items []ListItem) tea.Cmd {
 	listItems := make([]list.Item, len(items))

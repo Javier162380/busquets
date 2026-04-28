@@ -58,6 +58,84 @@ type ConnectorSettingInfo struct {
 	Sensitive   bool
 }
 
+// SessionService defines session management operations.
+type SessionService interface {
+	// Discovery and import
+	DiscoverSessions(ctx context.Context) (int, error)
+	ImportSession(ctx context.Context, jsonlPath string) error
+
+	// Session CRUD
+	ListAllSessions(ctx context.Context) ([]SessionSummaryInfo, error)
+	GetSessionDetail(ctx context.Context, sessionUUID string) (*SessionDetailInfo, error)
+	CreateSessionFromPlan(ctx context.Context, planFileName, initialPrompt string) (*SessionInfo, error)
+	CreateStandaloneSession(ctx context.Context, projectPath, initialMessage string) (*SessionInfo, error)
+	DeleteSession(ctx context.Context, sessionUUID string) error
+
+	// Communication
+	SendMessage(ctx context.Context, sessionUUID, message string) error
+
+	// Monitoring
+	StartSessionWatch(ctx context.Context, sessionUUID string) error
+	StopSessionWatch(ctx context.Context, sessionUUID string) error
+	GetSessionWatchResultChannel() <-chan SessionWatchResult
+
+	// File tracking
+	GetSessionFileChanges(ctx context.Context, sessionUUID string) ([]SessionFileChangeInfo, error)
+}
+
+// SessionInfo represents session information.
+type SessionInfo struct {
+	SessionUUID   string
+	ProjectName   string
+	JSONLFilePath string
+	Status        string
+	PlanTitle     *string
+}
+
+// SessionSummaryInfo represents a session summary for listing.
+type SessionSummaryInfo struct {
+	ID            int64
+	SessionUUID   string
+	ProjectName   string
+	Status        string
+	MessageCount  int64
+	LastMessageAt *string // Formatted timestamp
+	Slug          *string
+	PlanTitle     *string
+}
+
+// SessionDetailInfo represents a session with full details.
+type SessionDetailInfo struct {
+	Session        SessionInfo
+	Messages       []SessionMessageInfo
+	FileChanges    []SessionFileChangeInfo
+	Todos          []SessionTodoInfo
+	AssociatedPlan *PlanSummary
+}
+
+// SessionMessageInfo represents a message in a session.
+type SessionMessageInfo struct {
+	MessageUUID string
+	MessageType string
+	Role        *string
+	Content     *string
+	Timestamp   string // Formatted timestamp
+}
+
+// SessionFileChangeInfo represents a file change tracked during a session.
+type SessionFileChangeInfo struct {
+	FilePath   string
+	ChangeType string
+	DetectedAt string // Formatted timestamp
+}
+
+// SessionTodoInfo represents a todo item from a session.
+type SessionTodoInfo struct {
+	Content    string
+	Status     string
+	ActiveForm *string
+}
+
 // UnifiedService combines all service interfaces for use by HTTP and TUI.
 type UnifiedService interface {
 	PlanService
@@ -65,6 +143,7 @@ type UnifiedService interface {
 	SettingsService
 	SyncService
 	ConnectorService
+	SessionService
 }
 
 // Verify that *Service implements UnifiedService at compile time.

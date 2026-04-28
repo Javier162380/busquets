@@ -75,3 +75,32 @@ func HelpBoxStyle(width int) lipgloss.Style {
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(HelpColor)
 }
+
+// Border styles for panels.
+var (
+	FocusedBorderStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(AccentColor)
+
+	BlurredBorderStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(BorderColor)
+
+	FocusedTitleStyle = lipgloss.NewStyle().
+				Foreground(AccentColor).
+				Bold(true)
+
+	DimStyle = lipgloss.NewStyle().
+			Foreground(MutedColor)
+)
+
+// VerticalDivider returns a vertical divider of specified height.
+func VerticalDivider(height int) string {
+	divider := ""
+	for i := 0; i < height; i++ {
+		divider += "│\n"
+	}
+	return lipgloss.NewStyle().
+		Foreground(BorderColor).
+		Render(divider)
+}

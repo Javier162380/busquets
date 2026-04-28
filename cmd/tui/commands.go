@@ -406,3 +406,144 @@ func SearchPlansWithTagsCmd(ctx context.Context, svc UnifiedService, query strin
 		return screens.PlansLoadedMsg{Plans: plans}
 	}
 }
+
+// Session commands
+
+// LoadSessionsCmd loads all sessions from the service.
+func LoadSessionsCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		sessions, err := svc.ListAllSessions(ctx)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.SessionsLoadedMsg{Sessions: sessions}
+	}
+}
+
+// LoadSessionDetailCmd loads a specific session's details.
+func LoadSessionDetailCmd(ctx context.Context, svc UnifiedService, sessionUUID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		detail, err := svc.GetSessionDetail(ctx, sessionUUID)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.SessionDetailLoadedMsg{Detail: detail}
+	}
+}
+
+// DiscoverSessionsCmd discovers all Claude sessions.
+func DiscoverSessionsCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+
+		count, err := svc.DiscoverSessions(ctx)
+		if err != nil {
+			return screens.DiscoverResultMsg{Error: err}
+		}
+		return screens.DiscoverResultMsg{Count: count}
+	}
+}
+
+// CreateStandaloneSessionCmd creates a new standalone session.
+func CreateStandaloneSessionCmd(ctx context.Context, svc UnifiedService, projectPath, initialMessage string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		session, err := svc.CreateStandaloneSession(ctx, projectPath, initialMessage)
+		if err != nil {
+			return screens.SessionCreatedMsg{Error: err}
+		}
+		return screens.SessionCreatedMsg{Session: session}
+	}
+}
+
+// CreateSessionFromPlanCmd creates a new session from a plan.
+func CreateSessionFromPlanCmd(ctx context.Context, svc UnifiedService, planFileName, initialPrompt string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		session, err := svc.CreateSessionFromPlan(ctx, planFileName, initialPrompt)
+		if err != nil {
+			return screens.SessionCreatedMsg{Error: err}
+		}
+		return screens.SessionCreatedMsg{Session: session}
+	}
+}
+
+// SendSessionMessageCmd sends a message to a session.
+func SendSessionMessageCmd(ctx context.Context, svc UnifiedService, sessionUUID, message string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+
+		err := svc.SendMessage(ctx, sessionUUID, message)
+		if err != nil {
+			return screens.MessageSentMsg{Error: err}
+		}
+		return screens.MessageSentMsg{Success: true}
+	}
+}
+
+// StartSessionWatchCmd starts watching a session for updates.
+func StartSessionWatchCmd(ctx context.Context, svc UnifiedService, sessionUUID string) tea.Cmd {
+	return func() tea.Msg {
+		err := svc.StartSessionWatch(ctx, sessionUUID)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return nil
+	}
+}
+
+// StopSessionWatchCmd stops watching a session.
+func StopSessionWatchCmd(ctx context.Context, svc UnifiedService, sessionUUID string) tea.Cmd {
+	return func() tea.Msg {
+		err := svc.StopSessionWatch(ctx, sessionUUID)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return nil
+	}
+}
+
+// SessionWatchChannelListenerCmd listens to the session watch result channel.
+func SessionWatchChannelListenerCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case <-ctx.Done():
+			return nil
+		case result := <-svc.GetSessionWatchResultChannel():
+			// Convert JSONL messages to SessionMessageInfo
+			messages := make([]claudeviewer.SessionMessageInfo, len(result.NewMessages))
+			for i, msg := range result.NewMessages {
+				var content *string
+				var role *string
+				if msg.Message != nil {
+					contentStr := msg.Message.GetContentAsString()
+					content = &contentStr
+					role = &msg.Message.Role
+				}
+				messages[i] = claudeviewer.SessionMessageInfo{
+					MessageUUID: msg.UUID,
+					MessageType: msg.Type,
+					Role:        role,
+					Content:     content,
+					Timestamp:   msg.Timestamp.Format("2006-01-02 15:04:05"),
+				}
+			}
+			return screens.SessionMessagesUpdatedMsg{
+				SessionUUID: result.SessionUUID,
+				NewMessages: messages,
+			}
+		}
+	}
+}

@@ -40,6 +40,17 @@ func (q *Queries) CountPlans(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countSessions = `-- name: CountSessions :one
+SELECT COUNT(*) FROM sessions
+`
+
+func (q *Queries) CountSessions(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countSessions)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteAllConnectorSettings = `-- name: DeleteAllConnectorSettings :exec
 DELETE FROM connector_settings WHERE connector_name = ?
 `
@@ -78,6 +89,42 @@ DELETE FROM plans WHERE file_name = ?
 
 func (q *Queries) DeletePlan(ctx context.Context, fileName string) error {
 	_, err := q.db.ExecContext(ctx, deletePlan, fileName)
+	return err
+}
+
+const deleteSession = `-- name: DeleteSession :exec
+DELETE FROM sessions WHERE id = ?
+`
+
+func (q *Queries) DeleteSession(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteSession, id)
+	return err
+}
+
+const deleteSessionFileChanges = `-- name: DeleteSessionFileChanges :exec
+DELETE FROM session_file_changes WHERE session_id = ?
+`
+
+func (q *Queries) DeleteSessionFileChanges(ctx context.Context, sessionID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteSessionFileChanges, sessionID)
+	return err
+}
+
+const deleteSessionMessages = `-- name: DeleteSessionMessages :exec
+DELETE FROM session_messages WHERE session_id = ?
+`
+
+func (q *Queries) DeleteSessionMessages(ctx context.Context, sessionID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteSessionMessages, sessionID)
+	return err
+}
+
+const deleteSessionTodos = `-- name: DeleteSessionTodos :exec
+DELETE FROM session_todos WHERE session_id = ?
+`
+
+func (q *Queries) DeleteSessionTodos(ctx context.Context, sessionID int64) error {
+	_, err := q.db.ExecContext(ctx, deleteSessionTodos, sessionID)
 	return err
 }
 
@@ -200,6 +247,28 @@ SELECT id, file_name, file_path, title, content, created_at, modified_at, indexe
 
 func (q *Queries) GetPlanByFileName(ctx context.Context, fileName string) (Plan, error) {
 	row := q.db.QueryRowContext(ctx, getPlanByFileName, fileName)
+	var i Plan
+	err := row.Scan(
+		&i.ID,
+		&i.FileName,
+		&i.FilePath,
+		&i.Title,
+		&i.Content,
+		&i.CreatedAt,
+		&i.ModifiedAt,
+		&i.IndexedAt,
+		&i.FileSize,
+		&i.WordCount,
+	)
+	return i, err
+}
+
+const getPlanByID = `-- name: GetPlanByID :one
+SELECT id, file_name, file_path, title, content, created_at, modified_at, indexed_at, file_size, word_count FROM plans WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetPlanByID(ctx context.Context, id int64) (Plan, error) {
+	row := q.db.QueryRowContext(ctx, getPlanByID, id)
 	var i Plan
 	err := row.Scan(
 		&i.ID,
@@ -374,6 +443,196 @@ func (q *Queries) GetPlansWithTag(ctx context.Context, tagID int64) ([]GetPlansW
 	return items, nil
 }
 
+const getSessionByID = `-- name: GetSessionByID :one
+SELECT id, session_uuid, project_path, project_name, jsonl_file_path, plan_id, status, message_count, first_message_at, last_message_at, created_at, updated_at, cwd, git_branch, slug FROM sessions WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetSessionByID(ctx context.Context, id int64) (Session, error) {
+	row := q.db.QueryRowContext(ctx, getSessionByID, id)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.SessionUuid,
+		&i.ProjectPath,
+		&i.ProjectName,
+		&i.JsonlFilePath,
+		&i.PlanID,
+		&i.Status,
+		&i.MessageCount,
+		&i.FirstMessageAt,
+		&i.LastMessageAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Cwd,
+		&i.GitBranch,
+		&i.Slug,
+	)
+	return i, err
+}
+
+const getSessionByUUID = `-- name: GetSessionByUUID :one
+SELECT id, session_uuid, project_path, project_name, jsonl_file_path, plan_id, status, message_count, first_message_at, last_message_at, created_at, updated_at, cwd, git_branch, slug FROM sessions WHERE session_uuid = ? LIMIT 1
+`
+
+func (q *Queries) GetSessionByUUID(ctx context.Context, sessionUuid string) (Session, error) {
+	row := q.db.QueryRowContext(ctx, getSessionByUUID, sessionUuid)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.SessionUuid,
+		&i.ProjectPath,
+		&i.ProjectName,
+		&i.JsonlFilePath,
+		&i.PlanID,
+		&i.Status,
+		&i.MessageCount,
+		&i.FirstMessageAt,
+		&i.LastMessageAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Cwd,
+		&i.GitBranch,
+		&i.Slug,
+	)
+	return i, err
+}
+
+const getSessionFileChanges = `-- name: GetSessionFileChanges :many
+SELECT id, session_id, message_id, file_path, change_type, detected_at FROM session_file_changes
+WHERE session_id = ?
+ORDER BY detected_at DESC
+`
+
+func (q *Queries) GetSessionFileChanges(ctx context.Context, sessionID int64) ([]SessionFileChange, error) {
+	rows, err := q.db.QueryContext(ctx, getSessionFileChanges, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SessionFileChange{}
+	for rows.Next() {
+		var i SessionFileChange
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.MessageID,
+			&i.FilePath,
+			&i.ChangeType,
+			&i.DetectedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSessionMessageCount = `-- name: GetSessionMessageCount :one
+SELECT COUNT(*) FROM session_messages WHERE session_id = ?
+`
+
+func (q *Queries) GetSessionMessageCount(ctx context.Context, sessionID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getSessionMessageCount, sessionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getSessionMessages = `-- name: GetSessionMessages :many
+SELECT id, session_id, message_uuid, parent_uuid, message_type, message_subtype, content, role, timestamp, cwd, git_branch, is_meta, is_sidechain, created_at FROM session_messages
+WHERE session_id = ?
+ORDER BY timestamp ASC
+LIMIT ? OFFSET ?
+`
+
+type GetSessionMessagesParams struct {
+	SessionID int64 `json:"session_id"`
+	Limit     int64 `json:"limit"`
+	Offset    int64 `json:"offset"`
+}
+
+func (q *Queries) GetSessionMessages(ctx context.Context, arg GetSessionMessagesParams) ([]SessionMessage, error) {
+	rows, err := q.db.QueryContext(ctx, getSessionMessages, arg.SessionID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SessionMessage{}
+	for rows.Next() {
+		var i SessionMessage
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.MessageUuid,
+			&i.ParentUuid,
+			&i.MessageType,
+			&i.MessageSubtype,
+			&i.Content,
+			&i.Role,
+			&i.Timestamp,
+			&i.Cwd,
+			&i.GitBranch,
+			&i.IsMeta,
+			&i.IsSidechain,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getSessionTodos = `-- name: GetSessionTodos :many
+SELECT id, session_id, message_id, content, status, active_form, created_at, updated_at FROM session_todos
+WHERE session_id = ?
+ORDER BY created_at ASC
+`
+
+func (q *Queries) GetSessionTodos(ctx context.Context, sessionID int64) ([]SessionTodo, error) {
+	rows, err := q.db.QueryContext(ctx, getSessionTodos, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SessionTodo{}
+	for rows.Next() {
+		var i SessionTodo
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionID,
+			&i.MessageID,
+			&i.Content,
+			&i.Status,
+			&i.ActiveForm,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getSettingByName = `-- name: GetSettingByName :one
 SELECT variable_name, variable_type, string_value, number_value, boolean_value, datetime_value FROM settings WHERE variable_name = ? LIMIT 1
 `
@@ -493,6 +752,154 @@ func (q *Queries) InsertPlanVersion(ctx context.Context, arg InsertPlanVersionPa
 		arg.Content,
 		arg.WordCount,
 		arg.CreatedAt,
+	)
+	return err
+}
+
+const insertSession = `-- name: InsertSession :execlastid
+
+INSERT INTO sessions (session_uuid, project_path, project_name, jsonl_file_path, plan_id, status, message_count, first_message_at, last_message_at, created_at, updated_at, cwd, git_branch, slug)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertSessionParams struct {
+	SessionUuid    string         `json:"session_uuid"`
+	ProjectPath    string         `json:"project_path"`
+	ProjectName    string         `json:"project_name"`
+	JsonlFilePath  string         `json:"jsonl_file_path"`
+	PlanID         sql.NullInt64  `json:"plan_id"`
+	Status         string         `json:"status"`
+	MessageCount   int64          `json:"message_count"`
+	FirstMessageAt sql.NullTime   `json:"first_message_at"`
+	LastMessageAt  sql.NullTime   `json:"last_message_at"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	Cwd            sql.NullString `json:"cwd"`
+	GitBranch      sql.NullString `json:"git_branch"`
+	Slug           sql.NullString `json:"slug"`
+}
+
+// Session queries
+func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertSession,
+		arg.SessionUuid,
+		arg.ProjectPath,
+		arg.ProjectName,
+		arg.JsonlFilePath,
+		arg.PlanID,
+		arg.Status,
+		arg.MessageCount,
+		arg.FirstMessageAt,
+		arg.LastMessageAt,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+		arg.Cwd,
+		arg.GitBranch,
+		arg.Slug,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+const insertSessionFileChange = `-- name: InsertSessionFileChange :exec
+
+INSERT INTO session_file_changes (session_id, message_id, file_path, change_type, detected_at)
+VALUES (?, ?, ?, ?, ?)
+`
+
+type InsertSessionFileChangeParams struct {
+	SessionID  int64         `json:"session_id"`
+	MessageID  sql.NullInt64 `json:"message_id"`
+	FilePath   string        `json:"file_path"`
+	ChangeType string        `json:"change_type"`
+	DetectedAt time.Time     `json:"detected_at"`
+}
+
+// Session file change queries
+func (q *Queries) InsertSessionFileChange(ctx context.Context, arg InsertSessionFileChangeParams) error {
+	_, err := q.db.ExecContext(ctx, insertSessionFileChange,
+		arg.SessionID,
+		arg.MessageID,
+		arg.FilePath,
+		arg.ChangeType,
+		arg.DetectedAt,
+	)
+	return err
+}
+
+const insertSessionMessage = `-- name: InsertSessionMessage :execlastid
+
+INSERT INTO session_messages (session_id, message_uuid, parent_uuid, message_type, message_subtype, content, role, timestamp, cwd, git_branch, is_meta, is_sidechain, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertSessionMessageParams struct {
+	SessionID      int64          `json:"session_id"`
+	MessageUuid    string         `json:"message_uuid"`
+	ParentUuid     sql.NullString `json:"parent_uuid"`
+	MessageType    string         `json:"message_type"`
+	MessageSubtype sql.NullString `json:"message_subtype"`
+	Content        sql.NullString `json:"content"`
+	Role           sql.NullString `json:"role"`
+	Timestamp      time.Time      `json:"timestamp"`
+	Cwd            sql.NullString `json:"cwd"`
+	GitBranch      sql.NullString `json:"git_branch"`
+	IsMeta         sql.NullBool   `json:"is_meta"`
+	IsSidechain    sql.NullBool   `json:"is_sidechain"`
+	CreatedAt      time.Time      `json:"created_at"`
+}
+
+// Session message queries
+func (q *Queries) InsertSessionMessage(ctx context.Context, arg InsertSessionMessageParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, insertSessionMessage,
+		arg.SessionID,
+		arg.MessageUuid,
+		arg.ParentUuid,
+		arg.MessageType,
+		arg.MessageSubtype,
+		arg.Content,
+		arg.Role,
+		arg.Timestamp,
+		arg.Cwd,
+		arg.GitBranch,
+		arg.IsMeta,
+		arg.IsSidechain,
+		arg.CreatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+const insertSessionTodo = `-- name: InsertSessionTodo :exec
+
+INSERT INTO session_todos (session_id, message_id, content, status, active_form, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+`
+
+type InsertSessionTodoParams struct {
+	SessionID  int64          `json:"session_id"`
+	MessageID  sql.NullInt64  `json:"message_id"`
+	Content    string         `json:"content"`
+	Status     string         `json:"status"`
+	ActiveForm sql.NullString `json:"active_form"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
+}
+
+// Session todo queries
+func (q *Queries) InsertSessionTodo(ctx context.Context, arg InsertSessionTodoParams) error {
+	_, err := q.db.ExecContext(ctx, insertSessionTodo,
+		arg.SessionID,
+		arg.MessageID,
+		arg.Content,
+		arg.Status,
+		arg.ActiveForm,
+		arg.CreatedAt,
+		arg.UpdatedAt,
 	)
 	return err
 }
@@ -702,6 +1109,64 @@ func (q *Queries) ListAllPlansWithTags(ctx context.Context) ([]ListAllPlansWithT
 	return items, nil
 }
 
+const listAllSessions = `-- name: ListAllSessions :many
+SELECT
+    s.id,
+    s.session_uuid,
+    s.project_name,
+    s.status,
+    s.message_count,
+    s.last_message_at,
+    s.slug,
+    p.title AS plan_title
+FROM sessions s
+LEFT JOIN plans p ON s.plan_id = p.id
+ORDER BY s.updated_at DESC
+`
+
+type ListAllSessionsRow struct {
+	ID            int64          `json:"id"`
+	SessionUuid   string         `json:"session_uuid"`
+	ProjectName   string         `json:"project_name"`
+	Status        string         `json:"status"`
+	MessageCount  int64          `json:"message_count"`
+	LastMessageAt sql.NullTime   `json:"last_message_at"`
+	Slug          sql.NullString `json:"slug"`
+	PlanTitle     sql.NullString `json:"plan_title"`
+}
+
+func (q *Queries) ListAllSessions(ctx context.Context) ([]ListAllSessionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAllSessions)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllSessionsRow{}
+	for rows.Next() {
+		var i ListAllSessionsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionUuid,
+			&i.ProjectName,
+			&i.Status,
+			&i.MessageCount,
+			&i.LastMessageAt,
+			&i.Slug,
+			&i.PlanTitle,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAllTags = `-- name: ListAllTags :many
 SELECT id, name, description, color, created_at, updated_at FROM tags ORDER BY name ASC
 `
@@ -788,6 +1253,65 @@ func (q *Queries) ListConnectors(ctx context.Context) ([]Connector, error) {
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSessionsByPlanID = `-- name: ListSessionsByPlanID :many
+SELECT
+    s.id,
+    s.session_uuid,
+    s.project_name,
+    s.status,
+    s.message_count,
+    s.last_message_at,
+    s.slug,
+    p.title AS plan_title
+FROM sessions s
+LEFT JOIN plans p ON s.plan_id = p.id
+WHERE s.plan_id = ?
+ORDER BY s.updated_at DESC
+`
+
+type ListSessionsByPlanIDRow struct {
+	ID            int64          `json:"id"`
+	SessionUuid   string         `json:"session_uuid"`
+	ProjectName   string         `json:"project_name"`
+	Status        string         `json:"status"`
+	MessageCount  int64          `json:"message_count"`
+	LastMessageAt sql.NullTime   `json:"last_message_at"`
+	Slug          sql.NullString `json:"slug"`
+	PlanTitle     sql.NullString `json:"plan_title"`
+}
+
+func (q *Queries) ListSessionsByPlanID(ctx context.Context, planID sql.NullInt64) ([]ListSessionsByPlanIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSessionsByPlanID, planID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListSessionsByPlanIDRow{}
+	for rows.Next() {
+		var i ListSessionsByPlanIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SessionUuid,
+			&i.ProjectName,
+			&i.Status,
+			&i.MessageCount,
+			&i.LastMessageAt,
+			&i.Slug,
+			&i.PlanTitle,
 		); err != nil {
 			return nil, err
 		}
@@ -1100,6 +1624,60 @@ func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) error {
 		arg.FileSize,
 		arg.WordCount,
 		arg.FileName,
+	)
+	return err
+}
+
+const updateSession = `-- name: UpdateSession :exec
+UPDATE sessions
+SET status = ?, message_count = ?, first_message_at = ?, last_message_at = ?, updated_at = ?, cwd = ?, git_branch = ?
+WHERE id = ?
+`
+
+type UpdateSessionParams struct {
+	Status         string         `json:"status"`
+	MessageCount   int64          `json:"message_count"`
+	FirstMessageAt sql.NullTime   `json:"first_message_at"`
+	LastMessageAt  sql.NullTime   `json:"last_message_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+	Cwd            sql.NullString `json:"cwd"`
+	GitBranch      sql.NullString `json:"git_branch"`
+	ID             int64          `json:"id"`
+}
+
+func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) error {
+	_, err := q.db.ExecContext(ctx, updateSession,
+		arg.Status,
+		arg.MessageCount,
+		arg.FirstMessageAt,
+		arg.LastMessageAt,
+		arg.UpdatedAt,
+		arg.Cwd,
+		arg.GitBranch,
+		arg.ID,
+	)
+	return err
+}
+
+const updateSessionTodo = `-- name: UpdateSessionTodo :exec
+UPDATE session_todos
+SET status = ?, active_form = ?, updated_at = ?
+WHERE id = ?
+`
+
+type UpdateSessionTodoParams struct {
+	Status     string         `json:"status"`
+	ActiveForm sql.NullString `json:"active_form"`
+	UpdatedAt  time.Time      `json:"updated_at"`
+	ID         int64          `json:"id"`
+}
+
+func (q *Queries) UpdateSessionTodo(ctx context.Context, arg UpdateSessionTodoParams) error {
+	_, err := q.db.ExecContext(ctx, updateSessionTodo,
+		arg.Status,
+		arg.ActiveForm,
+		arg.UpdatedAt,
+		arg.ID,
 	)
 	return err
 }

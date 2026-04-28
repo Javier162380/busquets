@@ -92,3 +92,83 @@ type PlanSummaryWithTags struct {
 	Summary PlanSummary
 	Tags    []Tag
 }
+
+// Session represents a Claude Code session.
+type Session struct {
+	ID             int64
+	SessionUUID    string
+	ProjectPath    string
+	ProjectName    string
+	JSONLFilePath  string
+	PlanID         *int64
+	Status         string
+	MessageCount   int64
+	FirstMessageAt *time.Time
+	LastMessageAt  *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	CWD            *string
+	GitBranch      *string
+	Slug           *string
+}
+
+// SessionSummary represents a session summary for listing.
+type SessionSummary struct {
+	ID            int64
+	SessionUUID   string
+	ProjectName   string
+	Status        string
+	MessageCount  int64
+	LastMessageAt *time.Time
+	Slug          *string
+	PlanTitle     *string // If associated with plan
+}
+
+// SessionMessage represents an individual message in a session.
+type SessionMessage struct {
+	ID             int64
+	SessionID      int64
+	MessageUUID    string
+	ParentUUID     *string
+	MessageType    string
+	MessageSubtype *string
+	Content        *string
+	Role           *string
+	Timestamp      time.Time
+	CWD            *string
+	GitBranch      *string
+	IsMeta         bool
+	IsSidechain    bool
+	CreatedAt      time.Time
+}
+
+// SessionFileChange represents a file modification tracked during a session.
+type SessionFileChange struct {
+	ID         int64
+	SessionID  int64
+	MessageID  *int64
+	FilePath   string
+	ChangeType string
+	DetectedAt time.Time
+}
+
+// SessionTodo represents a todo item from a session.
+type SessionTodo struct {
+	ID         int64
+	SessionID  int64
+	MessageID  *int64
+	Content    string
+	Status     string
+	ActiveForm *string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+// SessionDetail represents a session with full details including messages.
+type SessionDetail struct {
+	Session
+	Messages       []SessionMessage
+	FileChanges    []SessionFileChange
+	Todos          []SessionTodo
+	AssociatedPlan *PlanSummary
+}
