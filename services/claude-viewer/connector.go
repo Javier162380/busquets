@@ -116,17 +116,11 @@ func (s *Service) GetConnectorSettings(ctx context.Context, connectorName string
 	for i, def := range definitions {
 		value, _, _ := s.connectorManager.GetConnectorSetting(ctx, connectorName, def.Key)
 
-		// Mask sensitive values - show empty if not set, masked indicator if set
-		displayValue := value
-		if def.Sensitive && value != "" {
-			displayValue = "••••••••"
-		}
-
 		result[i] = ConnectorSettingInfo{
 			Key:         def.Key,
 			DisplayName: def.DisplayName,
 			Description: def.Description,
-			Value:       displayValue,
+			Value:       value,
 			Required:    def.Required,
 			Sensitive:   def.Sensitive,
 		}

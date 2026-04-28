@@ -49,6 +49,9 @@ type ConnectorsScreen struct {
 	width       int
 	height      int
 	borderStyle lipgloss.Style
+
+	// displaySecretValues
+	displaySecretValues bool
 }
 
 // NewConnectorsScreen creates a new connectors screen.
@@ -172,6 +175,17 @@ func (s *ConnectorsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 			}
 		}
 		return s, nil
+
+	case "s":
+		if s.displaySecretValues {
+			s.displaySecretValues = false
+		} else {
+			s.displaySecretValues = true
+		}
+
+		return s, func() tea.Msg {
+			return LoadConnectorSettingsMsg{ConnectorName: s.currentConnName}
+		}
 
 	case "e":
 		// Edit selected setting (right panel only)
@@ -354,7 +368,7 @@ func (s *ConnectorsScreen) renderRightPanel(width, height int) string {
 				}
 
 				value := setting.Value
-				if setting.Sensitive && value != "" {
+				if setting.Sensitive && value != "" && !s.displaySecretValues {
 					value = "••••••••"
 				}
 				if value == "" {
@@ -418,7 +432,7 @@ func (s *ConnectorsScreen) ShortHelp() string {
 		return "enter: save | esc: cancel"
 	}
 	if s.focusRight {
-		return "j/k: navigate | e: edit | V: validate | tab: switch | esc: back"
+		return "j/k: navigate | e: edit | V: validate | tab: switch | s: display secret values | esc: back"
 	}
 	return "j/k: navigate | enter: enable | d: disable | V: validate | tab: switch | esc: back"
 }
