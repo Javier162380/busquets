@@ -409,7 +409,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.statusBar.SetSuccess("Connector validated successfully!")
 		}
-		return a, nil
+		return a, ClearStatusCmd(1 * time.Second)
 
 	// Tag messages.
 	case screens.LoadTagsForModalMsg:
