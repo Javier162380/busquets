@@ -12,11 +12,10 @@ import (
 )
 
 type SettingDefinition struct {
-	Name                 string
-	Description          string
-	Type                 string
-	Default              claudeviewer.SettingValues
-	RequiresThemeRefresh bool
+	Name        string
+	Description string
+	Type        string
+	Default     claudeviewer.SettingValues
 }
 
 var KnownSettings = []SettingDefinition{
@@ -27,18 +26,16 @@ var KnownSettings = []SettingDefinition{
 		Default:     claudeviewer.SettingValues{NumberValue: new(float64(200))},
 	},
 	{
-		Name:                 claudeviewer.SettingDarkModeEnabled,
-		Description:          "Enable dark mode theme",
-		Type:                 claudeviewer.SettingTypeBoolean,
-		Default:              claudeviewer.SettingValues{BooleanValue: new(true)},
-		RequiresThemeRefresh: true,
+		Name:        claudeviewer.SettingDarkModeEnabled,
+		Description: "Enable dark mode theme",
+		Type:        claudeviewer.SettingTypeBoolean,
+		Default:     claudeviewer.SettingValues{BooleanValue: new(true)},
 	},
 	{
-		Name:                 claudeviewer.SettingRenderMarkdownByDefault,
-		Description:          "Automatically render markdown by default, using the selected theme",
-		Type:                 claudeviewer.SettingTypeBoolean,
-		Default:              claudeviewer.SettingValues{BooleanValue: new(false)},
-		RequiresThemeRefresh: true,
+		Name:        claudeviewer.SettingRenderMarkdownByDefault,
+		Description: "Automatically render markdown by default, using the selected theme",
+		Type:        claudeviewer.SettingTypeBoolean,
+		Default:     claudeviewer.SettingValues{BooleanValue: new(false)},
 	},
 	{
 		Name:        claudeviewer.SettingWatchModeEnabled,
@@ -122,12 +119,12 @@ func (s *SettingsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.editing = false
 		s.settings[s.cursor].Editing = false
 
-		switch {
-		case s.settings[s.cursor].Definition.RequiresThemeRefresh && s.settings[s.cursor].Definition.Name == claudeviewer.SettingDarkModeEnabled:
+		switch s.settings[s.cursor].Definition.Name {
+		case claudeviewer.SettingDarkModeEnabled:
 			return s, func() tea.Msg {
 				return ThemeChangedMsg{}
 			}
-		case s.settings[s.cursor].Definition.RequiresThemeRefresh && s.settings[s.cursor].Definition.Name == claudeviewer.SettingRenderMarkdownByDefault:
+		case claudeviewer.SettingRenderMarkdownByDefault:
 			return s, func() tea.Msg {
 				return RenderMarkDownByDefaultMsg{}
 			}
