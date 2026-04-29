@@ -273,7 +273,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		}
 		return s, nil
 
-	case "j", "down", "k", "up":
+	case "down", "up":
 		cmd := s.list.Update(msg)
 		if item := s.list.SelectedItem(); item != nil {
 			if plan, ok := item.Data().(claudeviewer.PlanSummary); ok {
@@ -281,6 +281,29 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 			}
 		}
 		return s, cmd
+	case "j", "k":
+		now := time.Now()
+		if s.lastKey == key && now.Sub(s.lastKeyTime) < 500*time.Millisecond {
+			currentItem := s.list.SelectedIndex()
+			var nextItemIndex int
+			if key == "j" {
+				nextItemIndex = min(currentItem+10, s.list.ItemCount()-1)
+			} else {
+				nextItemIndex = max(0, currentItem-10)
+			}
+			s.list.Select(nextItemIndex)
+			cmd := s.list.Update(msg)
+			if item := s.list.SelectedItem(); item != nil {
+				if plan, ok := item.Data().(claudeviewer.PlanSummary); ok {
+					return s, tea.Batch(cmd, s.loadPlanDetail(plan.FileName))
+				}
+				return s, cmd
+			}
+			return s, cmd
+		}
+		s.lastKey = key
+		s.lastKeyTime = now
+		return s, nil
 	}
 
 	return s, s.list.Update(msg)
@@ -679,16 +702,16 @@ func (s *PlansScreen) ShortHelp() string {
 			}
 			searchHelp = fmt.Sprintf("/: search | T: tags | c: clear [%s]", activeFilters)
 		}
-		return fmt.Sprintf("j/k: navigate | m: manage tags | tab: content | v: fullscreen | e: edit | s: sync | S: settings | r: rsync | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
+		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | v: fullscreen | e: edit | s: sync | S: settings | r: rsync | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
 	case types.FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeGlamour {
 			mode = "RENDERED"
 		}
 		if s.layout == types.LayoutSplit {
-			return fmt.Sprintf("j/k: scroll | g/G: top/bottom | r: render (%s)	 | tab: list | esc: back", mode)
+			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s)	 | tab: list | esc: back", mode)
 		}
-		return fmt.Sprintf("j/k: scroll | g/G: top/bottom | r: render (%s) | e: edit | v: versions | t: transmit | esc: back", mode)
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | e: edit | v: versions | t: transmit | esc: back", mode)
 	case types.FocusEditor:
 		modified := ""
 		if s.editor.IsModified() {
