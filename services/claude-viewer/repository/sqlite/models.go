@@ -9,6 +9,19 @@ import (
 	"time"
 )
 
+type BackgroundJob struct {
+	ID            string         `json:"id"`
+	PlanID        int64          `json:"plan_id"`
+	Name          string         `json:"name"`
+	Description   sql.NullString `json:"description"`
+	AgentProvider string         `json:"agent_provider"`
+	AgentConfig   string         `json:"agent_config"`
+	Status        string         `json:"status"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	LastRunAt     sql.NullTime   `json:"last_run_at"`
+}
+
 type Connector struct {
 	Name        string    `json:"name"`
 	DisplayName string    `json:"display_name"`
@@ -23,6 +36,19 @@ type ConnectorSetting struct {
 	SettingKey    string `json:"setting_key"`
 	SettingValue  string `json:"setting_value"`
 	IsSecret      bool   `json:"is_secret"`
+}
+
+type JobExecution struct {
+	ID              string         `json:"id"`
+	JobID           string         `json:"job_id"`
+	ExecutionNumber int64          `json:"execution_number"`
+	Status          string         `json:"status"`
+	StartedAt       sql.NullTime   `json:"started_at"`
+	CompletedAt     sql.NullTime   `json:"completed_at"`
+	ExitCode        sql.NullInt64  `json:"exit_code"`
+	OutputLog       sql.NullString `json:"output_log"`
+	ErrorMessage    sql.NullString `json:"error_message"`
+	TriggeredBy     string         `json:"triggered_by"`
 }
 
 type Plan struct {
@@ -52,6 +78,14 @@ type PlanVersion struct {
 	Content       string    `json:"content"`
 	WordCount     int64     `json:"word_count"`
 	CreatedAt     time.Time `json:"created_at"`
+}
+
+type ScheduledJob struct {
+	ID          string    `json:"id"`
+	JobID       string    `json:"job_id"`
+	ScheduledAt time.Time `json:"scheduled_at"`
+	Cancelled   bool      `json:"cancelled"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type Setting struct {

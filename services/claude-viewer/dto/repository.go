@@ -11,6 +11,7 @@ type Repository interface {
 	// Plan operations
 	CountPlans(ctx context.Context) (int64, error)
 	GetPlanByFileName(ctx context.Context, fileName string) (Plan, error)
+	GetPlanByID(ctx context.Context, id int64) (Plan, error)
 	InsertPlan(ctx context.Context, params InsertPlanParams) error
 	UpdatePlan(ctx context.Context, params UpdatePlanParams) error
 	DeletePlan(ctx context.Context, fileName string) error
@@ -64,4 +65,31 @@ type Repository interface {
 	RemoveAllTagsFromPlan(ctx context.Context, planID int64) error
 	GetPlanTags(ctx context.Context, planID int64) ([]Tag, error)
 	SetPlanTags(ctx context.Context, planID int64, tagIDs []int64, assignedAt time.Time) error
+
+	// Background job operations
+	InsertJob(ctx context.Context, params CreateJobParams) (BackgroundJob, error)
+	GetJobByID(ctx context.Context, id string) (BackgroundJob, error)
+	GetJobByPlanID(ctx context.Context, planID int64) ([]BackgroundJob, error)
+	ListJobs(ctx context.Context, params ListJobsParams) ([]BackgroundJob, error)
+	ListJobsWithPlans(ctx context.Context, params ListJobsParams) ([]JobWithPlan, error)
+	UpdateJob(ctx context.Context, params UpdateJobParams) error
+	UpdateJobStatus(ctx context.Context, id string, status JobStatus, lastRunAt *time.Time) error
+	DeleteJob(ctx context.Context, id string) error
+
+	// Job execution operations
+	InsertExecution(ctx context.Context, params CreateExecutionParams) (JobExecution, error)
+	GetExecutionByID(ctx context.Context, id string) (JobExecution, error)
+	GetLatestExecution(ctx context.Context, jobID string) (JobExecution, error)
+	GetNextExecutionNumber(ctx context.Context, jobID string) (int64, error)
+	ListExecutions(ctx context.Context, params ListExecutionsParams) ([]JobExecution, error)
+	ListExecutionsWithContext(ctx context.Context, params ListExecutionsParams) ([]ExecutionWithJob, error)
+	UpdateExecution(ctx context.Context, params UpdateExecutionParams) error
+	DeleteExecutionsByJobID(ctx context.Context, jobID string) error
+
+	// Scheduled job operations
+	InsertScheduledJob(ctx context.Context, params CreateScheduledJobParams) (ScheduledJob, error)
+	GetScheduledJobByJobID(ctx context.Context, jobID string) (ScheduledJob, error)
+	ListDueScheduledJobs(ctx context.Context, now time.Time) ([]ScheduledJob, error)
+	CancelScheduledJob(ctx context.Context, jobID string) error
+	DeleteScheduledJob(ctx context.Context, jobID string) error
 }

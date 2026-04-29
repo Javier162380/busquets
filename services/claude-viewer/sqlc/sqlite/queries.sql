@@ -10,6 +10,9 @@ WHERE file_name = ?;
 -- name: GetPlanByFileName :one
 SELECT * FROM plans WHERE file_name = ? LIMIT 1;
 
+-- name: GetPlanByID :one
+SELECT * FROM plans WHERE id = ? LIMIT 1;
+
 -- name: ListAllPlans :many
 SELECT id, file_name, title, created_at, modified_at, file_size, word_count
 FROM plans
@@ -235,3 +238,130 @@ FROM plans p
 JOIN plan_tags pt ON p.id = pt.plan_id
 WHERE pt.tag_id = ?
 ORDER BY p.modified_at DESC;
+
+-- Background job queries
+
+-- name: InsertJob :one
+INSERT INTO background_jobs (id, plan_id, name, description, agent_provider, agent_config, status, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING *;
+
+-- name: GetJobByID :one
+SELECT * FROM background_jobs WHERE id = ? LIMIT 1;
+
+-- name: GetJobByPlanID :many
+SELECT * FROM background_jobs WHERE plan_id = ? ORDER BY created_at DESC;
+
+-- name: ListJobs :many
+SELECT * FROM background_jobs
+WHERE (? IS NULL OR plan_id = ?)
+  AND (? IS NULL OR status = ?)
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: ListJobsWithPlans :many
+SELECT
+    bj.*,
+    p.file_name AS plan_name,
+    p.file_path AS plan_path
+FROM background_jobs bj
+JOIN plans p ON bj.plan_id = p.id
+WHERE (? IS NULL OR bj.plan_id = ?)
+  AND (? IS NULL OR bj.status = ?)
+ORDER BY bj.created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: UpdateJob :exec
+UPDATE background_jobs
+SET name = COALESCE(?, name),
+    description = COALESCE(?, description),
+    agent_config = COALESCE(?, agent_config),
+    status = COALESCE(?, status),
+    updated_at = ?
+WHERE id = ?;
+
+-- name: UpdateJobStatus :exec
+UPDATE background_jobs
+SET status = ?,
+    last_run_at = COALESCE(?, last_run_at),
+    updated_at = ?
+WHERE id = ?;
+
+-- name: DeleteJob :exec
+DELETE FROM background_jobs WHERE id = ?;
+
+-- Job execution queries
+
+-- name: InsertExecution :one
+INSERT INTO job_executions (id, job_id, execution_number, status, triggered_by, started_at)
+VALUES (?, ?, ?, ?, ?, ?)
+RETURNING *;
+
+-- name: GetExecutionByID :one
+SELECT * FROM job_executions WHERE id = ? LIMIT 1;
+
+-- name: GetLatestExecution :one
+SELECT * FROM job_executions
+WHERE job_id = ?
+ORDER BY execution_number DESC
+LIMIT 1;
+
+-- name: GetNextExecutionNumber :one
+SELECT COALESCE(MAX(execution_number), 0) + 1 AS next_number
+FROM job_executions
+WHERE job_id = ?;
+
+-- name: ListExecutions :many
+SELECT * FROM job_executions
+WHERE (? IS NULL OR job_id = ?)
+ORDER BY started_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: ListExecutionsWithContext :many
+SELECT
+    je.*,
+    bj.name AS job_name,
+    p.file_name AS plan_name
+FROM job_executions je
+JOIN background_jobs bj ON je.job_id = bj.id
+JOIN plans p ON bj.plan_id = p.id
+WHERE (? IS NULL OR je.job_id = ?)
+ORDER BY je.started_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: UpdateExecution :exec
+UPDATE job_executions
+SET status = ?,
+    started_at = COALESCE(?, started_at),
+    completed_at = COALESCE(?, completed_at),
+    exit_code = COALESCE(?, exit_code),
+    output_log = COALESCE(?, output_log),
+    error_message = COALESCE(?, error_message)
+WHERE id = ?;
+
+-- name: DeleteExecutionsByJobID :exec
+DELETE FROM job_executions WHERE job_id = ?;
+
+-- Scheduled job queries
+
+-- name: InsertScheduledJob :one
+INSERT INTO scheduled_jobs (id, job_id, scheduled_at, created_at)
+VALUES (?, ?, ?, ?)
+RETURNING *;
+
+-- name: GetScheduledJobByJobID :one
+SELECT * FROM scheduled_jobs WHERE job_id = ? LIMIT 1;
+
+-- name: ListDueScheduledJobs :many
+SELECT * FROM scheduled_jobs
+WHERE scheduled_at <= ?
+  AND cancelled = 0
+ORDER BY scheduled_at ASC;
+
+-- name: CancelScheduledJob :exec
+UPDATE scheduled_jobs
+SET cancelled = 1
+WHERE job_id = ?;
+
+-- name: DeleteScheduledJob :exec
+DELETE FROM scheduled_jobs WHERE job_id = ?;
