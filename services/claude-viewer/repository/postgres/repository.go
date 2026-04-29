@@ -107,6 +107,37 @@ func ptrToTimestamptz(t *time.Time) pgtype.Timestamptz {
 	return pgtype.Timestamptz{Time: *t, Valid: true}
 }
 
+func uuidToString(u pgtype.UUID) string {
+	if !u.Valid {
+		return ""
+	}
+	return fmt.Sprintf("%x-%x-%x-%x-%x", u.Bytes[0:4], u.Bytes[4:6], u.Bytes[6:8], u.Bytes[8:10], u.Bytes[10:16])
+}
+
+func stringToUUID(s string) (pgtype.UUID, error) {
+	var uuid pgtype.UUID
+	err := uuid.Scan(s)
+	if err != nil {
+		return pgtype.UUID{}, err
+	}
+	return uuid, nil
+}
+
+func int4ToPtr(i pgtype.Int4) *int {
+	if !i.Valid {
+		return nil
+	}
+	val := int(i.Int32)
+	return &val
+}
+
+func ptrToInt4(i *int) pgtype.Int4 {
+	if i == nil {
+		return pgtype.Int4{}
+	}
+	return pgtype.Int4{Int32: int32(*i), Valid: true}
+}
+
 // Model conversions: SQLC types -> domain types
 
 func planToDomain(p Plan) dto.Plan {
@@ -247,6 +278,17 @@ func (r *Repository) CountPlans(ctx context.Context) (int64, error) {
 
 func (r *Repository) GetPlanByFileName(ctx context.Context, fileName string) (dto.Plan, error) {
 	p, err := r.q.GetPlanByFileName(ctx, fileName)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dto.Plan{}, dto.ErrNotFound
+	}
+	if err != nil {
+		return dto.Plan{}, err
+	}
+	return planToDomain(p), nil
+}
+
+func (r *Repository) GetPlanByID(ctx context.Context, id int64) (dto.Plan, error) {
+	p, err := r.q.GetPlanByID(ctx, int32(id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return dto.Plan{}, dto.ErrNotFound
 	}
@@ -847,4 +889,480 @@ func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int
 	}
 
 	return err
+}
+
+// Background job conversion functions
+
+func backgroundJobToDomain(job BackgroundJob) dto.BackgroundJob {
+	return dto.BackgroundJob{
+		ID:            uuidToString(job.ID),
+		PlanID:        job.PlanID,
+		Name:          job.Name,
+		Description:   textToPtr(job.Description),
+		AgentProvider: job.AgentProvider,
+		AgentConfig:   job.AgentConfig,
+		Status:        dto.JobStatus(job.Status),
+		CreatedAt:     timestamptzToTime(job.CreatedAt),
+		UpdatedAt:     timestamptzToTime(job.UpdatedAt),
+		LastRunAt:     timestamptzToPtr(job.LastRunAt),
+	}
+}
+
+func jobExecutionToDomain(exec JobExecution) dto.JobExecution {
+	return dto.JobExecution{
+		ID:              uuidToString(exec.ID),
+		JobID:           uuidToString(exec.JobID),
+		ExecutionNumber: exec.ExecutionNumber,
+		Status:          dto.ExecutionStatus(exec.Status),
+		StartedAt:       timestamptzToPtr(exec.StartedAt),
+		CompletedAt:     timestamptzToPtr(exec.CompletedAt),
+		ExitCode:        int4ToPtr(exec.ExitCode),
+		OutputLog:       textToPtr(exec.OutputLog),
+		ErrorMessage:    textToPtr(exec.ErrorMessage),
+		TriggeredBy:     exec.TriggeredBy,
+	}
+}
+
+func scheduledJobToDomain(sched ScheduledJob) dto.ScheduledJob {
+	return dto.ScheduledJob{
+		ID:          uuidToString(sched.ID),
+		JobID:       uuidToString(sched.JobID),
+		ScheduledAt: timestamptzToTime(sched.ScheduledAt),
+		Cancelled:   sched.Cancelled,
+		CreatedAt:   timestamptzToTime(sched.CreatedAt),
+	}
+}
+
+// Background job operations
+
+func (r *Repository) InsertJob(ctx context.Context, params dto.CreateJobParams) (dto.BackgroundJob, error) {
+	id, err := stringToUUID(params.ID)
+	if err != nil {
+		return dto.BackgroundJob{}, fmt.Errorf("invalid UUID: %w", err)
+	}
+
+	job, err := r.q.InsertJob(ctx, InsertJobParams{
+		ID:            id,
+		PlanID:        params.PlanID,
+		Name:          params.Name,
+		Description:   ptrToText(params.Description),
+		AgentProvider: params.AgentProvider,
+		AgentConfig:   params.AgentConfig,
+		Status:        string(dto.JobStatusPending),
+		CreatedAt:     timeToTimestamptz(params.CreatedAt),
+		UpdatedAt:     timeToTimestamptz(params.UpdatedAt),
+	})
+	if err != nil {
+		return dto.BackgroundJob{}, err
+	}
+	return backgroundJobToDomain(job), nil
+}
+
+func (r *Repository) GetJobByID(ctx context.Context, id string) (dto.BackgroundJob, error) {
+	uuid, err := stringToUUID(id)
+	if err != nil {
+		return dto.BackgroundJob{}, fmt.Errorf("invalid UUID: %w", err)
+	}
+
+	job, err := r.q.GetJobByID(ctx, uuid)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return dto.BackgroundJob{}, dto.ErrNotFound
+		}
+		return dto.BackgroundJob{}, err
+	}
+	return backgroundJobToDomain(job), nil
+}
+
+func (r *Repository) GetJobByPlanID(ctx context.Context, planID int64) ([]dto.BackgroundJob, error) {
+	rows, err := r.q.GetJobByPlanID(ctx, planID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.BackgroundJob, len(rows))
+	for i, row := range rows {
+		result[i] = backgroundJobToDomain(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) ListJobs(ctx context.Context, params dto.ListJobsParams) ([]dto.BackgroundJob, error) {
+	var planIDCheck int64
+	var planID int64
+	if params.PlanID != nil {
+		planIDCheck = *params.PlanID
+		planID = *params.PlanID
+	}
+
+	var statusCheck string
+	var status string
+	if params.Status != nil {
+		status = string(*params.Status)
+		statusCheck = status
+	}
+
+	rows, err := r.q.ListJobs(ctx, ListJobsParams{
+		Column1: planIDCheck,
+		PlanID:  planID,
+		Column3: statusCheck,
+		Status:  status,
+		Limit:   int32(params.Limit),
+		Offset:  int32(params.Offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]dto.BackgroundJob, len(rows))
+	for i, row := range rows {
+		result[i] = backgroundJobToDomain(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) ListJobsWithPlans(ctx context.Context, params dto.ListJobsParams) ([]dto.JobWithPlan, error) {
+	var planIDCheck int64
+	var planID int64
+	if params.PlanID != nil {
+		planIDCheck = *params.PlanID
+		planID = *params.PlanID
+	}
+
+	var statusCheck string
+	var status string
+	if params.Status != nil {
+		status = string(*params.Status)
+		statusCheck = status
+	}
+
+	rows, err := r.q.ListJobsWithPlans(ctx, ListJobsWithPlansParams{
+		Column1: planIDCheck,
+		PlanID:  planID,
+		Column3: statusCheck,
+		Status:  status,
+		Limit:   int32(params.Limit),
+		Offset:  int32(params.Offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]dto.JobWithPlan, len(rows))
+	for i, row := range rows {
+		// Convert flattened row to nested structure
+		job := BackgroundJob{
+			ID:            row.ID,
+			PlanID:        row.PlanID,
+			Name:          row.Name,
+			Description:   row.Description,
+			AgentProvider: row.AgentProvider,
+			AgentConfig:   row.AgentConfig,
+			Status:        row.Status,
+			CreatedAt:     row.CreatedAt,
+			UpdatedAt:     row.UpdatedAt,
+			LastRunAt:     row.LastRunAt,
+		}
+		result[i] = dto.JobWithPlan{
+			Job:      backgroundJobToDomain(job),
+			PlanName: row.PlanName,
+			PlanPath: row.PlanPath,
+		}
+	}
+	return result, nil
+}
+
+func (r *Repository) UpdateJob(ctx context.Context, params dto.UpdateJobParams) error {
+	uuid, err := stringToUUID(params.ID)
+	if err != nil {
+		return fmt.Errorf("invalid UUID: %w", err)
+	}
+
+	// SQLC expects non-nullable strings, using empty string for NULL case (COALESCE in SQL handles this)
+	name := ""
+	if params.Name != nil {
+		name = *params.Name
+	}
+
+	agentConfig := ""
+	if params.AgentConfig != nil {
+		agentConfig = *params.AgentConfig
+	}
+
+	status := ""
+	if params.Status != nil {
+		status = string(*params.Status)
+	}
+
+	return r.q.UpdateJob(ctx, UpdateJobParams{
+		Name:        name,
+		Description: ptrToText(params.Description),
+		AgentConfig: agentConfig,
+		Status:      status,
+		UpdatedAt:   timeToTimestamptz(params.UpdatedAt),
+		ID:          uuid,
+	})
+}
+
+func (r *Repository) UpdateJobStatus(ctx context.Context, id string, status dto.JobStatus, lastRunAt *time.Time) error {
+	uuid, err := stringToUUID(id)
+	if err != nil {
+		return fmt.Errorf("invalid UUID: %w", err)
+	}
+
+	now := time.Now()
+	return r.q.UpdateJobStatus(ctx, UpdateJobStatusParams{
+		Status:    string(status),
+		LastRunAt: ptrToTimestamptz(lastRunAt),
+		UpdatedAt: timeToTimestamptz(now),
+		ID:        uuid,
+	})
+}
+
+func (r *Repository) DeleteJob(ctx context.Context, id string) error {
+	uuid, err := stringToUUID(id)
+	if err != nil {
+		return fmt.Errorf("invalid UUID: %w", err)
+	}
+	return r.q.DeleteJob(ctx, uuid)
+}
+
+// Job execution operations
+
+func (r *Repository) InsertExecution(ctx context.Context, params dto.CreateExecutionParams) (dto.JobExecution, error) {
+	id, err := stringToUUID(params.ID)
+	if err != nil {
+		return dto.JobExecution{}, fmt.Errorf("invalid execution ID UUID: %w", err)
+	}
+
+	jobID, err := stringToUUID(params.JobID)
+	if err != nil {
+		return dto.JobExecution{}, fmt.Errorf("invalid job ID UUID: %w", err)
+	}
+
+	exec, err := r.q.InsertExecution(ctx, InsertExecutionParams{
+		ID:              id,
+		JobID:           jobID,
+		ExecutionNumber: params.ExecutionNumber,
+		Status:          string(params.Status),
+		TriggeredBy:     params.TriggeredBy,
+		StartedAt:       ptrToTimestamptz(params.StartedAt),
+	})
+	if err != nil {
+		return dto.JobExecution{}, err
+	}
+	return jobExecutionToDomain(exec), nil
+}
+
+func (r *Repository) GetExecutionByID(ctx context.Context, id string) (dto.JobExecution, error) {
+	uuid, err := stringToUUID(id)
+	if err != nil {
+		return dto.JobExecution{}, fmt.Errorf("invalid UUID: %w", err)
+	}
+
+	exec, err := r.q.GetExecutionByID(ctx, uuid)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return dto.JobExecution{}, dto.ErrNotFound
+		}
+		return dto.JobExecution{}, err
+	}
+	return jobExecutionToDomain(exec), nil
+}
+
+func (r *Repository) GetLatestExecution(ctx context.Context, jobID string) (dto.JobExecution, error) {
+	uuid, err := stringToUUID(jobID)
+	if err != nil {
+		return dto.JobExecution{}, fmt.Errorf("invalid UUID: %w", err)
+	}
+
+	exec, err := r.q.GetLatestExecution(ctx, uuid)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return dto.JobExecution{}, dto.ErrNotFound
+		}
+		return dto.JobExecution{}, err
+	}
+	return jobExecutionToDomain(exec), nil
+}
+
+func (r *Repository) GetNextExecutionNumber(ctx context.Context, jobID string) (int64, error) {
+	uuid, err := stringToUUID(jobID)
+	if err != nil {
+		return 0, fmt.Errorf("invalid UUID: %w", err)
+	}
+	nextNum, err := r.q.GetNextExecutionNumber(ctx, uuid)
+	if err != nil {
+		return 0, err
+	}
+	return int64(nextNum), nil
+}
+
+func (r *Repository) ListExecutions(ctx context.Context, params dto.ListExecutionsParams) ([]dto.JobExecution, error) {
+	var jobIDCheck pgtype.UUID
+	var jobID pgtype.UUID
+	if params.JobID != nil {
+		uuid, err := stringToUUID(*params.JobID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid UUID: %w", err)
+		}
+		jobIDCheck = uuid
+		jobID = uuid
+	}
+
+	rows, err := r.q.ListExecutions(ctx, ListExecutionsParams{
+		Column1: jobIDCheck,
+		JobID:   jobID,
+		Limit:   int32(params.Limit),
+		Offset:  int32(params.Offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]dto.JobExecution, len(rows))
+	for i, row := range rows {
+		result[i] = jobExecutionToDomain(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) ListExecutionsWithContext(ctx context.Context, params dto.ListExecutionsParams) ([]dto.ExecutionWithJob, error) {
+	var jobIDCheck pgtype.UUID
+	var jobID pgtype.UUID
+	if params.JobID != nil {
+		uuid, err := stringToUUID(*params.JobID)
+		if err != nil {
+			return nil, fmt.Errorf("invalid UUID: %w", err)
+		}
+		jobIDCheck = uuid
+		jobID = uuid
+	}
+
+	rows, err := r.q.ListExecutionsWithContext(ctx, ListExecutionsWithContextParams{
+		Column1: jobIDCheck,
+		JobID:   jobID,
+		Limit:   int32(params.Limit),
+		Offset:  int32(params.Offset),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]dto.ExecutionWithJob, len(rows))
+	for i, row := range rows {
+		// Convert flattened row to nested structure
+		exec := JobExecution{
+			ID:              row.ID,
+			JobID:           row.JobID,
+			ExecutionNumber: row.ExecutionNumber,
+			Status:          row.Status,
+			StartedAt:       row.StartedAt,
+			CompletedAt:     row.CompletedAt,
+			ExitCode:        row.ExitCode,
+			OutputLog:       row.OutputLog,
+			ErrorMessage:    row.ErrorMessage,
+			TriggeredBy:     row.TriggeredBy,
+		}
+		result[i] = dto.ExecutionWithJob{
+			Execution: jobExecutionToDomain(exec),
+			JobName:   row.JobName,
+			PlanName:  row.PlanName,
+		}
+	}
+	return result, nil
+}
+
+func (r *Repository) UpdateExecution(ctx context.Context, params dto.UpdateExecutionParams) error {
+	uuid, err := stringToUUID(params.ID)
+	if err != nil {
+		return fmt.Errorf("invalid UUID: %w", err)
+	}
+
+	return r.q.UpdateExecution(ctx, UpdateExecutionParams{
+		Status:       string(params.Status),
+		StartedAt:    ptrToTimestamptz(params.StartedAt),
+		CompletedAt:  ptrToTimestamptz(params.CompletedAt),
+		ExitCode:     ptrToInt4(params.ExitCode),
+		OutputLog:    ptrToText(params.OutputLog),
+		ErrorMessage: ptrToText(params.ErrorMessage),
+		ID:           uuid,
+	})
+}
+
+func (r *Repository) DeleteExecutionsByJobID(ctx context.Context, jobID string) error {
+	uuid, err := stringToUUID(jobID)
+	if err != nil {
+		return fmt.Errorf("invalid UUID: %w", err)
+	}
+	return r.q.DeleteExecutionsByJobID(ctx, uuid)
+}
+
+// Scheduled job operations
+
+func (r *Repository) InsertScheduledJob(ctx context.Context, params dto.CreateScheduledJobParams) (dto.ScheduledJob, error) {
+	id, err := stringToUUID(params.ID)
+	if err != nil {
+		return dto.ScheduledJob{}, fmt.Errorf("invalid schedule ID UUID: %w", err)
+	}
+
+	jobID, err := stringToUUID(params.JobID)
+	if err != nil {
+		return dto.ScheduledJob{}, fmt.Errorf("invalid job ID UUID: %w", err)
+	}
+
+	sched, err := r.q.InsertScheduledJob(ctx, InsertScheduledJobParams{
+		ID:          id,
+		JobID:       jobID,
+		ScheduledAt: timeToTimestamptz(params.ScheduledAt),
+		CreatedAt:   timeToTimestamptz(params.CreatedAt),
+	})
+	if err != nil {
+		return dto.ScheduledJob{}, err
+	}
+	return scheduledJobToDomain(sched), nil
+}
+
+func (r *Repository) GetScheduledJobByJobID(ctx context.Context, jobID string) (dto.ScheduledJob, error) {
+	uuid, err := stringToUUID(jobID)
+	if err != nil {
+		return dto.ScheduledJob{}, fmt.Errorf("invalid UUID: %w", err)
+	}
+
+	sched, err := r.q.GetScheduledJobByJobID(ctx, uuid)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return dto.ScheduledJob{}, dto.ErrNotFound
+		}
+		return dto.ScheduledJob{}, err
+	}
+	return scheduledJobToDomain(sched), nil
+}
+
+func (r *Repository) ListDueScheduledJobs(ctx context.Context, now time.Time) ([]dto.ScheduledJob, error) {
+	rows, err := r.q.ListDueScheduledJobs(ctx, timeToTimestamptz(now))
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]dto.ScheduledJob, len(rows))
+	for i, row := range rows {
+		result[i] = scheduledJobToDomain(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) CancelScheduledJob(ctx context.Context, jobID string) error {
+	uuid, err := stringToUUID(jobID)
+	if err != nil {
+		return fmt.Errorf("invalid UUID: %w", err)
+	}
+	return r.q.CancelScheduledJob(ctx, uuid)
+}
+
+func (r *Repository) DeleteScheduledJob(ctx context.Context, jobID string) error {
+	uuid, err := stringToUUID(jobID)
+	if err != nil {
+		return fmt.Errorf("invalid UUID: %w", err)
+	}
+	return r.q.DeleteScheduledJob(ctx, uuid)
 }
