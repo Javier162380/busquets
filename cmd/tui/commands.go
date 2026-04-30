@@ -406,3 +406,130 @@ func SearchPlansWithTagsCmd(ctx context.Context, svc UnifiedService, query strin
 		return screens.PlansLoadedMsg{Plans: plans}
 	}
 }
+
+// Background Jobs Commands
+
+// LoadJobsCmd loads all background jobs.
+func LoadJobsCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		jobs, err := svc.ListBackgroundJobs(ctx, nil, nil, 100, 0)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.JobsLoadedMsg{Jobs: jobs}
+	}
+}
+
+// LoadJobDetailCmd loads detailed job information with execution history.
+func LoadJobDetailCmd(ctx context.Context, svc UnifiedService, jobID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		job, err := svc.GetBackgroundJob(ctx, jobID)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+
+		executions, err := svc.ListJobExecutions(ctx, &jobID, 20, 0)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+
+		var scheduled *claudeviewer.ScheduledJob
+		sched, err := svc.GetScheduledJob(ctx, jobID)
+		if err == nil {
+			scheduled = &sched
+		}
+
+		// Convert to screen types
+		detail := &screens.JobDetail{
+			Job:        job,
+			PlanName:   "", // Will be populated from joined data
+			Executions: executions,
+			Scheduled:  scheduled,
+		}
+
+		// Get plan name from job
+		if len(detail.Executions) > 0 {
+			detail.PlanName = detail.Executions[0].PlanName
+		}
+
+		return screens.JobDetailLoadedMsg{Detail: detail}
+	}
+}
+
+// TriggerJobCmd triggers a job for immediate execution.
+func TriggerJobCmd(ctx context.Context, svc UnifiedService, jobID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		err := svc.TriggerJob(ctx, jobID)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		// Reload job detail to show new execution
+		return screens.LoadJobDetailMsg{JobID: jobID}
+	}
+}
+
+// ScheduleJobCmd schedules a job for future execution.
+func ScheduleJobCmd(ctx context.Context, svc UnifiedService, jobID string, scheduledAt time.Time) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		err := svc.ScheduleJob(ctx, jobID, scheduledAt)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.LoadJobDetailMsg{JobID: jobID}
+	}
+}
+
+// CancelScheduledJobCmd cancels a scheduled job.
+func CancelScheduledJobCmd(ctx context.Context, svc UnifiedService, jobID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		err := svc.CancelScheduledJob(ctx, jobID)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.LoadJobDetailMsg{JobID: jobID}
+	}
+}
+
+// CancelExecutionCmd cancels a running execution.
+func CancelExecutionCmd(ctx context.Context, svc UnifiedService, executionID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		err := svc.CancelJobExecution(ctx, executionID)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.RequestJobsReloadMsg{}
+	}
+}
+
+// JobResultListenerCmd listens to the job result channel and converts results to messages.
+func JobResultListenerCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case <-ctx.Done():
+			return nil
+		case result := <-svc.GetJobResultChannel():
+			return screens.JobResultMsg{
+				JobID:   result.JobID,
+				Success: result.Success,
+			}
+		}
+	}
+}

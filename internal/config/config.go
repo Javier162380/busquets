@@ -15,9 +15,10 @@ const (
 
 // Config represents the application configuration.
 type Config struct {
-	Database DatabaseConfig `toml:"database"`
-	Paths    PathsConfig    `toml:"paths"`
-	MCP      MCPConfig      `toml:"mcp"`
+	Database       DatabaseConfig       `toml:"database"`
+	Paths          PathsConfig          `toml:"paths"`
+	MCP            MCPConfig            `toml:"mcp"`
+	BackgroundJobs BackgroundJobsConfig `toml:"background_jobs"`
 }
 
 // DatabaseConfig contains database-related configuration.
@@ -49,6 +50,14 @@ type PathsConfig struct {
 type MCPConfig struct {
 	ServerName string `toml:"server_name"`
 	Version    string `toml:"version"`
+}
+
+// BackgroundJobsConfig contains background job execution configuration.
+type BackgroundJobsConfig struct {
+	Enabled            bool `toml:"enabled"`
+	MaxConcurrent      int  `toml:"max_concurrent"`
+	DefaultTimeout     int  `toml:"default_timeout_minutes"`
+	PollingIntervalSec int  `toml:"polling_interval_seconds"`
 }
 
 // LoadConfig loads configuration from the current working directory.
@@ -108,6 +117,12 @@ func DefaultConfig() *Config {
 			ServerName: "claude-plan-viewer",
 			Version:    "1.0.0",
 		},
+		BackgroundJobs: BackgroundJobsConfig{
+			Enabled:            true,
+			MaxConcurrent:      3,
+			DefaultTimeout:     30,
+			PollingIntervalSec: 30,
+		},
 	}
 }
 
@@ -160,6 +175,15 @@ func (c *Config) applyDefaults() {
 	}
 	if c.MCP.Version == "" {
 		c.MCP.Version = defaults.MCP.Version
+	}
+	if c.BackgroundJobs.MaxConcurrent == 0 {
+		c.BackgroundJobs.MaxConcurrent = defaults.BackgroundJobs.MaxConcurrent
+	}
+	if c.BackgroundJobs.DefaultTimeout == 0 {
+		c.BackgroundJobs.DefaultTimeout = defaults.BackgroundJobs.DefaultTimeout
+	}
+	if c.BackgroundJobs.PollingIntervalSec == 0 {
+		c.BackgroundJobs.PollingIntervalSec = defaults.BackgroundJobs.PollingIntervalSec
 	}
 }
 

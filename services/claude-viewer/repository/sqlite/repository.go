@@ -852,3 +852,309 @@ func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int
 	}
 	return err
 }
+
+
+// Background job operations
+
+func (r *Repository) InsertJob(ctx context.Context, params dto.CreateJobParams) (dto.BackgroundJob, error) {
+	result, err := r.q.InsertJob(ctx, InsertJobParams{
+		ID:            params.ID,
+		PlanID:        params.PlanID,
+		Name:          params.Name,
+		Description:   ptrToNullString(params.Description),
+		AgentProvider: params.AgentProvider,
+		AgentConfig:   params.AgentConfig,
+		Status:        "pending", // Default status
+		CreatedAt:     params.CreatedAt,
+		UpdatedAt:     params.UpdatedAt,
+	})
+	if err != nil {
+		return dto.BackgroundJob{}, err
+	}
+
+	return dto.BackgroundJob{
+		ID:            result.ID,
+		PlanID:        result.PlanID,
+		Name:          result.Name,
+		Description:   nullStringToPtr(result.Description),
+		AgentProvider: result.AgentProvider,
+		AgentConfig:   result.AgentConfig,
+		Status:        dto.JobStatus(result.Status),
+		CreatedAt:     result.CreatedAt,
+		UpdatedAt:     result.UpdatedAt,
+		LastRunAt:     nullTimeToPtr(result.LastRunAt),
+	}, nil
+}
+
+func (r *Repository) GetJobByID(ctx context.Context, id string) (dto.BackgroundJob, error) {
+	result, err := r.q.GetJobByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return dto.BackgroundJob{}, dto.ErrNotFound
+		}
+		return dto.BackgroundJob{}, err
+	}
+
+	return dto.BackgroundJob{
+		ID:            result.ID,
+		PlanID:        result.PlanID,
+		Name:          result.Name,
+		Description:   nullStringToPtr(result.Description),
+		AgentProvider: result.AgentProvider,
+		AgentConfig:   result.AgentConfig,
+		Status:        dto.JobStatus(result.Status),
+		CreatedAt:     result.CreatedAt,
+		UpdatedAt:     result.UpdatedAt,
+		LastRunAt:     nullTimeToPtr(result.LastRunAt),
+	}, nil
+}
+
+func (r *Repository) ListJobsWithPlans(ctx context.Context, params dto.ListJobsParams) ([]dto.JobWithPlan, error) {
+	rows, err := r.q.ListJobsWithPlans(ctx, ListJobsWithPlansParams{
+		Limit:  params.Limit,
+		Offset: params.Offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]dto.JobWithPlan, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, dto.JobWithPlan{
+			Job: dto.BackgroundJob{
+				ID:            row.JobID,
+				PlanID:        row.PlanID,
+				Name:          row.JobName,
+				Description:   nullStringToPtr(row.JobDescription),
+				AgentProvider: row.AgentProvider,
+				AgentConfig:   row.AgentConfig,
+				Status:        dto.JobStatus(row.Status),
+				CreatedAt:     row.JobCreatedAt,
+				UpdatedAt:     row.JobUpdatedAt,
+				LastRunAt:     nullTimeToPtr(row.LastRunAt),
+			},
+			PlanName: row.PlanFileName,
+			PlanPath: row.PlanFilePath,
+		})
+	}
+
+	return result, nil
+}
+
+func (r *Repository) UpdateJob(ctx context.Context, params dto.UpdateJobParams) error {
+	return r.q.UpdateJob(ctx, UpdateJobParams{
+		Name:        nullStringFromPtr(params.Name),
+		Description: ptrToNullString(params.Description),
+		AgentConfig: nullStringFromPtr(params.AgentConfig),
+		UpdatedAt:   params.UpdatedAt,
+		ID:          params.ID,
+	})
+}
+
+func (r *Repository) UpdateJobStatus(ctx context.Context, id string, status dto.JobStatus, lastRunAt *time.Time) error {
+	return r.q.UpdateJobStatus(ctx, UpdateJobStatusParams{
+		Status:    string(status),
+		LastRunAt: ptrToNullTime(lastRunAt),
+		UpdatedAt: time.Now(),
+		ID:        id,
+	})
+}
+
+func (r *Repository) DeleteJob(ctx context.Context, id string) error {
+	return r.q.DeleteJob(ctx, id)
+}
+
+// Job execution operations
+
+func (r *Repository) InsertExecution(ctx context.Context, params dto.CreateExecutionParams) (dto.JobExecution, error) {
+	result, err := r.q.InsertExecution(ctx, InsertExecutionParams{
+		ID:              params.ID,
+		JobID:           params.JobID,
+		ExecutionNumber: params.ExecutionNumber,
+		Status:          string(params.Status),
+		TriggeredBy:     params.TriggeredBy,
+	})
+	if err != nil {
+		return dto.JobExecution{}, err
+	}
+
+	return dto.JobExecution{
+		ID:              result.ID,
+		JobID:           result.JobID,
+		ExecutionNumber: result.ExecutionNumber,
+		Status:          dto.ExecutionStatus(result.Status),
+		StartedAt:       nullTimeToPtr(result.StartedAt),
+		CompletedAt:     nullTimeToPtr(result.CompletedAt),
+		ExitCode:        nullInt64ToIntPtr(result.ExitCode),
+		OutputLog:       nullStringToPtr(result.OutputLog),
+		ErrorMessage:    nullStringToPtr(result.ErrorMessage),
+		TriggeredBy:     result.TriggeredBy,
+	}, nil
+}
+
+func (r *Repository) GetExecutionByID(ctx context.Context, id string) (dto.JobExecution, error) {
+	result, err := r.q.GetExecutionByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return dto.JobExecution{}, dto.ErrNotFound
+		}
+		return dto.JobExecution{}, err
+	}
+
+	return dto.JobExecution{
+		ID:              result.ID,
+		JobID:           result.JobID,
+		ExecutionNumber: result.ExecutionNumber,
+		Status:          dto.ExecutionStatus(result.Status),
+		StartedAt:       nullTimeToPtr(result.StartedAt),
+		CompletedAt:     nullTimeToPtr(result.CompletedAt),
+		ExitCode:        nullInt64ToIntPtr(result.ExitCode),
+		OutputLog:       nullStringToPtr(result.OutputLog),
+		ErrorMessage:    nullStringToPtr(result.ErrorMessage),
+		TriggeredBy:     result.TriggeredBy,
+	}, nil
+}
+
+func (r *Repository) GetNextExecutionNumber(ctx context.Context, jobID string) (int64, error) {
+	return r.q.GetNextExecutionNumber(ctx, jobID)
+}
+
+func (r *Repository) UpdateExecution(ctx context.Context, params dto.UpdateExecutionParams) error {
+	return r.q.UpdateExecution(ctx, UpdateExecutionParams{
+		Status:       string(params.Status),
+		StartedAt:    ptrToNullTime(params.StartedAt),
+		CompletedAt:  ptrToNullTime(params.CompletedAt),
+		ExitCode:     intPtrToNullInt64(params.ExitCode),
+		OutputLog:    ptrToNullString(params.OutputLog),
+		ErrorMessage: ptrToNullString(params.ErrorMessage),
+		ID:           params.ID,
+	})
+}
+
+func (r *Repository) ListExecutionsWithContext(ctx context.Context, params dto.ListExecutionsParams) ([]dto.ExecutionWithJob, error) {
+	rows, err := r.q.ListExecutionsWithJobs(ctx, ListExecutionsWithJobsParams{
+		Limit:  params.Limit,
+		Offset: params.Offset,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]dto.ExecutionWithJob, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, dto.ExecutionWithJob{
+			Execution: dto.JobExecution{
+				ID:              row.ExecutionID,
+				JobID:           row.JobID,
+				ExecutionNumber: row.ExecutionNumber,
+				Status:          dto.ExecutionStatus(row.ExecutionStatus),
+				StartedAt:       nullTimeToPtr(row.StartedAt),
+				CompletedAt:     nullTimeToPtr(row.CompletedAt),
+				ExitCode:        nullInt64ToIntPtr(row.ExitCode),
+				OutputLog:       nullStringToPtr(row.OutputLog),
+				ErrorMessage:    nullStringToPtr(row.ErrorMessage),
+				TriggeredBy:     row.TriggeredBy,
+			},
+			JobName:  row.JobName,
+			PlanName: row.PlanFileName,
+		})
+	}
+
+	return result, nil
+}
+
+func (r *Repository) DeleteExecutionsByJobID(ctx context.Context, jobID string) error {
+	return r.q.DeleteExecutionsByJobID(ctx, jobID)
+}
+
+// Scheduled job operations
+
+func (r *Repository) InsertScheduledJob(ctx context.Context, params dto.CreateScheduledJobParams) (dto.ScheduledJob, error) {
+	result, err := r.q.InsertScheduledJob(ctx, InsertScheduledJobParams{
+		ID:          params.ID,
+		JobID:       params.JobID,
+		ScheduledAt: params.ScheduledAt,
+		CreatedAt:   params.CreatedAt,
+	})
+	if err != nil {
+		return dto.ScheduledJob{}, err
+	}
+
+	return dto.ScheduledJob{
+		ID:          result.ID,
+		JobID:       result.JobID,
+		ScheduledAt: result.ScheduledAt,
+		Cancelled:   result.Cancelled,
+		CreatedAt:   result.CreatedAt,
+	}, nil
+}
+
+func (r *Repository) GetScheduledJobByJobID(ctx context.Context, jobID string) (dto.ScheduledJob, error) {
+	result, err := r.q.GetScheduledJobByJobID(ctx, jobID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return dto.ScheduledJob{}, dto.ErrNotFound
+		}
+		return dto.ScheduledJob{}, err
+	}
+
+	return dto.ScheduledJob{
+		ID:          result.ID,
+		JobID:       result.JobID,
+		ScheduledAt: result.ScheduledAt,
+		Cancelled:   result.Cancelled,
+		CreatedAt:   result.CreatedAt,
+	}, nil
+}
+
+func (r *Repository) ListDueScheduledJobs(ctx context.Context, now time.Time) ([]dto.ScheduledJob, error) {
+	rows, err := r.q.ListDueScheduledJobs(ctx, now)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]dto.ScheduledJob, 0, len(rows))
+	for _, row := range rows {
+		result = append(result, dto.ScheduledJob{
+			ID:          row.ID,
+			JobID:       row.JobID,
+			ScheduledAt: row.ScheduledAt,
+			Cancelled:   row.Cancelled,
+			CreatedAt:   row.CreatedAt,
+		})
+	}
+
+	return result, nil
+}
+
+func (r *Repository) CancelScheduledJob(ctx context.Context, jobID string) error {
+	return r.q.CancelScheduledJob(ctx, jobID)
+}
+
+func (r *Repository) DeleteScheduledJob(ctx context.Context, jobID string) error {
+	return r.q.DeleteScheduledJob(ctx, jobID)
+}
+
+// Helper functions for converting between sql.Null* and Go pointers
+
+func nullInt64ToIntPtr(n sql.NullInt64) *int {
+	if !n.Valid {
+		return nil
+	}
+	val := int(n.Int64)
+	return &val
+}
+
+func intPtrToNullInt64(i *int) sql.NullInt64 {
+	if i == nil {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(*i), Valid: true}
+}
+
+func nullStringFromPtr(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}

@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	httpserver "github.com/Javier162380/claude-plan-viewer/cmd/http"
 	mcphandler "github.com/Javier162380/claude-plan-viewer/cmd/mcp"
@@ -193,7 +195,19 @@ func runServe(cfg *config.Config) error {
 }
 
 func runTUI(cfg *config.Config) error {
-	ctx := context.Background()
+	// Create cancellable context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set up signal handling for graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		<-sigChan
+		log.Println("Received shutdown signal, cleaning up...")
+		cancel()
+	}()
 
 	debug := os.Getenv("DEBUG") == "1"
 
@@ -214,6 +228,16 @@ func runTUI(cfg *config.Config) error {
 
 	connectorManager := connectors.NewManager(registry, repo)
 	service.SetConnectorManager(connectorManager)
+
+	// Ensure graceful shutdown of job manager
+	defer func() {
+		if service.IsJobManagerRunning() {
+			log.Println("Stopping job manager...")
+			if err := service.StopJobManager(ctx); err != nil {
+				log.Printf("Error stopping job manager: %v", err)
+			}
+		}
+	}()
 
 	return tuiapp.StartWithOptions(ctx, service, debug)
 }

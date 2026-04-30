@@ -8,6 +8,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BackgroundJob struct {
+	ID            pgtype.UUID      `json:"id"`
+	PlanID        int64            `json:"plan_id"`
+	Name          string           `json:"name"`
+	Description   pgtype.Text      `json:"description"`
+	AgentProvider string           `json:"agent_provider"`
+	AgentConfig   string           `json:"agent_config"`
+	Status        string           `json:"status"`
+	CreatedAt     pgtype.Timestamp `json:"created_at"`
+	UpdatedAt     pgtype.Timestamp `json:"updated_at"`
+	LastRunAt     pgtype.Timestamp `json:"last_run_at"`
+}
+
 type Connector struct {
 	Name        string             `json:"name"`
 	DisplayName string             `json:"display_name"`
@@ -22,6 +35,19 @@ type ConnectorSetting struct {
 	SettingKey    string `json:"setting_key"`
 	SettingValue  string `json:"setting_value"`
 	IsSecret      bool   `json:"is_secret"`
+}
+
+type JobExecution struct {
+	ID              pgtype.UUID      `json:"id"`
+	JobID           pgtype.UUID      `json:"job_id"`
+	ExecutionNumber int64            `json:"execution_number"`
+	Status          string           `json:"status"`
+	StartedAt       pgtype.Timestamp `json:"started_at"`
+	CompletedAt     pgtype.Timestamp `json:"completed_at"`
+	ExitCode        pgtype.Int4      `json:"exit_code"`
+	OutputLog       pgtype.Text      `json:"output_log"`
+	ErrorMessage    pgtype.Text      `json:"error_message"`
+	TriggeredBy     string           `json:"triggered_by"`
 }
 
 type Plan struct {
@@ -51,6 +77,14 @@ type PlanVersion struct {
 	Content       string             `json:"content"`
 	WordCount     int64              `json:"word_count"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type ScheduledJob struct {
+	ID          pgtype.UUID      `json:"id"`
+	JobID       pgtype.UUID      `json:"job_id"`
+	ScheduledAt pgtype.Timestamp `json:"scheduled_at"`
+	Cancelled   bool             `json:"cancelled"`
+	CreatedAt   pgtype.Timestamp `json:"created_at"`
 }
 
 type Setting struct {

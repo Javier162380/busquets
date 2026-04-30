@@ -47,6 +47,20 @@ type UnifiedService interface {
 	GetPlanTags(ctx context.Context, fileName string) ([]claudeviewer.Tag, error)
 	SetPlanTags(ctx context.Context, fileName string, tagNames []string) error
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]claudeviewer.PlanSummary, error)
+
+	// Background job methods
+	ListBackgroundJobs(ctx context.Context, planID *int64, status *claudeviewer.JobStatus, limit, offset int) ([]claudeviewer.JobWithPlan, error)
+	GetBackgroundJob(ctx context.Context, jobID string) (claudeviewer.BackgroundJob, error)
+	TriggerJob(ctx context.Context, jobID string) error
+	ScheduleJob(ctx context.Context, jobID string, scheduledAt time.Time) error
+	CancelScheduledJob(ctx context.Context, jobID string) error
+	CancelJobExecution(ctx context.Context, executionID string) error
+	ListJobExecutions(ctx context.Context, jobID *string, limit, offset int) ([]claudeviewer.ExecutionWithJob, error)
+	GetScheduledJob(ctx context.Context, jobID string) (claudeviewer.ScheduledJob, error)
+	StartJobManager(ctx context.Context) error
+	StopJobManager(ctx context.Context) error
+	GetJobResultChannel() <-chan claudeviewer.JobResult
+	IsJobManagerRunning() bool
 }
 
 // WatchResultMsg wraps watch sync results from service.
@@ -116,10 +130,14 @@ func (a *App) Init() tea.Cmd {
 	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault)
 	a.stack = append(a.stack, plansScreen)
 
-	// Start watching for watch results and load initial plans.
+	// Start job manager
+	_ = a.service.StartJobManager(a.ctx)
+
+	// Start watching for watch results, job results, and load initial plans.
 	return tea.Batch(
 		LoadPlansCmd(a.ctx, a.service),
 		WatchChannelListenerCmd(a.ctx, a.service),
+		JobResultListenerCmd(a.ctx, a.service),
 	)
 }
 
@@ -167,6 +185,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.showHelp = false
 			}
 			return a, nil
+		}
+
+		// Global keybinding for jobs screen
+		if msg.String() == "ctrl+j" && !a.showHelp && len(a.stack) > 0 && !a.stack[len(a.stack)-1].IsInputMode() {
+			return a, a.pushJobsScreen()
 		}
 
 	case screens.PopScreenMsg:
@@ -411,7 +434,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, ClearStatusCmd(1 * time.Second)
 
-	// Tag messages.
 	case screens.LoadTagsForModalMsg:
 		return a, LoadTagsForModalCmd(a.ctx, a.service, msg.FileName)
 
@@ -427,6 +449,60 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.SearchPlansWithTagsMsg:
 		return a, SearchPlansWithTagsCmd(a.ctx, a.service, msg.Query, msg.Tags, msg.MatchAll)
+
+	// Background Jobs messages
+	case screens.RequestJobsScreenMsg:
+		return a, a.pushJobsScreen()
+
+	case screens.LoadJobsMsg:
+		return a, LoadJobsCmd(a.ctx, a.service)
+
+	case screens.JobsLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.LoadJobDetailMsg:
+		return a, LoadJobDetailCmd(a.ctx, a.service, msg.JobID)
+
+	case screens.JobDetailLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.TriggerJobMsg:
+		a.statusBar.SetLoading("Triggering job...")
+		return a, tea.Batch(
+			TriggerJobCmd(a.ctx, a.service, msg.JobID),
+			ClearStatusCmd(1*time.Second),
+		)
+
+	case screens.CancelScheduledJobMsg:
+		a.statusBar.SetLoading("Cancelling scheduled job...")
+		return a, tea.Batch(
+			CancelScheduledJobCmd(a.ctx, a.service, msg.JobID),
+			ClearStatusCmd(1*time.Second),
+		)
+
+	case screens.CancelExecutionMsg:
+		a.statusBar.SetLoading("Cancelling execution...")
+		return a, tea.Batch(
+			CancelExecutionCmd(a.ctx, a.service, msg.ExecutionID),
+			ClearStatusCmd(1*time.Second),
+		)
+
+	case screens.JobResultMsg:
+		if msg.Success {
+			a.statusBar.SetSuccess("Job completed successfully")
+		} else {
+			a.statusBar.SetError("Job failed")
+		}
+		// Delegate to current screen for updates and re-schedule listener
+		model, cmd := a.delegateToCurrentScreen(msg)
+		return model, tea.Batch(
+			cmd,
+			JobResultListenerCmd(a.ctx, a.service),
+			ClearStatusCmd(2*time.Second),
+		)
+
+	case screens.RequestJobsReloadMsg:
+		return a, LoadJobsCmd(a.ctx, a.service)
 
 	case screens.ThemeChangedMsg:
 		// Get current dark mode setting and apply theme.
@@ -536,4 +612,13 @@ func (a *App) pushConnectorsScreen() tea.Cmd {
 	connectorsScreen := screens.NewConnectorsScreen(a.width, a.height)
 	a.stack = append(a.stack, connectorsScreen)
 	return connectorsScreen.Init()
+}
+
+func (a *App) pushJobsScreen() tea.Cmd {
+	jobsScreen := screens.NewJobsScreen(a.width, a.height, a.isDarkModeEnabled)
+	a.stack = append(a.stack, jobsScreen)
+	return tea.Batch(
+		jobsScreen.Init(),
+		LoadJobsCmd(a.ctx, a.service),
+	)
 }

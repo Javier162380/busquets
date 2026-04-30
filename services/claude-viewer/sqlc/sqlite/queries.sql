@@ -235,3 +235,146 @@ FROM plans p
 JOIN plan_tags pt ON p.id = pt.plan_id
 WHERE pt.tag_id = ?
 ORDER BY p.modified_at DESC;
+
+-- Background Jobs
+
+-- name: InsertJob :one
+INSERT INTO background_jobs (id, plan_id, name, description, agent_provider, agent_config, status, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING *;
+
+-- name: GetJobByID :one
+SELECT * FROM background_jobs WHERE id = ? LIMIT 1;
+
+-- name: ListJobs :many
+SELECT * FROM background_jobs
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: ListJobsByPlanID :many
+SELECT * FROM background_jobs
+WHERE plan_id = ?
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: ListJobsByStatus :many
+SELECT * FROM background_jobs
+WHERE status = ?
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: UpdateJob :exec
+UPDATE background_jobs
+SET name = COALESCE(?, name),
+    description = COALESCE(?, description),
+    agent_config = COALESCE(?, agent_config),
+    updated_at = ?
+WHERE id = ?;
+
+-- name: UpdateJobStatus :exec
+UPDATE background_jobs
+SET status = ?,
+    last_run_at = ?,
+    updated_at = ?
+WHERE id = ?;
+
+-- name: DeleteJob :exec
+DELETE FROM background_jobs WHERE id = ?;
+
+-- Job Executions
+
+-- name: InsertExecution :one
+INSERT INTO job_executions (id, job_id, execution_number, status, triggered_by)
+VALUES (?, ?, ?, ?, ?)
+RETURNING *;
+
+-- name: GetExecutionByID :one
+SELECT * FROM job_executions WHERE id = ? LIMIT 1;
+
+-- name: GetNextExecutionNumber :one
+SELECT COALESCE(MAX(execution_number), 0) + 1 AS next_number
+FROM job_executions
+WHERE job_id = ?;
+
+-- name: ListExecutionsByJobID :many
+SELECT * FROM job_executions
+WHERE job_id = ?
+ORDER BY execution_number DESC
+LIMIT ? OFFSET ?;
+
+-- name: UpdateExecution :exec
+UPDATE job_executions
+SET status = ?,
+    started_at = COALESCE(?, started_at),
+    completed_at = COALESCE(?, completed_at),
+    exit_code = COALESCE(?, exit_code),
+    output_log = COALESCE(?, output_log),
+    error_message = COALESCE(?, error_message)
+WHERE id = ?;
+
+-- name: DeleteExecutionsByJobID :exec
+DELETE FROM job_executions WHERE job_id = ?;
+
+-- Scheduled Jobs
+
+-- name: InsertScheduledJob :one
+INSERT INTO scheduled_jobs (id, job_id, scheduled_at, created_at)
+VALUES (?, ?, ?, ?)
+RETURNING *;
+
+-- name: GetScheduledJobByJobID :one
+SELECT * FROM scheduled_jobs WHERE job_id = ? LIMIT 1;
+
+-- name: ListDueScheduledJobs :many
+SELECT * FROM scheduled_jobs
+WHERE scheduled_at <= ? AND cancelled = 0;
+
+-- name: CancelScheduledJob :exec
+UPDATE scheduled_jobs
+SET cancelled = 1
+WHERE job_id = ?;
+
+-- name: DeleteScheduledJob :exec
+DELETE FROM scheduled_jobs WHERE job_id = ?;
+
+-- Job queries with joins
+
+-- name: ListJobsWithPlans :many
+SELECT
+    j.id AS job_id,
+    j.plan_id,
+    j.name AS job_name,
+    j.description AS job_description,
+    j.agent_provider,
+    j.agent_config,
+    j.status,
+    j.created_at AS job_created_at,
+    j.updated_at AS job_updated_at,
+    j.last_run_at,
+    p.file_name AS plan_file_name,
+    p.file_path AS plan_file_path,
+    p.title AS plan_title
+FROM background_jobs j
+JOIN plans p ON j.plan_id = p.id
+ORDER BY j.created_at DESC
+LIMIT ? OFFSET ?;
+
+-- name: ListExecutionsWithJobs :many
+SELECT
+    e.id AS execution_id,
+    e.job_id,
+    e.execution_number,
+    e.status AS execution_status,
+    e.started_at,
+    e.completed_at,
+    e.exit_code,
+    e.output_log,
+    e.error_message,
+    e.triggered_by,
+    j.name AS job_name,
+    p.file_name AS plan_file_name
+FROM job_executions e
+JOIN background_jobs j ON e.job_id = j.id
+JOIN plans p ON j.plan_id = p.id
+ORDER BY e.started_at DESC
+LIMIT ? OFFSET ?;

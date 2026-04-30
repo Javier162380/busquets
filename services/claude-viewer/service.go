@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Javier162380/claude-plan-viewer/internal/agent"
+	"github.com/Javier162380/claude-plan-viewer/internal/agent/providers"
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
@@ -34,6 +36,8 @@ type Service struct {
 	nowProvider          NowProvider
 	connectorManager     *connectors.Manager
 	watchManager         *WatchManager
+	agentRegistry        *agent.Registry
+	jobManager           *JobManager
 }
 
 // SetConnectorManager sets the connector manager for the service.
@@ -54,6 +58,12 @@ func New(db dto.Repository, viewerDir, sourcePlansDir string, indexFullContent b
 		goldmark.WithRendererOptions(html.WithUnsafe()),
 	)
 
+	// Initialize agent registry and register providers
+	agentRegistry := agent.NewRegistry()
+	if err := agentRegistry.Register(&providers.ClaudeCodeProvider{}); err != nil {
+		return nil, fmt.Errorf("failed to register Claude Code provider: %w", err)
+	}
+
 	svc := &Service{
 		db:                   db,
 		viewerDir:            viewerDir,
@@ -61,10 +71,14 @@ func New(db dto.Repository, viewerDir, sourcePlansDir string, indexFullContent b
 		indexFullContent:     indexFullContent,
 		markdownHTMLRendered: md,
 		nowProvider:          systemTimeProvider{},
+		agentRegistry:        agentRegistry,
 	}
 
 	// Initialize watch manager
 	svc.watchManager = NewWatchManager(svc)
+
+	// Initialize job manager
+	svc.jobManager = NewJobManager(svc, agentRegistry, 3)
 
 	return svc, nil
 }
@@ -114,6 +128,43 @@ func (s *Service) UpdateWatchInterval(intervalSeconds float64) {
 	}
 	interval := time.Duration(intervalSeconds) * time.Second
 	s.watchManager.UpdateInterval(interval)
+}
+
+// Job Manager methods
+
+// StartJobManager starts the background job manager.
+func (s *Service) StartJobManager(ctx context.Context) error {
+	if s.jobManager == nil {
+		return fmt.Errorf("job manager not initialized")
+	}
+	return s.jobManager.Start(ctx)
+}
+
+// StopJobManager stops the background job manager.
+func (s *Service) StopJobManager(ctx context.Context) error {
+	if s.jobManager == nil {
+		return nil
+	}
+	s.jobManager.Stop()
+	return nil
+}
+
+// GetJobResultChannel returns the channel for receiving job execution results.
+func (s *Service) GetJobResultChannel() <-chan JobResult {
+	if s.jobManager == nil {
+		ch := make(chan JobResult)
+		close(ch)
+		return ch
+	}
+	return s.jobManager.ResultChannel()
+}
+
+// IsJobManagerRunning returns true if the job manager is currently running.
+func (s *Service) IsJobManagerRunning() bool {
+	if s.jobManager == nil {
+		return false
+	}
+	return s.jobManager.IsRunning()
 }
 
 // Tag management methods

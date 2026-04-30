@@ -29,6 +29,17 @@ func (q *Queries) AddTagToPlan(ctx context.Context, arg AddTagToPlanParams) erro
 	return err
 }
 
+const cancelScheduledJob = `-- name: CancelScheduledJob :exec
+UPDATE scheduled_jobs
+SET cancelled = 1
+WHERE job_id = ?
+`
+
+func (q *Queries) CancelScheduledJob(ctx context.Context, jobID string) error {
+	_, err := q.db.ExecContext(ctx, cancelScheduledJob, jobID)
+	return err
+}
+
 const countPlans = `-- name: CountPlans :one
 SELECT COUNT(*) FROM plans
 `
@@ -72,12 +83,39 @@ func (q *Queries) DeleteConnectorSetting(ctx context.Context, arg DeleteConnecto
 	return err
 }
 
+const deleteExecutionsByJobID = `-- name: DeleteExecutionsByJobID :exec
+DELETE FROM job_executions WHERE job_id = ?
+`
+
+func (q *Queries) DeleteExecutionsByJobID(ctx context.Context, jobID string) error {
+	_, err := q.db.ExecContext(ctx, deleteExecutionsByJobID, jobID)
+	return err
+}
+
+const deleteJob = `-- name: DeleteJob :exec
+DELETE FROM background_jobs WHERE id = ?
+`
+
+func (q *Queries) DeleteJob(ctx context.Context, id string) error {
+	_, err := q.db.ExecContext(ctx, deleteJob, id)
+	return err
+}
+
 const deletePlan = `-- name: DeletePlan :exec
 DELETE FROM plans WHERE file_name = ?
 `
 
 func (q *Queries) DeletePlan(ctx context.Context, fileName string) error {
 	_, err := q.db.ExecContext(ctx, deletePlan, fileName)
+	return err
+}
+
+const deleteScheduledJob = `-- name: DeleteScheduledJob :exec
+DELETE FROM scheduled_jobs WHERE job_id = ?
+`
+
+func (q *Queries) DeleteScheduledJob(ctx context.Context, jobID string) error {
+	_, err := q.db.ExecContext(ctx, deleteScheduledJob, jobID)
 	return err
 }
 
@@ -183,6 +221,50 @@ func (q *Queries) GetEnabledConnector(ctx context.Context) (Connector, error) {
 	return i, err
 }
 
+const getExecutionByID = `-- name: GetExecutionByID :one
+SELECT id, job_id, execution_number, status, started_at, completed_at, exit_code, output_log, error_message, triggered_by FROM job_executions WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetExecutionByID(ctx context.Context, id string) (JobExecution, error) {
+	row := q.db.QueryRowContext(ctx, getExecutionByID, id)
+	var i JobExecution
+	err := row.Scan(
+		&i.ID,
+		&i.JobID,
+		&i.ExecutionNumber,
+		&i.Status,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ExitCode,
+		&i.OutputLog,
+		&i.ErrorMessage,
+		&i.TriggeredBy,
+	)
+	return i, err
+}
+
+const getJobByID = `-- name: GetJobByID :one
+SELECT id, plan_id, name, description, agent_provider, agent_config, status, created_at, updated_at, last_run_at FROM background_jobs WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetJobByID(ctx context.Context, id string) (BackgroundJob, error) {
+	row := q.db.QueryRowContext(ctx, getJobByID, id)
+	var i BackgroundJob
+	err := row.Scan(
+		&i.ID,
+		&i.PlanID,
+		&i.Name,
+		&i.Description,
+		&i.AgentProvider,
+		&i.AgentConfig,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastRunAt,
+	)
+	return i, err
+}
+
 const getLatestVersionNumber = `-- name: GetLatestVersionNumber :one
 SELECT COALESCE(MAX(version_number), 0) FROM plan_versions WHERE plan_id = ?
 `
@@ -192,6 +274,19 @@ func (q *Queries) GetLatestVersionNumber(ctx context.Context, planID int64) (int
 	var coalesce interface{}
 	err := row.Scan(&coalesce)
 	return coalesce, err
+}
+
+const getNextExecutionNumber = `-- name: GetNextExecutionNumber :one
+SELECT COALESCE(MAX(execution_number), 0) + 1 AS next_number
+FROM job_executions
+WHERE job_id = ?
+`
+
+func (q *Queries) GetNextExecutionNumber(ctx context.Context, jobID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getNextExecutionNumber, jobID)
+	var next_number int64
+	err := row.Scan(&next_number)
+	return next_number, err
 }
 
 const getPlanByFileName = `-- name: GetPlanByFileName :one
@@ -374,6 +469,23 @@ func (q *Queries) GetPlansWithTag(ctx context.Context, tagID int64) ([]GetPlansW
 	return items, nil
 }
 
+const getScheduledJobByJobID = `-- name: GetScheduledJobByJobID :one
+SELECT id, job_id, scheduled_at, cancelled, created_at FROM scheduled_jobs WHERE job_id = ? LIMIT 1
+`
+
+func (q *Queries) GetScheduledJobByJobID(ctx context.Context, jobID string) (ScheduledJob, error) {
+	row := q.db.QueryRowContext(ctx, getScheduledJobByJobID, jobID)
+	var i ScheduledJob
+	err := row.Scan(
+		&i.ID,
+		&i.JobID,
+		&i.ScheduledAt,
+		&i.Cancelled,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getSettingByName = `-- name: GetSettingByName :one
 SELECT variable_name, variable_type, string_value, number_value, boolean_value, datetime_value FROM settings WHERE variable_name = ? LIMIT 1
 `
@@ -439,6 +551,94 @@ func (q *Queries) GetVersionCount(ctx context.Context, planID int64) (int64, err
 	return count, err
 }
 
+const insertExecution = `-- name: InsertExecution :one
+
+INSERT INTO job_executions (id, job_id, execution_number, status, triggered_by)
+VALUES (?, ?, ?, ?, ?)
+RETURNING id, job_id, execution_number, status, started_at, completed_at, exit_code, output_log, error_message, triggered_by
+`
+
+type InsertExecutionParams struct {
+	ID              string `json:"id"`
+	JobID           string `json:"job_id"`
+	ExecutionNumber int64  `json:"execution_number"`
+	Status          string `json:"status"`
+	TriggeredBy     string `json:"triggered_by"`
+}
+
+// Job Executions
+func (q *Queries) InsertExecution(ctx context.Context, arg InsertExecutionParams) (JobExecution, error) {
+	row := q.db.QueryRowContext(ctx, insertExecution,
+		arg.ID,
+		arg.JobID,
+		arg.ExecutionNumber,
+		arg.Status,
+		arg.TriggeredBy,
+	)
+	var i JobExecution
+	err := row.Scan(
+		&i.ID,
+		&i.JobID,
+		&i.ExecutionNumber,
+		&i.Status,
+		&i.StartedAt,
+		&i.CompletedAt,
+		&i.ExitCode,
+		&i.OutputLog,
+		&i.ErrorMessage,
+		&i.TriggeredBy,
+	)
+	return i, err
+}
+
+const insertJob = `-- name: InsertJob :one
+
+INSERT INTO background_jobs (id, plan_id, name, description, agent_provider, agent_config, status, created_at, updated_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id, plan_id, name, description, agent_provider, agent_config, status, created_at, updated_at, last_run_at
+`
+
+type InsertJobParams struct {
+	ID            string         `json:"id"`
+	PlanID        int64          `json:"plan_id"`
+	Name          string         `json:"name"`
+	Description   sql.NullString `json:"description"`
+	AgentProvider string         `json:"agent_provider"`
+	AgentConfig   string         `json:"agent_config"`
+	Status        string         `json:"status"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+}
+
+// Background Jobs
+func (q *Queries) InsertJob(ctx context.Context, arg InsertJobParams) (BackgroundJob, error) {
+	row := q.db.QueryRowContext(ctx, insertJob,
+		arg.ID,
+		arg.PlanID,
+		arg.Name,
+		arg.Description,
+		arg.AgentProvider,
+		arg.AgentConfig,
+		arg.Status,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var i BackgroundJob
+	err := row.Scan(
+		&i.ID,
+		&i.PlanID,
+		&i.Name,
+		&i.Description,
+		&i.AgentProvider,
+		&i.AgentConfig,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastRunAt,
+	)
+	return i, err
+}
+
 const insertPlan = `-- name: InsertPlan :exec
 INSERT INTO plans (file_name, file_path, title, content, created_at, modified_at, indexed_at, file_size, word_count)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -495,6 +695,39 @@ func (q *Queries) InsertPlanVersion(ctx context.Context, arg InsertPlanVersionPa
 		arg.CreatedAt,
 	)
 	return err
+}
+
+const insertScheduledJob = `-- name: InsertScheduledJob :one
+
+INSERT INTO scheduled_jobs (id, job_id, scheduled_at, created_at)
+VALUES (?, ?, ?, ?)
+RETURNING id, job_id, scheduled_at, cancelled, created_at
+`
+
+type InsertScheduledJobParams struct {
+	ID          string    `json:"id"`
+	JobID       string    `json:"job_id"`
+	ScheduledAt time.Time `json:"scheduled_at"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// Scheduled Jobs
+func (q *Queries) InsertScheduledJob(ctx context.Context, arg InsertScheduledJobParams) (ScheduledJob, error) {
+	row := q.db.QueryRowContext(ctx, insertScheduledJob,
+		arg.ID,
+		arg.JobID,
+		arg.ScheduledAt,
+		arg.CreatedAt,
+	)
+	var i ScheduledJob
+	err := row.Scan(
+		&i.ID,
+		&i.JobID,
+		&i.ScheduledAt,
+		&i.Cancelled,
+		&i.CreatedAt,
+	)
+	return i, err
 }
 
 const insertTag = `-- name: InsertTag :one
@@ -802,6 +1035,384 @@ func (q *Queries) ListConnectors(ctx context.Context) ([]Connector, error) {
 	return items, nil
 }
 
+const listDueScheduledJobs = `-- name: ListDueScheduledJobs :many
+SELECT id, job_id, scheduled_at, cancelled, created_at FROM scheduled_jobs
+WHERE scheduled_at <= ? AND cancelled = 0
+`
+
+func (q *Queries) ListDueScheduledJobs(ctx context.Context, scheduledAt time.Time) ([]ScheduledJob, error) {
+	rows, err := q.db.QueryContext(ctx, listDueScheduledJobs, scheduledAt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ScheduledJob{}
+	for rows.Next() {
+		var i ScheduledJob
+		if err := rows.Scan(
+			&i.ID,
+			&i.JobID,
+			&i.ScheduledAt,
+			&i.Cancelled,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExecutionsByJobID = `-- name: ListExecutionsByJobID :many
+SELECT id, job_id, execution_number, status, started_at, completed_at, exit_code, output_log, error_message, triggered_by FROM job_executions
+WHERE job_id = ?
+ORDER BY execution_number DESC
+LIMIT ? OFFSET ?
+`
+
+type ListExecutionsByJobIDParams struct {
+	JobID  string `json:"job_id"`
+	Limit  int64  `json:"limit"`
+	Offset int64  `json:"offset"`
+}
+
+func (q *Queries) ListExecutionsByJobID(ctx context.Context, arg ListExecutionsByJobIDParams) ([]JobExecution, error) {
+	rows, err := q.db.QueryContext(ctx, listExecutionsByJobID, arg.JobID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []JobExecution{}
+	for rows.Next() {
+		var i JobExecution
+		if err := rows.Scan(
+			&i.ID,
+			&i.JobID,
+			&i.ExecutionNumber,
+			&i.Status,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.ExitCode,
+			&i.OutputLog,
+			&i.ErrorMessage,
+			&i.TriggeredBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listExecutionsWithJobs = `-- name: ListExecutionsWithJobs :many
+SELECT
+    e.id AS execution_id,
+    e.job_id,
+    e.execution_number,
+    e.status AS execution_status,
+    e.started_at,
+    e.completed_at,
+    e.exit_code,
+    e.output_log,
+    e.error_message,
+    e.triggered_by,
+    j.name AS job_name,
+    p.file_name AS plan_file_name
+FROM job_executions e
+JOIN background_jobs j ON e.job_id = j.id
+JOIN plans p ON j.plan_id = p.id
+ORDER BY e.started_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListExecutionsWithJobsParams struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+type ListExecutionsWithJobsRow struct {
+	ExecutionID     string         `json:"execution_id"`
+	JobID           string         `json:"job_id"`
+	ExecutionNumber int64          `json:"execution_number"`
+	ExecutionStatus string         `json:"execution_status"`
+	StartedAt       sql.NullTime   `json:"started_at"`
+	CompletedAt     sql.NullTime   `json:"completed_at"`
+	ExitCode        sql.NullInt64  `json:"exit_code"`
+	OutputLog       sql.NullString `json:"output_log"`
+	ErrorMessage    sql.NullString `json:"error_message"`
+	TriggeredBy     string         `json:"triggered_by"`
+	JobName         string         `json:"job_name"`
+	PlanFileName    string         `json:"plan_file_name"`
+}
+
+func (q *Queries) ListExecutionsWithJobs(ctx context.Context, arg ListExecutionsWithJobsParams) ([]ListExecutionsWithJobsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listExecutionsWithJobs, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListExecutionsWithJobsRow{}
+	for rows.Next() {
+		var i ListExecutionsWithJobsRow
+		if err := rows.Scan(
+			&i.ExecutionID,
+			&i.JobID,
+			&i.ExecutionNumber,
+			&i.ExecutionStatus,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.ExitCode,
+			&i.OutputLog,
+			&i.ErrorMessage,
+			&i.TriggeredBy,
+			&i.JobName,
+			&i.PlanFileName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listJobs = `-- name: ListJobs :many
+SELECT id, plan_id, name, description, agent_provider, agent_config, status, created_at, updated_at, last_run_at FROM background_jobs
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListJobsParams struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+func (q *Queries) ListJobs(ctx context.Context, arg ListJobsParams) ([]BackgroundJob, error) {
+	rows, err := q.db.QueryContext(ctx, listJobs, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BackgroundJob{}
+	for rows.Next() {
+		var i BackgroundJob
+		if err := rows.Scan(
+			&i.ID,
+			&i.PlanID,
+			&i.Name,
+			&i.Description,
+			&i.AgentProvider,
+			&i.AgentConfig,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastRunAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listJobsByPlanID = `-- name: ListJobsByPlanID :many
+SELECT id, plan_id, name, description, agent_provider, agent_config, status, created_at, updated_at, last_run_at FROM background_jobs
+WHERE plan_id = ?
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListJobsByPlanIDParams struct {
+	PlanID int64 `json:"plan_id"`
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+func (q *Queries) ListJobsByPlanID(ctx context.Context, arg ListJobsByPlanIDParams) ([]BackgroundJob, error) {
+	rows, err := q.db.QueryContext(ctx, listJobsByPlanID, arg.PlanID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BackgroundJob{}
+	for rows.Next() {
+		var i BackgroundJob
+		if err := rows.Scan(
+			&i.ID,
+			&i.PlanID,
+			&i.Name,
+			&i.Description,
+			&i.AgentProvider,
+			&i.AgentConfig,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastRunAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listJobsByStatus = `-- name: ListJobsByStatus :many
+SELECT id, plan_id, name, description, agent_provider, agent_config, status, created_at, updated_at, last_run_at FROM background_jobs
+WHERE status = ?
+ORDER BY created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListJobsByStatusParams struct {
+	Status string `json:"status"`
+	Limit  int64  `json:"limit"`
+	Offset int64  `json:"offset"`
+}
+
+func (q *Queries) ListJobsByStatus(ctx context.Context, arg ListJobsByStatusParams) ([]BackgroundJob, error) {
+	rows, err := q.db.QueryContext(ctx, listJobsByStatus, arg.Status, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BackgroundJob{}
+	for rows.Next() {
+		var i BackgroundJob
+		if err := rows.Scan(
+			&i.ID,
+			&i.PlanID,
+			&i.Name,
+			&i.Description,
+			&i.AgentProvider,
+			&i.AgentConfig,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastRunAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listJobsWithPlans = `-- name: ListJobsWithPlans :many
+
+SELECT
+    j.id AS job_id,
+    j.plan_id,
+    j.name AS job_name,
+    j.description AS job_description,
+    j.agent_provider,
+    j.agent_config,
+    j.status,
+    j.created_at AS job_created_at,
+    j.updated_at AS job_updated_at,
+    j.last_run_at,
+    p.file_name AS plan_file_name,
+    p.file_path AS plan_file_path,
+    p.title AS plan_title
+FROM background_jobs j
+JOIN plans p ON j.plan_id = p.id
+ORDER BY j.created_at DESC
+LIMIT ? OFFSET ?
+`
+
+type ListJobsWithPlansParams struct {
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
+}
+
+type ListJobsWithPlansRow struct {
+	JobID          string         `json:"job_id"`
+	PlanID         int64          `json:"plan_id"`
+	JobName        string         `json:"job_name"`
+	JobDescription sql.NullString `json:"job_description"`
+	AgentProvider  string         `json:"agent_provider"`
+	AgentConfig    string         `json:"agent_config"`
+	Status         string         `json:"status"`
+	JobCreatedAt   time.Time      `json:"job_created_at"`
+	JobUpdatedAt   time.Time      `json:"job_updated_at"`
+	LastRunAt      sql.NullTime   `json:"last_run_at"`
+	PlanFileName   string         `json:"plan_file_name"`
+	PlanFilePath   string         `json:"plan_file_path"`
+	PlanTitle      string         `json:"plan_title"`
+}
+
+// Job queries with joins
+func (q *Queries) ListJobsWithPlans(ctx context.Context, arg ListJobsWithPlansParams) ([]ListJobsWithPlansRow, error) {
+	rows, err := q.db.QueryContext(ctx, listJobsWithPlans, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListJobsWithPlansRow{}
+	for rows.Next() {
+		var i ListJobsWithPlansRow
+		if err := rows.Scan(
+			&i.JobID,
+			&i.PlanID,
+			&i.JobName,
+			&i.JobDescription,
+			&i.AgentProvider,
+			&i.AgentConfig,
+			&i.Status,
+			&i.JobCreatedAt,
+			&i.JobUpdatedAt,
+			&i.LastRunAt,
+			&i.PlanFileName,
+			&i.PlanFilePath,
+			&i.PlanTitle,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const removeAllPlansFromTag = `-- name: RemoveAllPlansFromTag :exec
 DELETE FROM plan_tags WHERE tag_id = ?
 `
@@ -1072,6 +1683,93 @@ UPDATE connectors SET enabled = 1, updated_at = CURRENT_TIMESTAMP WHERE name = ?
 
 func (q *Queries) SetConnectorEnabled(ctx context.Context, name string) error {
 	_, err := q.db.ExecContext(ctx, setConnectorEnabled, name)
+	return err
+}
+
+const updateExecution = `-- name: UpdateExecution :exec
+UPDATE job_executions
+SET status = ?,
+    started_at = COALESCE(?, started_at),
+    completed_at = COALESCE(?, completed_at),
+    exit_code = COALESCE(?, exit_code),
+    output_log = COALESCE(?, output_log),
+    error_message = COALESCE(?, error_message)
+WHERE id = ?
+`
+
+type UpdateExecutionParams struct {
+	Status       string         `json:"status"`
+	StartedAt    sql.NullTime   `json:"started_at"`
+	CompletedAt  sql.NullTime   `json:"completed_at"`
+	ExitCode     sql.NullInt64  `json:"exit_code"`
+	OutputLog    sql.NullString `json:"output_log"`
+	ErrorMessage sql.NullString `json:"error_message"`
+	ID           string         `json:"id"`
+}
+
+func (q *Queries) UpdateExecution(ctx context.Context, arg UpdateExecutionParams) error {
+	_, err := q.db.ExecContext(ctx, updateExecution,
+		arg.Status,
+		arg.StartedAt,
+		arg.CompletedAt,
+		arg.ExitCode,
+		arg.OutputLog,
+		arg.ErrorMessage,
+		arg.ID,
+	)
+	return err
+}
+
+const updateJob = `-- name: UpdateJob :exec
+UPDATE background_jobs
+SET name = COALESCE(?, name),
+    description = COALESCE(?, description),
+    agent_config = COALESCE(?, agent_config),
+    updated_at = ?
+WHERE id = ?
+`
+
+type UpdateJobParams struct {
+	Name        string         `json:"name"`
+	Description sql.NullString `json:"description"`
+	AgentConfig string         `json:"agent_config"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	ID          string         `json:"id"`
+}
+
+func (q *Queries) UpdateJob(ctx context.Context, arg UpdateJobParams) error {
+	_, err := q.db.ExecContext(ctx, updateJob,
+		arg.Name,
+		arg.Description,
+		arg.AgentConfig,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
+const updateJobStatus = `-- name: UpdateJobStatus :exec
+UPDATE background_jobs
+SET status = ?,
+    last_run_at = ?,
+    updated_at = ?
+WHERE id = ?
+`
+
+type UpdateJobStatusParams struct {
+	Status    string       `json:"status"`
+	LastRunAt sql.NullTime `json:"last_run_at"`
+	UpdatedAt time.Time    `json:"updated_at"`
+	ID        string       `json:"id"`
+}
+
+func (q *Queries) UpdateJobStatus(ctx context.Context, arg UpdateJobStatusParams) error {
+	_, err := q.db.ExecContext(ctx, updateJobStatus,
+		arg.Status,
+		arg.LastRunAt,
+		arg.UpdatedAt,
+		arg.ID,
+	)
 	return err
 }
 

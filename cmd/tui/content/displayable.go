@@ -127,6 +127,48 @@ func (v *VersionContent) GetIdentifier() string {
 	return fmt.Sprintf("%s@v%d", v.FilePath, v.VersionNumber)
 }
 
+// TextContent is a simple text content wrapper for displaying plain text.
+type TextContent struct {
+	title           string
+	content         string
+	darkModeEnabled bool
+	width           int
+}
+
+// NewTextContent creates a new TextContent.
+func NewTextContent(title, content string, darkModeEnabled bool, width int) *TextContent {
+	return &TextContent{
+		title:           title,
+		content:         content,
+		darkModeEnabled: darkModeEnabled,
+		width:           width,
+	}
+}
+
+func (t *TextContent) GetTitle() string {
+	return t.title
+}
+
+func (t *TextContent) GetContent() string {
+	return t.content
+}
+
+func (t *TextContent) GetRenderedHTML() string {
+	return renderMarkdown(t.content, t.darkModeEnabled, t.width)
+}
+
+func (t *TextContent) GetReadingTime() int {
+	return 0
+}
+
+func (t *TextContent) GetMetadata() Metadata {
+	return Metadata{}
+}
+
+func (t *TextContent) GetIdentifier() string {
+	return t.title
+}
+
 func renderMarkdown(content string, darkModeEnabled bool, width int) string {
 	style := GlamourDarkMode
 	if darkModeEnabled {

@@ -50,6 +50,12 @@ Claude Plan Viewer provides a centralized solution for managing Claude Code plan
 - **Automatic Migrations**: Database schema managed automatically
 
 ### Additional Features
+- **Background Job Execution**: Execute plans automatically using Claude Code CLI
+  - Schedule plan execution for future times (one-time scheduling)
+  - Trigger manual execution from the TUI
+  - Track execution history with detailed logs
+  - Concurrent execution with configurable worker pool
+  - Real-time status updates and cancellation support
 - **Connector System**: Extensible notification system (includes Telegram integration)
 - **Markdown Rendering**: Beautiful plan display with code syntax highlighting
 - **Pagination**: Efficient browsing of large plan collections
@@ -138,6 +144,25 @@ viewer_dir = "/Users/yourname/.claude-viewer"
 # Source directory containing Claude plan files
 plans_dir = "/Users/yourname/.claude/plans"
 ```
+
+#### Background Jobs Configuration
+
+```toml
+[background_jobs]
+# Enable background job execution (default: true)
+enabled = true
+
+# Maximum number of concurrent job executions (default: 3)
+max_concurrent = 3
+
+# Default timeout for job execution in minutes (default: 30)
+default_timeout_minutes = 30
+
+# How often to check for scheduled jobs in seconds (default: 30)
+polling_interval_seconds = 30
+```
+
+**Note**: Background jobs allow you to execute plans automatically using Claude Code CLI. Jobs can be triggered manually from the TUI or scheduled for future execution.
 
 ### Environment Variables
 
@@ -235,8 +260,15 @@ DEBUG=1 ./bin/plan-viewer tui
 - Settings configuration
 - Connector management (Telegram notifications)
 - Watch mode with automatic sync
+- Background job execution and management
+  - Trigger plan execution manually
+  - Schedule jobs for future execution
+  - View execution history and logs
+  - Cancel running or scheduled jobs
 
-**Keyboard Shortcuts:** Press `?` in the TUI for help.
+**Keyboard Shortcuts:**
+- Press `?` in the TUI for help
+- Press `Ctrl+J` to access the Jobs screen
 
 ### MCP Server
 
