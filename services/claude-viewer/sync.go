@@ -82,7 +82,7 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 
 	viewerEntries, err := os.ReadDir(s.viewerDir)
 	if err != nil {
-		return 0, fmt.Errorf("failed to read plans directory: %w", err)
+		return 0, fmt.Errorf("failed to read viewer directory: %w", err)
 	}
 
 	viewerEntriesFiles := map[string]struct{}{}
