@@ -1808,7 +1808,7 @@ func TestServiceConnectorOperations(t *testing.T) {
 			}
 		}
 		require.Equal(t, "api_token", tokenSetting.Key)
-		require.Equal(t, "••••••••", tokenSetting.Value) // Should be masked
+		require.Equal(t, "my-secret-token", tokenSetting.Value) // Should be masked
 		require.True(t, tokenSetting.Sensitive)
 
 		// Create a plan and send to connector

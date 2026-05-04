@@ -296,28 +296,36 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
 	// Create queries with transaction
 	qtx := r.q.WithTx(tx)
 
-	// First, get the plan to obtain its ID
 	plan, err := qtx.GetPlanByFileName(ctx, fileName)
 	if err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
 		return fmt.Errorf("failed to get plan: %w", err)
 	}
 
-	// Delete all plan_tags associations for this plan
 	if err := qtx.RemoveAllTagsFromPlan(ctx, int64(plan.ID)); err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
 		return fmt.Errorf("failed to delete plan_tags associations: %w", err)
 	}
 
-	// Then delete the plan itself
 	if err := qtx.DeletePlan(ctx, fileName); err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
 		return fmt.Errorf("failed to delete plan: %w", err)
 	}
 
-	// Commit transaction
 	err = tx.Commit(ctx)
 	if err != nil {
-		rollBarErr := tx.Rollback(ctx)
-		if rollBarErr != nil {
-			return fmt.Errorf("failed to rollback: %w orginial error %w", rollBarErr, err)
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
 		}
 	}
 	return err
@@ -458,7 +466,59 @@ func (r *Repository) matchesTagFilter(planTags []dto.Tag, filterTags []string, m
 	return false
 }
 
-// Plan version operations
+func (r *Repository) RestorePlanVersion(ctx context.Context, params dto.RestorePlanVersionParams) error {
+	if r.pool == nil {
+		return errors.New("transaction support not available")
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+
+	qtx := r.q.WithTx(tx)
+
+	if err := qtx.UpdatePlan(ctx, UpdatePlanParams{
+		FileName:   params.Plan.FileName,
+		Title:      params.Plan.Title,
+		Content:    params.Plan.Content,
+		ModifiedAt: timeToTimestamptz(params.Plan.ModifiedAt),
+		IndexedAt:  timeToTimestamptz(params.Plan.IndexedAt),
+		FileSize:   params.Plan.FileSize,
+		WordCount:  params.Plan.WordCount,
+	}); err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
+
+		return fmt.Errorf("failed to update plan: %w", err)
+	}
+
+	if err := qtx.InsertPlanVersion(ctx, InsertPlanVersionParams{
+		PlanID:        params.Version.PlanID,
+		VersionNumber: params.Version.VersionNumber,
+		FilePath:      params.Version.FilePath,
+		Content:       params.Version.Content,
+		WordCount:     params.Version.WordCount,
+		CreatedAt:     timeToTimestamptz(params.Version.CreatedAt),
+	}); err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
+		return fmt.Errorf("failed to insert plan version: %w", err)
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
+	}
+	return err
+}
 
 func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPlanVersionParams) error {
 	return r.q.InsertPlanVersion(ctx, InsertPlanVersionParams{
@@ -758,22 +818,27 @@ func (r *Repository) DeleteTag(ctx context.Context, id int64) error {
 	// Create queries with transaction
 	qtx := r.q.WithTx(tx)
 
-	// First, delete all plan_tags associations for this tag
 	if err := qtx.RemoveAllPlansFromTag(ctx, id); err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
 		return fmt.Errorf("failed to delete plan_tags associations: %w", err)
 	}
 
-	// Then delete the tag itself
 	if err := qtx.DeleteTag(ctx, int32(id)); err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
 		return fmt.Errorf("failed to delete tag: %w", err)
 	}
 
-	// Commit transaction
 	err = tx.Commit(ctx)
 	if err != nil {
-		rollBarErr := tx.Rollback(ctx)
-		if rollBarErr != nil {
-			return fmt.Errorf("failed to rollback: %w orginial error %w", rollBarErr, err)
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
 		}
 	}
 	return err
@@ -825,6 +890,10 @@ func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int
 	qtx := r.q.WithTx(tx)
 
 	if err := qtx.RemoveAllTagsFromPlan(ctx, planID); err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
 		return err
 	}
 
@@ -834,15 +903,19 @@ func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int
 			TagID:      tagID,
 			AssignedAt: pgtype.Timestamptz{Time: assignedAt, Valid: true},
 		}); err != nil {
+			rollbackErr := tx.Rollback(ctx)
+			if rollbackErr != nil {
+				return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+			}
 			return err
 		}
 	}
 
 	err = tx.Commit(ctx)
 	if err != nil {
-		rollBarErr := tx.Rollback(ctx)
-		if rollBarErr != nil {
-			return fmt.Errorf("failed to rollback: %w orginial error %w", rollBarErr, err)
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
 		}
 	}
 

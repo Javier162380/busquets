@@ -124,3 +124,9 @@ type TagFilterParams struct {
 	TagNames []string
 	MatchAll bool // AND vs OR logic
 }
+
+// RestorePlanVersionParams holds the two DB writes that must be atomic during a restore.
+type RestorePlanVersionParams struct {
+	Plan    UpdatePlanParams
+	Version InsertPlanVersionParams
+}

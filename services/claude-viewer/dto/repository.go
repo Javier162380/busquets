@@ -22,6 +22,7 @@ type Repository interface {
 
 	// Plan version operations
 	InsertPlanVersion(ctx context.Context, params InsertPlanVersionParams) error
+	RestorePlanVersion(ctx context.Context, params RestorePlanVersionParams) error
 	GetPlanVersionHistory(ctx context.Context, params VersionHistoryParams) ([]PlanVersion, error)
 	GetPlanVersionByNumber(ctx context.Context, planID, versionNumber int64) (PlanVersion, error)
 	GetLatestVersionNumber(ctx context.Context, planID int64) (int64, error)

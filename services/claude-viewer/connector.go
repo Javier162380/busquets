@@ -114,7 +114,10 @@ func (s *Service) GetConnectorSettings(ctx context.Context, connectorName string
 	// Build result with current values
 	result := make([]ConnectorSettingInfo, len(definitions))
 	for i, def := range definitions {
-		value, _, _ := s.connectorManager.GetConnectorSetting(ctx, connectorName, def.Key)
+		value, _, conErr := s.connectorManager.GetConnectorSetting(ctx, connectorName, def.Key)
+		if conErr != nil {
+			return nil, conErr
+		}
 
 		result[i] = ConnectorSettingInfo{
 			Key:         def.Key,
