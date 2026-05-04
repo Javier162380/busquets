@@ -5,12 +5,17 @@ import (
 	"strings"
 )
 
+var (
+	hashtagRegex    = regexp.MustCompile(`#(\w+)`)
+	tagsLineRegex   = regexp.MustCompile(`(?i)^tags?:\s*(.+)$`)
+	validCharsRegex = regexp.MustCompile(`[^a-z0-9_-]+`)
+)
+
 // ExtractTagsFromContent parses plan content for inline tags.
 func ExtractTagsFromContent(content string) []string {
 	tags := make(map[string]struct{})
 
 	// Extract hashtags (#tag)
-	hashtagRegex := regexp.MustCompile(`#(\w+)`)
 	matches := hashtagRegex.FindAllStringSubmatch(content, -1)
 	for _, match := range matches {
 		if len(match) > 1 {
@@ -19,7 +24,6 @@ func ExtractTagsFromContent(content string) []string {
 	}
 
 	// Extract from "Tags:" or "tags:" metadata line.
-	tagsLineRegex := regexp.MustCompile(`(?i)^tags?:\s*(.+)$`)
 	lines := strings.Split(content, "\n")
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -49,8 +53,6 @@ func ExtractTagsFromContent(content string) []string {
 func NormalizeTags(tags []string) []string {
 	seen := make(map[string]struct{})
 	result := make([]string, 0, len(tags))
-
-	validCharsRegex := regexp.MustCompile(`[^a-z0-9_-]+`)
 
 	for _, tag := range tags {
 		normalized := strings.ToLower(strings.TrimSpace(tag))

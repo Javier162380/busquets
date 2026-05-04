@@ -96,7 +96,6 @@ func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, of
 	}
 
 	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
-	readingTime := s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
 
 	planVersionsDetail := make([]PlanVersionDetail, len(versions))
 	for i, version := range versions {
@@ -109,7 +108,7 @@ func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, of
 			WordCount:     version.WordCount,
 			CreatedAt:     version.CreatedAt,
 		}
-		renderedHTML, err := s.RenderMarkdown(plan.Content)
+		renderedHTML, err := s.RenderMarkdown(version.Content)
 		if err != nil {
 			return nil, err
 		}
@@ -117,7 +116,7 @@ func (s *Service) GetPlanVersionHistory(ctx context.Context, planName string, of
 		planVersionsDetail[i] = PlanVersionDetail{
 			PlanVersion:  planVersion,
 			RenderedHTML: renderedHTML,
-			ReadingTime:  readingTime,
+			ReadingTime:  s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM),
 			Tags:         tags,
 		}
 	}
@@ -143,13 +142,13 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName string, versionNu
 		return nil, fmt.Errorf("failed to get plan tags: %w", err)
 	}
 
-	renderedHTML, err := s.RenderMarkdown(plan.Content)
+	renderedHTML, err := s.RenderMarkdown(version.Content)
 	if err != nil {
 		return nil, err
 	}
 
 	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
-	readingTime := s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
+	readingTime := s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM)
 
 	planVersion := PlanVersion{
 		ID:            version.ID,
@@ -295,7 +294,6 @@ func (s *Service) SearchVersions(ctx context.Context, planName, query string) ([
 	}
 
 	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
-	readingTime := s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
 
 	planVersionsDetail := make([]PlanVersionDetail, len(versions))
 	for i, version := range versions {
@@ -308,7 +306,7 @@ func (s *Service) SearchVersions(ctx context.Context, planName, query string) ([
 			WordCount:     version.WordCount,
 			CreatedAt:     version.CreatedAt,
 		}
-		renderedHTML, err := s.RenderMarkdown(plan.Content)
+		renderedHTML, err := s.RenderMarkdown(version.Content)
 		if err != nil {
 			return nil, err
 		}
@@ -316,7 +314,7 @@ func (s *Service) SearchVersions(ctx context.Context, planName, query string) ([
 		planVersionsDetail[i] = PlanVersionDetail{
 			PlanVersion:  planVersion,
 			RenderedHTML: renderedHTML,
-			ReadingTime:  readingTime,
+			ReadingTime:  s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM),
 			Tags:         tags,
 		}
 	}

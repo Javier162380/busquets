@@ -57,12 +57,12 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 		}, nil
 	}
 
-	if err := os.WriteFile(viewerPath, []byte(req.NewContent), 0o600); err != nil {
-		return nil, fmt.Errorf("failed to write to viewer directory: %w", err)
-	}
-
 	if err := os.WriteFile(sourcePath, []byte(req.NewContent), 0o600); err != nil {
 		return nil, fmt.Errorf("failed to write to source directory: %w", err)
+	}
+
+	if err := os.WriteFile(viewerPath, []byte(req.NewContent), 0o600); err != nil {
+		return nil, fmt.Errorf("failed to write to viewer directory: %w", err)
 	}
 
 	title := extractTitle(req.NewContent)

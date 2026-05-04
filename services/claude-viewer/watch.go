@@ -106,18 +106,12 @@ func (wm *WatchManager) watchLoop(ctx context.Context) {
 			}
 
 			count, err := wm.service.SyncPlans(ctx)
-			maxRetries := 3
-		retryLoop:
-			for i := 0; i < maxRetries; i++ {
-				select {
-				case wm.resultChan <- WatchResult{Count: count, Error: err}:
-					break retryLoop
-				case <-ctx.Done():
-					return
-				default:
-					// Channel full, skip this result
-					time.Sleep(50 * time.Millisecond)
-				}
+			select {
+			case wm.resultChan <- WatchResult{Count: count, Error: err}:
+			case <-ctx.Done():
+				return
+			default:
+				// Channel full, drop this result
 			}
 		}
 	}
