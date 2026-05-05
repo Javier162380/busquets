@@ -8,7 +8,7 @@ Go application that syncs Claude AI plans from `~/.claude/plans/` to a searchabl
 
 **Core Features**: Plan sync/search, version tracking, multi-database support (SQLite/PostgreSQL), connector system, markdown rendering, MCP integration
 
-**Main Commands**: `sync`, `tui`, `serve`, `mcp`, `migrate`
+**Main Commands**: `sync`, `dump`, `tui`, `serve`, `mcp`, `migrate`
 
 ## Essential Workflow
 

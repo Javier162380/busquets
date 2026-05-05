@@ -11,6 +11,7 @@ A powerful Go application for indexing, searching, and viewing [Claude Code](htt
 - [Configuration](#configuration)
 - [Usage](#usage)
   - [Sync Plans](#sync-plans)
+  - [Dump Plans](#dump-plans)
   - [Web Server](#web-server)
   - [Terminal UI (TUI)](#terminal-ui-tui)
   - [MCP Server](#mcp-server)
@@ -34,6 +35,7 @@ Claude Plan Viewer provides a centralized solution for managing Claude Code plan
 ### Core Functionality
 - **Automatic Synchronization**: Sync plans from `~/.claude/plans/` to `~/.claude-viewer/`
 - **Bidirectional Sync**: `rsync` command for syncing changes back to source
+- **Database Dump**: `dump` command to restore plans from the database back to `~/.claude/plans/`
 - **Full-Text Search**: Fast content search with SQLite FTS5 or PostgreSQL text search
 - **Version Control**: Track multiple versions of plans with diff viewing
 - **File Watching**: Automatic background synchronization at configurable intervals
@@ -187,6 +189,21 @@ make rsync
 ```
 ✓ Synced 42 plans from /Users/you/.claude/plans to /Users/you/.claude-viewer (backend: sqlite)
 ```
+
+### Dump Plans
+
+Write all plans stored in the database back to `~/.claude/plans/`. Useful when the source directory has been lost or you've switched databases and want to restore plan files to disk:
+
+```bash
+./bin/plan-viewer dump
+```
+
+**Output:**
+```
+✓ Dumped 42 plans from database to /Users/you/.claude/plans (backend: sqlite)
+```
+
+In the TUI, press `d` from the plans list to trigger a dump.
 
 ### Web Server
 
