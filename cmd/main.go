@@ -46,6 +46,10 @@ func main() {
 		if err := runRSync(cfg); err != nil {
 			log.Fatalf("RSync failed: %v", err)
 		}
+	case "dump":
+		if err := runDump(cfg); err != nil {
+			log.Fatalf("Dump failed: %v", err)
+		}
 	case "serve":
 		if err := runServe(cfg); err != nil {
 			log.Fatalf("Server failed: %v", err)
@@ -160,6 +164,30 @@ func runRSync(cfg *config.Config) error {
 
 	fmt.Printf("✓ RSynced %d plans from %s to %s (backend: %s)\n",
 		count, cfg.Paths.ViewerDir, cfg.Paths.PlansDir, cfg.Database.Backend)
+	return nil
+}
+
+func runDump(cfg *config.Config) error {
+	ctx := context.Background()
+
+	repo, cleanup, err := initRepository(ctx, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to initialize repository: %w", err)
+	}
+	defer cleanup()
+
+	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDir, true)
+	if err != nil {
+		return fmt.Errorf("failed to initialize service: %w", err)
+	}
+
+	count, err := service.DumpPlans(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to dump plans: %w", err)
+	}
+
+	fmt.Printf("✓ Dumped %d plans from database to %s (backend: %s)\n",
+		count, cfg.Paths.PlansDir, cfg.Database.Backend)
 	return nil
 }
 
@@ -295,6 +323,7 @@ func printUsage() {
 
 Commands:
   sync                Copy and index plans from source directory
+  dump                Write all plans from the database back to the source plans directory
   serve [-addr :port] Start web server (default: :8081)
   tui                 Start terminal user interface
   mcp                 Start MCP server for Claude integration
