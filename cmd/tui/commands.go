@@ -134,6 +134,20 @@ func RsyncPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 	}
 }
 
+// DumpPlansCmd writes all plans from the database back to the source plans directory.
+func DumpPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+
+		count, err := svc.DumpPlans(ctx)
+		if err != nil {
+			return screens.DumpResultMsg{Error: err}
+		}
+		return screens.DumpResultMsg{Count: count}
+	}
+}
+
 // SearchVersionsCmd searches a plan over it's different versions.
 func SearchVersionsCmd(ctx context.Context, svc UnifiedService, currentPlanName, query string) tea.Cmd {
 	return func() tea.Msg {

@@ -257,6 +257,9 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 	case "r":
 		return s, s.rsyncPlans()
 
+	case "d":
+		return s, s.dumpPlans()
+
 	case "S":
 		return s, func() tea.Msg {
 			return OpenSettingsMsg{}
@@ -702,7 +705,7 @@ func (s *PlansScreen) ShortHelp() string {
 			}
 			searchHelp = fmt.Sprintf("/: search | T: tags | c: clear [%s]", activeFilters)
 		}
-		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | v: fullscreen | e: edit | s: sync | S: settings | r: rsync | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
+		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | v: fullscreen | e: edit | s: sync | S: settings | r: rsync | d: dump | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
 	case types.FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeGlamour {
@@ -819,6 +822,12 @@ func (s *PlansScreen) rsyncPlans() tea.Cmd {
 	}
 }
 
+func (s *PlansScreen) dumpPlans() tea.Cmd {
+	return func() tea.Msg {
+		return DumpPlansMsg{}
+	}
+}
+
 // Message types for plans screen.
 
 // PlansLoadedMsg is sent when plans are loaded.
@@ -849,6 +858,9 @@ type SyncPlansMsg struct{}
 // RSyncPlansMsg request resync plans from the viewer directory back into the LLM directory.
 type RSyncPlansMsg struct{}
 
+// DumpPlansMsg requests dumping all plans from the database to the source plans directory.
+type DumpPlansMsg struct{}
+
 // SaveResultMsg is sent when save completes.
 type SaveResultMsg struct {
 	Result *claudeviewer.UpdatePlanResult
@@ -863,6 +875,12 @@ type SyncResultMsg struct {
 
 // RSyncResultMsg is sent when rsync completes.
 type RSyncResultMsg struct {
+	Count int
+	Error error
+}
+
+// DumpResultMsg is sent when dump completes.
+type DumpResultMsg struct {
 	Count int
 	Error error
 }

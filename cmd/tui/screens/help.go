@@ -50,6 +50,7 @@ PLANS LIST (Two-Panel mode):
   v              Enter fullscreen view mode
   e              Enter edit mode
   s              Sync plans from source directory
+  d              Dump all plans from database to source directory
 
 PLAN CONTENT (Two-Panel mode, right panel):
   j/k, ↑/↓       Scroll up/down

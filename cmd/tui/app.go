@@ -28,6 +28,7 @@ type UnifiedService interface {
 	RestorePlanVersion(ctx context.Context, planName string, versionNumber int64) error
 	SyncPlans(ctx context.Context) (int, error)
 	RSyncPlans(ctx context.Context) (int, error)
+	DumpPlans(ctx context.Context) (int, error)
 	RenderMarkdown(content string) (string, error)
 	GetSetting(ctx context.Context, variableName string) (claudeviewer.Setting, bool, error)
 	SetSetting(ctx context.Context, varName string, values claudeviewer.SettingValues) error
@@ -228,6 +229,19 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		a.statusBar.SetSuccess(fmt.Sprintf("Rsync succeeded: %d plans sync from remote into the local directory", msg.Count))
 		return a, LoadPlansCmd(a.ctx, a.service)
+
+	case screens.DumpResultMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError("Dump failed: " + msg.Error.Error())
+			return a, ClearStatusCmd(500 * time.Millisecond)
+		}
+		a.statusBar.SetSuccess(fmt.Sprintf("Dumped %d plans to source directory", msg.Count))
+		return a, ClearStatusCmd(500 * time.Second)
+
+	case screens.DumpPlansMsg:
+		a.statusBar.SetLoading("Dumping plans from database to source directory...")
+		return a, DumpPlansCmd(a.ctx, a.service)
+
 	case screens.ErrorMsg:
 		// Show error in App's status bar (which is rendered).
 		a.statusBar.SetError(msg.Error.Error())
