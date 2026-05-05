@@ -48,6 +48,7 @@ type UnifiedService interface {
 	GetPlanTags(ctx context.Context, fileName string) ([]claudeviewer.Tag, error)
 	SetPlanTags(ctx context.Context, fileName string, tagNames []string) error
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]claudeviewer.PlanSummary, error)
+	DeleteTag(ctx context.Context, id int64) error
 }
 
 // WatchResultMsg wraps watch sync results from service.
@@ -245,7 +246,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.ErrorMsg:
 		// Show error in App's status bar (which is rendered).
 		a.statusBar.SetError(msg.Error.Error())
-		return a, nil
+		return a, ClearStatusCmd(500 * time.Millisecond)
 
 	// Internal command messages from screens.
 	case screens.LoadPlanDetailMsg:
@@ -441,6 +442,20 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.SearchPlansWithTagsMsg:
 		return a, SearchPlansWithTagsCmd(a.ctx, a.service, msg.Query, msg.Tags, msg.MatchAll)
+
+	case components.DeleteTagMsg:
+		return a, DeleteTagsCmd(a.ctx, a.service, msg.TagID, msg.CurrentPlan)
+
+	case components.DeleteTagCmdMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError(fmt.Sprintf("Failed to delete tag %s", *msg.Error))
+		} else {
+			a.statusBar.SetSuccess("Deleted tag")
+		}
+
+		return a, tea.Batch(
+			ClearStatusCmd(500*time.Second), LoadTagsForModalCmd(a.ctx, a.service, msg.FileName),
+		)
 
 	case screens.ThemeChangedMsg:
 		// Get current dark mode setting and apply theme.

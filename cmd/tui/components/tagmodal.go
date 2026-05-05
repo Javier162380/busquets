@@ -151,6 +151,15 @@ func (m *TagModal) Update(msg tea.Msg) tea.Cmd {
 			if m.focus == TagModalFocusInput {
 				m.AddNewTag(m.input.Value())
 			}
+		case "d":
+			if m.focus == TagModalFocusTagList {
+				tagID := m.allTags[m.selectedIdx].ID
+				return func() tea.Msg {
+					return DeleteTagMsg{
+						TagID: tagID, CurrentPlan: m.planFileName,
+					}
+				}
+			}
 		}
 
 		// Update input if focused
@@ -263,4 +272,15 @@ func (m *TagModal) View() string {
 	content.WriteString(helpStyle.Render(helpText))
 
 	return modalStyle.Render(content.String())
+}
+
+// DeleteTagMsg delete tags for plans searching.
+type DeleteTagMsg struct {
+	TagID       int64
+	CurrentPlan string
+}
+
+type DeleteTagCmdMsg struct {
+	Error    *string
+	FileName string
 }
