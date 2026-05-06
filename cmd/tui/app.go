@@ -454,7 +454,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		return a, tea.Batch(
-			ClearStatusCmd(500*time.Second), LoadTagsForModalCmd(a.ctx, a.service, msg.FileName),
+			ClearStatusCmd(500*time.Millisecond), LoadTagsForModalCmd(a.ctx, a.service, msg.FileName),
 		)
 
 	case screens.ThemeChangedMsg:
