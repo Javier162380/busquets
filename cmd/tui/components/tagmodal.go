@@ -268,7 +268,7 @@ func (m *TagModal) View() string {
 
 	// Help text
 	content.WriteString("\n")
-	helpText := "[Space] Toggle | [Enter] Add | [Tab] Switch | [ESC] Save & Close"
+	helpText := "[Space] Toggle | [Enter] Add | [Tab] Switch | [d] Delete | [ESC] Save & Close"
 	content.WriteString(helpStyle.Render(helpText))
 
 	return modalStyle.Render(content.String())
@@ -283,4 +283,10 @@ type DeleteTagMsg struct {
 type DeleteTagCmdMsg struct {
 	Error    *string
 	FileName string
+}
+
+type TagsLoadedMsg struct {
+	FileName string
+	PlanTags []dto.Tag
+	AllTags  []dto.Tag
 }

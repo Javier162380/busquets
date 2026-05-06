@@ -380,7 +380,7 @@ func LoadTagsForModalCmd(ctx context.Context, svc UnifiedService, fileName strin
 			return screens.ErrorMsg{Error: err}
 		}
 
-		return screens.TagsLoadedMsg{
+		return components.TagsLoadedMsg{
 			FileName: fileName,
 			PlanTags: planTags,
 			AllTags:  allTags,

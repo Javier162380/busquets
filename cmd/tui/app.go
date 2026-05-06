@@ -237,7 +237,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, ClearStatusCmd(500 * time.Millisecond)
 		}
 		a.statusBar.SetSuccess(fmt.Sprintf("Dumped %d plans to source directory", msg.Count))
-		return a, ClearStatusCmd(500 * time.Second)
+		return a, ClearStatusCmd(500 * time.Millisecond)
 
 	case screens.DumpPlansMsg:
 		a.statusBar.SetLoading("Dumping plans from database to source directory...")
@@ -430,7 +430,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.LoadTagsForModalMsg:
 		return a, LoadTagsForModalCmd(a.ctx, a.service, msg.FileName)
 
-	case screens.TagsLoadedMsg:
+	case components.TagsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
 	case screens.SetPlanTagsMsg:

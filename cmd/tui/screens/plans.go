@@ -10,7 +10,6 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -98,6 +97,9 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 					Tags:     msg.Tags,
 				}
 			}
+		case components.TagsLoadedMsg:
+			s.tagModal.Open(msg.FileName, msg.PlanTags, msg.AllTags)
+			return s, nil
 		}
 		return s, nil
 	}
@@ -138,7 +140,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			return LoadTagsForModalMsg{FileName: msg.FileName}
 		}
 
-	case TagsLoadedMsg:
+	case components.TagsLoadedMsg:
 		// Open modal with loaded tags.
 		s.tagModal.Open(msg.FileName, msg.PlanTags, msg.AllTags)
 		s.showingModal = true
@@ -929,13 +931,6 @@ type OpenTagModalMsg struct {
 // LoadTagsForModalMsg requests loading tags for the modal.
 type LoadTagsForModalMsg struct {
 	FileName string
-}
-
-// TagsLoadedMsg contains loaded tags for the modal.
-type TagsLoadedMsg struct {
-	FileName string
-	PlanTags []dto.Tag
-	AllTags  []dto.Tag
 }
 
 // SavePlanTagsMsg requests saving tags for a plan.
