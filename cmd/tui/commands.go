@@ -135,6 +135,17 @@ func RsyncPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 	}
 }
 
+// CreateTagCmd creates a new tag via the service.
+func CreateTagCmd(ctx context.Context, svc UnifiedService, name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		_, err := svc.CreateTag(ctx, name, nil, nil)
+		return screens.CreateTagResultMsg{Error: err}
+	}
+}
+
 // DumpPlansCmd writes all plans from the database back to the source plans directory.
 func DumpPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 	return func() tea.Msg {
@@ -352,6 +363,20 @@ func WatchChannelListenerCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 				Error: result.Error,
 			}
 		}
+	}
+}
+
+// LoadAllTagsForPanelCmd loads all tags for the tag panel (including unassigned ones).
+func LoadAllTagsForPanelCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		tags, err := svc.GetAllTags(ctx)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.AllTagsForPanelLoadedMsg{Tags: tags}
 	}
 }
 

@@ -29,6 +29,7 @@ type UnifiedService interface {
 	SyncPlans(ctx context.Context) (int, error)
 	RSyncPlans(ctx context.Context) (int, error)
 	DumpPlans(ctx context.Context) (int, error)
+	CreateTag(ctx context.Context, name string, description, color *string) (claudeviewer.Tag, error)
 	RenderMarkdown(content string) (string, error)
 	GetSetting(ctx context.Context, variableName string) (claudeviewer.Setting, bool, error)
 	SetSetting(ctx context.Context, varName string, values claudeviewer.SettingValues) error
@@ -80,6 +81,7 @@ type App struct {
 
 	isDarkModeEnabled       bool
 	renderMarkDownByDefault bool
+	displayMode             string
 }
 
 // New creates a new TUI application.
@@ -114,8 +116,15 @@ func (a *App) Init() tea.Cmd {
 	}
 	a.renderMarkDownByDefault = renderMarkDownByDefault
 
+	setting, exists, _ = a.service.GetSetting(a.ctx, claudeviewer.SettingDefaultDisplayMode)
+	displayMode := claudeviewer.DisplayModePlanContent
+	if exists && setting.IsString() {
+		displayMode = setting.GetStringValue()
+	}
+	a.displayMode = displayMode
+
 	// Create initial plans screen.
-	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault)
+	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault, displayMode)
 	a.stack = append(a.stack, plansScreen)
 
 	// Start watching for watch results and load initial plans.
@@ -242,6 +251,41 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.DumpPlansMsg:
 		a.statusBar.SetLoading("Dumping plans from database to source directory...")
 		return a, DumpPlansCmd(a.ctx, a.service)
+
+	case screens.DisplayModeChangedMsg:
+		setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingDefaultDisplayMode)
+		mode := claudeviewer.DisplayModePlanContent
+		if exists && setting.IsString() {
+			mode = setting.GetStringValue()
+		}
+		a.displayMode = mode
+		for _, screen := range a.stack {
+			if s, ok := screen.(*screens.PlansScreen); ok {
+				s.SetDisplayMode(mode)
+			}
+		}
+		return a, nil
+
+	case screens.LoadAllTagsForPanelMsg:
+		return a, LoadAllTagsForPanelCmd(a.ctx, a.service)
+
+	case screens.AllTagsForPanelLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.CreateTagMsg:
+		return a, CreateTagCmd(a.ctx, a.service, msg.Name)
+
+	case screens.CreateTagResultMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError("Failed to create tag: " + msg.Error.Error())
+			return a, ClearStatusCmd(2 * time.Second)
+		}
+		a.statusBar.SetSuccess("Tag created")
+		return a, tea.Batch(
+			LoadPlansCmd(a.ctx, a.service),
+			LoadAllTagsForPanelCmd(a.ctx, a.service),
+			ClearStatusCmd(1*time.Second),
+		)
 
 	case screens.ErrorMsg:
 		// Show error in App's status bar (which is rendered).
