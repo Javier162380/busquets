@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
@@ -379,7 +380,7 @@ func LoadTagsForModalCmd(ctx context.Context, svc UnifiedService, fileName strin
 			return screens.ErrorMsg{Error: err}
 		}
 
-		return screens.TagsLoadedMsg{
+		return components.TagsLoadedMsg{
 			FileName: fileName,
 			PlanTags: planTags,
 			AllTags:  allTags,
@@ -418,5 +419,22 @@ func SearchPlansWithTagsCmd(ctx context.Context, svc UnifiedService, query strin
 			return screens.ErrorMsg{Error: err}
 		}
 		return screens.PlansLoadedMsg{Plans: plans}
+	}
+}
+
+// DeleteTagsCmd delete a tag command.
+func DeleteTagsCmd(ctx context.Context, svc UnifiedService, tagID int64, fileName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		err := svc.DeleteTag(ctx, tagID)
+		if err != nil {
+			return components.DeleteTagCmdMsg{Error: new(err.Error())}
+		}
+
+		return components.DeleteTagCmdMsg{
+			FileName: fileName,
+		}
 	}
 }
