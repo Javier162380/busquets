@@ -380,7 +380,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		}
 		return s, nil
 
-	case "down", "up", "j", "k":
+	case "down", "up":
 		cmd := s.list.Update(msg)
 		if item := s.list.SelectedItem(); item != nil {
 			if plan, ok := item.Data().(claudeviewer.PlanSummary); ok {
@@ -388,6 +388,30 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 			}
 		}
 		return s, cmd
+
+	case "j", "k":
+		now := time.Now()
+		if s.lastKey == key && now.Sub(s.lastKeyTime) < 500*time.Millisecond {
+			currentItem := s.list.SelectedIndex()
+			var nextItemIndex int
+			if key == "j" {
+				nextItemIndex = min(currentItem+10, s.list.ItemCount()-1)
+			} else {
+				nextItemIndex = max(0, currentItem-10)
+			}
+			s.list.Select(nextItemIndex)
+			cmd := s.list.Update(msg)
+			if item := s.list.SelectedItem(); item != nil {
+				if plan, ok := item.Data().(claudeviewer.PlanSummary); ok {
+					return s, tea.Batch(cmd, s.loadPlanDetail(plan.FileName))
+				}
+				return s, cmd
+			}
+			return s, cmd
+		}
+		s.lastKey = key
+		s.lastKeyTime = now
+		return s, nil
 	}
 
 	return s, s.list.Update(msg)
