@@ -825,6 +825,50 @@ func (r *Repository) ListUntaggedPlans(ctx context.Context) ([]dto.PlanSummary, 
 	return result, nil
 }
 
+func (r *Repository) ListPlansWithTags(ctx context.Context) ([]dto.PlanSummary, error) {
+	rows, err := r.q.ListAllPlansWithTagsExpanded(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// Aggregate one-row-per-(plan,tag) into one PlanSummary per plan.
+	type entry struct {
+		summary dto.PlanSummary
+		idx     int
+	}
+	seen := make(map[int64]*entry, len(rows))
+	var order []int64
+	for _, row := range rows {
+		e, exists := seen[row.ID]
+		if !exists {
+			e = &entry{
+				summary: dto.PlanSummary{
+					ID:         row.ID,
+					FileName:   row.FileName,
+					Title:      row.Title,
+					CreatedAt:  row.CreatedAt,
+					ModifiedAt: row.ModifiedAt,
+					FileSize:   row.FileSize,
+					WordCount:  row.WordCount,
+				},
+				idx: len(order),
+			}
+			seen[row.ID] = e
+			order = append(order, row.ID)
+		}
+		if row.TagID.Valid && row.TagName.Valid {
+			e.summary.Tags = append(e.summary.Tags, dto.Tag{
+				ID:   row.TagID.Int64,
+				Name: row.TagName.String,
+			})
+		}
+	}
+	result := make([]dto.PlanSummary, len(order))
+	for i, id := range order {
+		result[i] = seen[id].summary
+	}
+	return result, nil
+}
+
 func (r *Repository) ListAllTags(ctx context.Context) ([]dto.Tag, error) {
 	rows, err := r.q.ListAllTags(ctx)
 	if err != nil {

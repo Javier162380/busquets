@@ -28,8 +28,8 @@ const (
 
 // Display mode values for SettingDefaultDisplayMode.
 const (
-	DisplayModePlanContent    = "plan_content"      // two-panel: list + content (default)
-	DisplayModeTagPlanContent = "tag_plan_content"  // three-panel: tags + list + content
+	DisplayModePlanContent    = "plan_content"     //nolint:gci    // two-panel: list + content (default)
+	DisplayModeTagPlanContent = "tag_plan_content" // three-panel: tags + list + content
 )
 
 type Setting struct {

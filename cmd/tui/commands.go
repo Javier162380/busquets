@@ -395,10 +395,17 @@ func LoadAllTagsForPanelCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 			return err
 		})
 
+		var tagPlanMap map[string][]claudeviewer.PlanSummary
+		errGroup.Go(func() error {
+			var err error
+			tagPlanMap, err = svc.BuildTagPlanMap(eggCtx)
+			return err
+		})
+
 		if err := errGroup.Wait(); err != nil {
 			return screens.ErrorMsg{Error: err}
 		}
-		return screens.AllTagsForPanelLoadedMsg{Tags: tags, Counts: counts, UntaggedCount: int(untaggedCount)}
+		return screens.AllTagsForPanelLoadedMsg{Tags: tags, Counts: counts, UntaggedCount: int(untaggedCount), TagPlanMap: tagPlanMap}
 	}
 }
 

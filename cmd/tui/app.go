@@ -49,6 +49,7 @@ type UnifiedService interface {
 	GetTagPlanCounts(ctx context.Context) (map[string]int, error)
 	GetUntaggedPlanCount(ctx context.Context) (int64, error)
 	ListUntaggedPlansWithReadingTime(ctx context.Context) ([]claudeviewer.PlanSummary, error)
+	BuildTagPlanMap(ctx context.Context) (map[string][]claudeviewer.PlanSummary, error)
 	GetPlanTags(ctx context.Context, fileName string) ([]claudeviewer.Tag, error)
 	SetPlanTags(ctx context.Context, fileName string, tagNames []string) error
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]claudeviewer.PlanSummary, error)
@@ -266,6 +267,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if s, ok := screen.(*screens.PlansScreen); ok {
 				s.SetDisplayMode(mode)
 			}
+		}
+		if mode == claudeviewer.DisplayModeTagPlanContent {
+			return a, LoadAllTagsForPanelCmd(a.ctx, a.service)
 		}
 		return a, nil
 

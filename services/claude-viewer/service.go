@@ -150,6 +150,37 @@ func (s *Service) GetUntaggedPlanCount(ctx context.Context) (int64, error) {
 	return s.db.GetUntaggedPlanCount(ctx)
 }
 
+// ListPlansWithTags returns all plans with their tags reliably populated via a single JOIN query.
+// Plans with no tags have an empty Tags slice.
+func (s *Service) ListPlansWithTags(ctx context.Context) ([]PlanSummary, error) {
+	plans, err := s.db.ListPlansWithTags(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.toSummaries(ctx, plans), nil
+}
+
+// BuildTagPlanMap returns a map of tag name → plans carrying that tag.
+// Plans with no tags are stored under the empty string key "".
+func (s *Service) BuildTagPlanMap(ctx context.Context) (map[string][]PlanSummary, error) {
+	plans, err := s.ListPlansWithTags(ctx)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string][]PlanSummary)
+	for _, p := range plans {
+		if len(p.Tags) == 0 {
+			m[""] = append(m[""], p)
+		}
+		for _, t := range p.Tags {
+			if t.Name != "" {
+				m[t.Name] = append(m[t.Name], p)
+			}
+		}
+	}
+	return m, nil
+}
+
 // ListUntaggedPlansWithReadingTime returns plans with no tags, including reading time.
 func (s *Service) ListUntaggedPlansWithReadingTime(ctx context.Context) ([]PlanSummary, error) {
 	plans, err := s.db.ListUntaggedPlans(ctx)

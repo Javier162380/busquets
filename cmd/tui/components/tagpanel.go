@@ -62,7 +62,8 @@ func (t *TagPanel) SetEntries(entries []TagPanelEntry, totalPlans, untaggedCount
 		{Name: "", Count: totalPlans},
 		{Name: UntaggedSentinel, Count: untaggedCount},
 	}
-	t.entries = append(header, entries...)
+
+	t.entries = append(append(t.entries, header...), entries...)
 	if t.cursor >= len(t.entries) {
 		t.cursor = 0
 	}

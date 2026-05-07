@@ -68,4 +68,5 @@ type Repository interface {
 	GetTagPlanCounts(ctx context.Context) (map[string]int, error)
 	GetUntaggedPlanCount(ctx context.Context) (int64, error)
 	ListUntaggedPlans(ctx context.Context) ([]PlanSummary, error)
+	ListPlansWithTags(ctx context.Context) ([]PlanSummary, error)
 }

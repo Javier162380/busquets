@@ -750,6 +750,62 @@ func (q *Queries) ListAllPlansWithTags(ctx context.Context) ([]ListAllPlansWithT
 	return items, nil
 }
 
+const listAllPlansWithTagsExpanded = `-- name: ListAllPlansWithTagsExpanded :many
+SELECT
+    p.id, p.file_name, p.title, p.created_at, p.modified_at, p.file_size, p.word_count,
+    t.id  AS tag_id,
+    t.name AS tag_name
+FROM plans p
+LEFT JOIN plan_tags pt ON p.id = pt.plan_id
+LEFT JOIN tags t      ON pt.tag_id = t.id
+ORDER BY p.modified_at DESC, t.name ASC
+`
+
+type ListAllPlansWithTagsExpandedRow struct {
+	ID         int64          `json:"id"`
+	FileName   string         `json:"file_name"`
+	Title      string         `json:"title"`
+	CreatedAt  time.Time      `json:"created_at"`
+	ModifiedAt time.Time      `json:"modified_at"`
+	FileSize   int64          `json:"file_size"`
+	WordCount  int64          `json:"word_count"`
+	TagID      sql.NullInt64  `json:"tag_id"`
+	TagName    sql.NullString `json:"tag_name"`
+}
+
+func (q *Queries) ListAllPlansWithTagsExpanded(ctx context.Context) ([]ListAllPlansWithTagsExpandedRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAllPlansWithTagsExpanded)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllPlansWithTagsExpandedRow{}
+	for rows.Next() {
+		var i ListAllPlansWithTagsExpandedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FileName,
+			&i.Title,
+			&i.CreatedAt,
+			&i.ModifiedAt,
+			&i.FileSize,
+			&i.WordCount,
+			&i.TagID,
+			&i.TagName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listAllTags = `-- name: ListAllTags :many
 SELECT id, name, description, color, created_at, updated_at FROM tags ORDER BY name ASC
 `

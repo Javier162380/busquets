@@ -30,18 +30,19 @@ type PlansScreen struct {
 	// State.
 	layout        types.Layout
 	focus         types.Focus
-	plans         []claudeviewer.PlanSummary // filtered view shown in list
-	allPlans      []claudeviewer.PlanSummary // full unfiltered source of truth
-	allTags       []claudeviewer.Tag         // all tags in the system (including unassigned)
-	tagPlanCounts map[string]int             // authoritative plan count per tag from DB
-	untaggedCount int                        // number of plans with no tags assigned
-	displayMode   string                     // one of DisplayModePlanContent, DisplayModeTagPlanContent
-	current      *claudeviewer.PlanDetail
-	searchQuery  string    // Current active search query (empty = show all).
-	tagFilters   []string  // Active tag filters.
-	showingModal bool      // Whether tag modal is shown.
-	lastKey      string    // Last key pressed in editor (for double-key detection).
-	lastKeyTime  time.Time // Time of last key press in editor.
+	plans         []claudeviewer.PlanSummary            // filtered view shown in list
+	allPlans      []claudeviewer.PlanSummary            // full unfiltered source of truth
+	allTags       []claudeviewer.Tag                    // all tags in the system (including unassigned)
+	tagPlanCounts map[string]int                        // authoritative plan count per tag from DB
+	tagPlanMap    map[string][]claudeviewer.PlanSummary // map tags to a planSummary
+	untaggedCount int                                   // number of plans with no tags assigned
+	displayMode   string                                // one of DisplayModePlanContent, DisplayModeTagPlanContent
+	current       *claudeviewer.PlanDetail
+	searchQuery   string    // Current active search query (empty = show all).
+	tagFilters    []string  // Active tag filters.
+	showingModal  bool      // Whether tag modal is shown.
+	lastKey       string    // Last key pressed in editor (for double-key detection).
+	lastKeyTime   time.Time // Time of last key press in editor.
 
 	// Dimensions.
 	width  int
@@ -60,16 +61,16 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 	contentHeight := height - 4
 
 	p := PlansScreen{
-		list:      components.NewList(nil, panelWidth, contentHeight),
-		viewer:    components.NewViewer(panelWidth, contentHeight),
-		editor:    components.NewEditor(width-4, contentHeight),
-		searchBar: components.NewSearchBar(panelWidth),
-		tagModal:  components.NewTagModal(),
-		tagFilter: components.NewTagFilter(panelWidth),
-		layout:    types.LayoutSplit,
-		focus:     types.FocusList,
-		width:     width,
-		height:    height,
+		list:        components.NewList(nil, panelWidth, contentHeight),
+		viewer:      components.NewViewer(panelWidth, contentHeight),
+		editor:      components.NewEditor(width-4, contentHeight),
+		searchBar:   components.NewSearchBar(panelWidth),
+		tagModal:    components.NewTagModal(),
+		tagFilter:   components.NewTagFilter(panelWidth),
+		layout:      types.LayoutSplit,
+		focus:       types.FocusList,
+		width:       width,
+		height:      height,
 		displayMode: displayMode,
 		borderStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
@@ -146,6 +147,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.allTags = msg.Tags
 		s.tagPlanCounts = msg.Counts
 		s.untaggedCount = msg.UntaggedCount
+		s.tagPlanMap = msg.TagPlanMap
 		s.rebuildTagPanelEntries()
 		return s, nil
 
@@ -270,6 +272,11 @@ func (s *PlansScreen) handleTagPanelKey(key string, msg tea.KeyMsg) (Screen, tea
 		s.focus = types.FocusList
 		return s, nil
 
+	case "/":
+		s.tagPanel.Blur()
+		s.focus = types.FocusSearch
+		return s, s.searchBar.Focus()
+
 	case "n":
 		return s, s.tagPanel.StartCreating()
 	}
@@ -277,8 +284,8 @@ func (s *PlansScreen) handleTagPanelKey(key string, msg tea.KeyMsg) (Screen, tea
 	return s, nil
 }
 
-// applyTagFilter filters plans by tag. Empty string = "All", UntaggedSentinel = no tags,
-// any other value = filter by that tag name via the service.
+// applyTagFilter filters the plan list by tag. Uses tagPlanMap for instant in-memory
+// filtering when available; falls back to async service calls while the map loads.
 func (s *PlansScreen) applyTagFilter(tag string) tea.Cmd {
 	if tag == "" {
 		s.plans = s.allPlans
@@ -289,10 +296,30 @@ func (s *PlansScreen) applyTagFilter(tag string) tea.Cmd {
 		}
 		return nil
 	}
+
+	if s.tagPlanMap != nil {
+		var mapKey string
+		if tag == components.UntaggedSentinel {
+			mapKey = "" // untagged plans are stored under "" in the service map
+		} else {
+			mapKey = tag
+		}
+		s.plans = s.tagPlanMap[mapKey]
+		if s.plans == nil {
+			s.plans = []claudeviewer.PlanSummary{}
+		}
+		s.updateListItems()
+		s.list.Select(0)
+		if len(s.plans) > 0 {
+			return s.loadPlanDetail(s.plans[0].FileName)
+		}
+		return nil
+	}
+
+	// Map not yet loaded — fall back to async service call.
 	if tag == components.UntaggedSentinel {
 		return func() tea.Msg { return LoadUntaggedPlansMsg{} }
 	}
-	// Delegate to service so filtering uses the reliable per-plan tag query.
 	return func() tea.Msg {
 		return SearchPlansWithTagsMsg{Tags: []string{tag}, MatchAll: false}
 	}
@@ -731,9 +758,14 @@ func (s *PlansScreen) renderThreePanelView() string {
 	contentHeight := s.height - 4
 	innerH := contentHeight - 4
 
+	listInnerH := innerH
+	if s.searchBar.IsActive() {
+		listInnerH -= 3
+	}
 	s.tagPanel.SetSize(tagsW-4, innerH)
-	s.list.SetSize(plansW-4, innerH)
+	s.list.SetSize(plansW-4, listInnerH)
 	s.viewer.SetSize(viewW-4, innerH)
+	s.searchBar.SetWidth(plansW - 4)
 
 	activeBorder := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -749,6 +781,7 @@ func (s *PlansScreen) renderThreePanelView() string {
 		listBorder = activeBorder
 	case types.FocusContent:
 		contentBorder = activeBorder
+	default:
 	}
 
 	tagPanelView := tagBorder.
@@ -761,6 +794,9 @@ func (s *PlansScreen) renderThreePanelView() string {
 		listContent = styles.InactiveStyle.Render("No items.")
 	} else {
 		listContent = s.list.View()
+	}
+	if s.searchBar.IsActive() {
+		listContent = lipgloss.JoinVertical(lipgloss.Left, listContent, s.searchBar.View())
 	}
 	listView := listBorder.
 		Width(plansW).
@@ -853,30 +889,8 @@ func (s *PlansScreen) getViewerWidth() int {
 }
 
 // panelWidths returns the widths for the three-panel layout.
-func (s *PlansScreen) panelWidths() (tagsW, plansW, viewW int) {
-	tagsW = s.width / 5
-	plansW = (s.width * 3) / 10
-	viewW = s.width - tagsW - plansW - 4
-	return
-}
-
-// filterPlansByTag filters s.plans from s.allPlans by the given tag name.
-// An empty tagName shows all plans.
-func (s *PlansScreen) filterPlansByTag(tagName string) {
-	if tagName == "" {
-		s.plans = s.allPlans
-		return
-	}
-	filtered := make([]claudeviewer.PlanSummary, 0)
-	for _, p := range s.allPlans {
-		for _, t := range p.Tags {
-			if t.Name == tagName {
-				filtered = append(filtered, p)
-				break
-			}
-		}
-	}
-	s.plans = filtered
+func (s *PlansScreen) panelWidths() (int, int, int) {
+	return s.width / 5, (s.width * 3) / 10, s.width - s.width/5 - (s.width*3)/10 - 4
 }
 
 // rebuildTagPanelEntries updates the tag panel using authoritative DB counts.
@@ -951,7 +965,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.tagPanel != nil && s.tagPanel.IsCreating() {
 			return "enter: create tag | esc: cancel"
 		}
-		return fmt.Sprintf("j/k: navigate tags | enter/tab: plans | n: new tag | q: quit | Plans: %d", len(s.plans))
+		return fmt.Sprintf("j/k: navigate tags | enter/tab: plans | /: search | n: new tag | q: quit | Plans: %d", len(s.plans))
 	case types.FocusList:
 		searchHelp := "/: search | T: tags"
 		if s.searchQuery != "" || len(s.tagFilters) > 0 {
@@ -1244,9 +1258,10 @@ type LoadAllTagsForPanelMsg struct{}
 // LoadUntaggedPlansMsg requests loading plans with no tags.
 type LoadUntaggedPlansMsg struct{}
 
-// AllTagsForPanelLoadedMsg carries all tags and their plan counts for the tag panel.
+// AllTagsForPanelLoadedMsg carries all tags, their plan counts, and the tag→plans map.
 type AllTagsForPanelLoadedMsg struct {
 	Tags          []claudeviewer.Tag
 	Counts        map[string]int
 	UntaggedCount int
+	TagPlanMap    map[string][]claudeviewer.PlanSummary
 }

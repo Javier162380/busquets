@@ -4,9 +4,9 @@ package types
 type Layout int
 
 const (
-	LayoutSplit       Layout = iota // Two panels side-by-side.
-	LayoutFullscreen                // Single content area.
-	LayoutThreePanel                // Three panels: tags + list + content.
+	LayoutSplit   Layout = iota //nolint:gofumpt,gci    // Two panels side-by-side.
+	LayoutFullscreen            // Single content area.
+	LayoutThreePanel            // Three panels: tags + list + content.
 )
 
 // Focus determines where user attention is.
