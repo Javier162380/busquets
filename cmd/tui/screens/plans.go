@@ -927,7 +927,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.tagPanel != nil && s.tagPanel.IsCreating() {
 			return "enter: create tag | esc: cancel"
 		}
-		return fmt.Sprintf("j/k: navigate tags | enter/tab: plans | n: new tag | Plans: %d", len(s.plans))
+		return fmt.Sprintf("j/k: navigate tags | enter/tab: plans | n: new tag | q: quit | Plans: %d", len(s.plans))
 	case types.FocusList:
 		searchHelp := "/: search | T: tags"
 		if s.searchQuery != "" || len(s.tagFilters) > 0 {

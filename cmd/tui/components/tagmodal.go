@@ -109,16 +109,6 @@ func (m *TagModal) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "esc":
-			// Close and save
-			tags := m.Close()
-			return func() tea.Msg {
-				return SavePlanTagsMsg{
-					FileName: m.planFileName,
-					Tags:     tags,
-				}
-			}
-
 		case "tab":
 			// Switch focus
 			if m.focus == TagModalFocusTagList {
