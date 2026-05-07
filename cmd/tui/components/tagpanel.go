@@ -11,6 +11,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// UntaggedSentinel is the Name value used in TagPanelEntry to represent the "Untagged" category.
+const UntaggedSentinel = "\x00untagged"
+
 // CreateTagRequestedMsg is emitted by TagPanel when a new tag creation is confirmed.
 type CreateTagRequestedMsg struct {
 	Name string
@@ -18,7 +21,7 @@ type CreateTagRequestedMsg struct {
 
 // TagPanelEntry represents one row in the tag panel.
 type TagPanelEntry struct {
-	Name  string // empty string == "All"
+	Name  string // "" == "All", UntaggedSentinel == "Untagged", otherwise the tag name
 	Count int
 }
 
@@ -51,14 +54,15 @@ func NewTagPanel(width, height int) *TagPanel {
 	}
 }
 
-// SetEntries replaces the tag list. An "All" entry (Name=="") is prepended
-// automatically with the total plan count derived from the entries.
-func (t *TagPanel) SetEntries(entries []TagPanelEntry) {
-	total := 0
-	for _, e := range entries {
-		total += e.Count
+// SetEntries replaces the tag list. "All" and "Untagged" entries are prepended automatically.
+// totalPlans is the accurate total plan count for the "All" row.
+// untaggedCount is the number of plans with no tags.
+func (t *TagPanel) SetEntries(entries []TagPanelEntry, totalPlans, untaggedCount int) {
+	header := []TagPanelEntry{
+		{Name: "", Count: totalPlans},
+		{Name: UntaggedSentinel, Count: untaggedCount},
 	}
-	t.entries = append([]TagPanelEntry{{Name: "", Count: total}}, entries...)
+	t.entries = append(header, entries...)
 	if t.cursor >= len(t.entries) {
 		t.cursor = 0
 	}
@@ -179,7 +183,12 @@ func (t *TagPanel) View() string {
 	for i := start; i < end; i++ {
 		entry := t.entries[i]
 		label := "All"
-		if entry.Name != "" {
+		switch entry.Name {
+		case UntaggedSentinel:
+			label = "Untagged"
+		case "":
+			label = "All"
+		default:
 			label = entry.Name
 		}
 

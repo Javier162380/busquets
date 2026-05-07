@@ -46,6 +46,9 @@ type UnifiedService interface {
 	IsWatchModeRunning() bool
 	UpdateWatchInterval(intervalSeconds float64)
 	GetAllTags(ctx context.Context) ([]claudeviewer.Tag, error)
+	GetTagPlanCounts(ctx context.Context) (map[string]int, error)
+	GetUntaggedPlanCount(ctx context.Context) (int64, error)
+	ListUntaggedPlansWithReadingTime(ctx context.Context) ([]claudeviewer.PlanSummary, error)
 	GetPlanTags(ctx context.Context, fileName string) ([]claudeviewer.Tag, error)
 	SetPlanTags(ctx context.Context, fileName string, tagNames []string) error
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]claudeviewer.PlanSummary, error)
@@ -486,6 +489,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.SearchPlansWithTagsMsg:
 		return a, SearchPlansWithTagsCmd(a.ctx, a.service, msg.Query, msg.Tags, msg.MatchAll)
+
+	case screens.LoadUntaggedPlansMsg:
+		return a, LoadUntaggedPlansCmd(a.ctx, a.service)
 
 	case components.DeleteTagMsg:
 		return a, DeleteTagsCmd(a.ctx, a.service, msg.TagID, msg.CurrentPlan)

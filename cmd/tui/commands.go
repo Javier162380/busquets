@@ -366,7 +366,7 @@ func WatchChannelListenerCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 	}
 }
 
-// LoadAllTagsForPanelCmd loads all tags for the tag panel (including unassigned ones).
+// LoadAllTagsForPanelCmd loads all tags, their plan counts, and the untagged count for the tag panel.
 func LoadAllTagsForPanelCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -376,7 +376,29 @@ func LoadAllTagsForPanelCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 		if err != nil {
 			return screens.ErrorMsg{Error: err}
 		}
-		return screens.AllTagsForPanelLoadedMsg{Tags: tags}
+		counts, err := svc.GetTagPlanCounts(ctx)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		untaggedCount, err := svc.GetUntaggedPlanCount(ctx)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.AllTagsForPanelLoadedMsg{Tags: tags, Counts: counts, UntaggedCount: int(untaggedCount)}
+	}
+}
+
+// LoadUntaggedPlansCmd loads plans with no tags assigned.
+func LoadUntaggedPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		plans, err := svc.ListUntaggedPlansWithReadingTime(ctx)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.PlansLoadedMsg{Plans: plans, IsFiltered: true}
 	}
 }
 
@@ -443,7 +465,7 @@ func SearchPlansWithTagsCmd(ctx context.Context, svc UnifiedService, query strin
 		if err != nil {
 			return screens.ErrorMsg{Error: err}
 		}
-		return screens.PlansLoadedMsg{Plans: plans}
+		return screens.PlansLoadedMsg{Plans: plans, IsFiltered: true}
 	}
 }
 

@@ -789,6 +789,42 @@ func (r *Repository) GetTagByID(ctx context.Context, id int64) (dto.Tag, error) 
 	return tagToDomain(tag), nil
 }
 
+func (r *Repository) GetTagPlanCounts(ctx context.Context) (map[string]int, error) {
+	rows, err := r.q.GetTagPlanCounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[string]int, len(rows))
+	for _, row := range rows {
+		counts[row.Name] = int(row.PlanCount)
+	}
+	return counts, nil
+}
+
+func (r *Repository) GetUntaggedPlanCount(ctx context.Context) (int64, error) {
+	return r.q.GetUntaggedPlanCount(ctx)
+}
+
+func (r *Repository) ListUntaggedPlans(ctx context.Context) ([]dto.PlanSummary, error) {
+	rows, err := r.q.ListUntaggedPlans(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.PlanSummary, len(rows))
+	for i, row := range rows {
+		result[i] = dto.PlanSummary{
+			ID:         row.ID,
+			FileName:   row.FileName,
+			Title:      row.Title,
+			CreatedAt:  row.CreatedAt,
+			ModifiedAt: row.ModifiedAt,
+			FileSize:   row.FileSize,
+			WordCount:  row.WordCount,
+		}
+	}
+	return result, nil
+}
+
 func (r *Repository) ListAllTags(ctx context.Context) ([]dto.Tag, error) {
 	rows, err := r.q.ListAllTags(ctx)
 	if err != nil {

@@ -28,12 +28,14 @@ type PlansScreen struct {
 	tagPanel  *components.TagPanel
 
 	// State.
-	layout       types.Layout
-	focus        types.Focus
-	plans        []claudeviewer.PlanSummary // filtered view shown in list
-	allPlans     []claudeviewer.PlanSummary // full unfiltered source of truth
-	allTags      []claudeviewer.Tag         // all tags in the system (including unassigned)
-	displayMode  string                     // one of DisplayModePlanContent, DisplayModeTagPlanContent
+	layout        types.Layout
+	focus         types.Focus
+	plans         []claudeviewer.PlanSummary // filtered view shown in list
+	allPlans      []claudeviewer.PlanSummary // full unfiltered source of truth
+	allTags       []claudeviewer.Tag         // all tags in the system (including unassigned)
+	tagPlanCounts map[string]int             // authoritative plan count per tag from DB
+	untaggedCount int                        // number of plans with no tags assigned
+	displayMode   string                     // one of DisplayModePlanContent, DisplayModeTagPlanContent
 	current      *claudeviewer.PlanDetail
 	searchQuery  string    // Current active search query (empty = show all).
 	tagFilters   []string  // Active tag filters.
@@ -122,25 +124,28 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s.handleKey(msg)
 
 	case PlansLoadedMsg:
-		s.allPlans = msg.Plans
+		if !msg.IsFiltered {
+			s.allPlans = msg.Plans
+		}
+		s.plans = msg.Plans
 		if s.tagPanel != nil {
 			s.rebuildTagPanelEntries()
-			s.filterPlansByTag(s.tagPanel.SelectedTag())
-		} else {
-			s.plans = msg.Plans
 		}
 		s.updateListItems()
+		s.list.Select(0)
 		var cmds []tea.Cmd
 		if len(s.plans) > 0 {
 			cmds = append(cmds, s.loadPlanDetail(s.plans[0].FileName))
 		}
-		if s.tagPanel != nil {
+		if s.tagPanel != nil && !msg.IsFiltered {
 			cmds = append(cmds, func() tea.Msg { return LoadAllTagsForPanelMsg{} })
 		}
 		return s, tea.Batch(cmds...)
 
 	case AllTagsForPanelLoadedMsg:
 		s.allTags = msg.Tags
+		s.tagPlanCounts = msg.Counts
+		s.untaggedCount = msg.UntaggedCount
 		s.rebuildTagPanelEntries()
 		return s, nil
 
@@ -254,23 +259,11 @@ func (s *PlansScreen) handleTagPanelKey(key string, msg tea.KeyMsg) (Screen, tea
 	switch key {
 	case "j", "down":
 		tag := s.tagPanel.MoveDown()
-		s.filterPlansByTag(tag)
-		s.updateListItems()
-		s.list.Select(0)
-		if len(s.plans) > 0 {
-			return s, s.loadPlanDetail(s.plans[0].FileName)
-		}
-		return s, nil
+		return s, s.applyTagFilter(tag)
 
 	case "k", "up":
 		tag := s.tagPanel.MoveUp()
-		s.filterPlansByTag(tag)
-		s.updateListItems()
-		s.list.Select(0)
-		if len(s.plans) > 0 {
-			return s, s.loadPlanDetail(s.plans[0].FileName)
-		}
-		return s, nil
+		return s, s.applyTagFilter(tag)
 
 	case "enter", "tab":
 		s.tagPanel.Blur()
@@ -282,6 +275,27 @@ func (s *PlansScreen) handleTagPanelKey(key string, msg tea.KeyMsg) (Screen, tea
 	}
 
 	return s, nil
+}
+
+// applyTagFilter filters plans by tag. Empty string = "All", UntaggedSentinel = no tags,
+// any other value = filter by that tag name via the service.
+func (s *PlansScreen) applyTagFilter(tag string) tea.Cmd {
+	if tag == "" {
+		s.plans = s.allPlans
+		s.updateListItems()
+		s.list.Select(0)
+		if len(s.plans) > 0 {
+			return s.loadPlanDetail(s.plans[0].FileName)
+		}
+		return nil
+	}
+	if tag == components.UntaggedSentinel {
+		return func() tea.Msg { return LoadUntaggedPlansMsg{} }
+	}
+	// Delegate to service so filtering uses the reliable per-plan tag query.
+	return func() tea.Msg {
+		return SearchPlansWithTagsMsg{Tags: []string{tag}, MatchAll: false}
+	}
 }
 
 // handleListKey handles keys in list focus mode.
@@ -718,10 +732,16 @@ func (s *PlansScreen) renderThreePanelView() string {
 		Height(contentHeight).
 		Render(s.tagPanel.View())
 
+	var listContent string
+	if s.list.ItemCount() == 0 {
+		listContent = styles.InactiveStyle.Render("No items.")
+	} else {
+		listContent = s.list.View()
+	}
 	listView := listBorder.
 		Width(plansW).
 		Height(contentHeight).
-		Render(s.list.View())
+		Render(listContent)
 
 	rightView := contentBorder.
 		Width(viewW).
@@ -835,36 +855,44 @@ func (s *PlansScreen) filterPlansByTag(tagName string) {
 	s.plans = filtered
 }
 
-// rebuildTagPanelEntries recomputes tag counts from allPlans and updates the tag panel.
-// It uses s.allTags as the base so that tags with zero assigned plans are still visible.
+// rebuildTagPanelEntries updates the tag panel using authoritative DB counts.
+// tagPlanCounts (from GetTagPlanCounts) is the source of truth; allTags provides
+// the full tag list so unassigned tags still appear.
 func (s *PlansScreen) rebuildTagPanelEntries() {
 	if s.tagPanel == nil {
 		return
 	}
-	// Count plans per tag from allPlans.
-	tagCounts := make(map[string]int)
-	for _, plan := range s.allPlans {
-		for _, tag := range plan.Tags {
-			tagCounts[tag.Name]++
+	counts := s.tagPlanCounts
+	if counts == nil {
+		// Fall back to counting from plan summaries until DB counts arrive.
+		counts = make(map[string]int)
+		for _, plan := range s.allPlans {
+			for _, tag := range plan.Tags {
+				if tag.Name != "" {
+					counts[tag.Name]++
+				}
+			}
 		}
 	}
-	// Build entries from all known tags so unassigned tags still appear.
 	seen := make(map[string]bool)
 	var entries []components.TagPanelEntry
 	for _, tag := range s.allTags {
+		if tag.Name == "" {
+			continue
+		}
 		seen[tag.Name] = true
-		entries = append(entries, components.TagPanelEntry{Name: tag.Name, Count: tagCounts[tag.Name]})
+		entries = append(entries, components.TagPanelEntry{Name: tag.Name, Count: counts[tag.Name]})
 	}
-	// Also add any tags found in plans but not yet in allTags (shouldn't happen but be safe).
-	for name, count := range tagCounts {
-		if !seen[name] {
-			entries = append(entries, components.TagPanelEntry{Name: name, Count: count})
+	// Include any tags found only in plan summaries (safety net).
+	for name := range counts {
+		if name != "" && !seen[name] {
+			entries = append(entries, components.TagPanelEntry{Name: name, Count: counts[name]})
 		}
 	}
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Name < entries[j].Name
 	})
-	s.tagPanel.SetEntries(entries)
+	s.tagPanel.SetEntries(entries, len(s.allPlans), s.untaggedCount)
 }
 
 // SetDisplayMode switches the screen between display modes.
@@ -1051,7 +1079,8 @@ func (s *PlansScreen) dumpPlans() tea.Cmd {
 
 // PlansLoadedMsg is sent when plans are loaded.
 type PlansLoadedMsg struct {
-	Plans []claudeviewer.PlanSummary
+	Plans      []claudeviewer.PlanSummary
+	IsFiltered bool // when true, only s.plans is updated, not s.allPlans
 }
 
 // PlanDetailLoadedMsg is sent when plan detail is loaded.
@@ -1188,7 +1217,12 @@ type SearchPlansWithTagsMsg struct {
 // LoadAllTagsForPanelMsg requests loading all tags for the tag panel.
 type LoadAllTagsForPanelMsg struct{}
 
-// AllTagsForPanelLoadedMsg carries all tags for the tag panel.
+// LoadUntaggedPlansMsg requests loading plans with no tags.
+type LoadUntaggedPlansMsg struct{}
+
+// AllTagsForPanelLoadedMsg carries all tags and their plan counts for the tag panel.
 type AllTagsForPanelLoadedMsg struct {
-	Tags []claudeviewer.Tag
+	Tags          []claudeviewer.Tag
+	Counts        map[string]int
+	UntaggedCount int
 }

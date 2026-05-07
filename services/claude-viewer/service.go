@@ -140,6 +140,25 @@ func (s *Service) GetAllTags(ctx context.Context) ([]dto.Tag, error) {
 	return s.db.ListAllTags(ctx)
 }
 
+// GetTagPlanCounts returns a map of tag name → number of plans tagged with it.
+func (s *Service) GetTagPlanCounts(ctx context.Context) (map[string]int, error) {
+	return s.db.GetTagPlanCounts(ctx)
+}
+
+// GetUntaggedPlanCount returns the number of plans with no tags.
+func (s *Service) GetUntaggedPlanCount(ctx context.Context) (int64, error) {
+	return s.db.GetUntaggedPlanCount(ctx)
+}
+
+// ListUntaggedPlansWithReadingTime returns plans with no tags, including reading time.
+func (s *Service) ListUntaggedPlansWithReadingTime(ctx context.Context) ([]PlanSummary, error) {
+	plans, err := s.db.ListUntaggedPlans(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.toSummaries(ctx, plans), nil
+}
+
 // DeleteTag deletes a tag by ID. This will also remove all plan-tag associations
 // within a transaction (first removes associations, then the tag).
 func (s *Service) DeleteTag(ctx context.Context, id int64) error {

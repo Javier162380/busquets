@@ -428,6 +428,54 @@ func (q *Queries) GetTagByName(ctx context.Context, name string) (Tag, error) {
 	return i, err
 }
 
+const getTagPlanCounts = `-- name: GetTagPlanCounts :many
+SELECT t.name, COUNT(DISTINCT pt.plan_id) AS plan_count
+FROM tags t
+LEFT JOIN plan_tags pt ON t.id = pt.tag_id
+GROUP BY t.id, t.name
+ORDER BY t.name ASC
+`
+
+type GetTagPlanCountsRow struct {
+	Name      string `json:"name"`
+	PlanCount int64  `json:"plan_count"`
+}
+
+func (q *Queries) GetTagPlanCounts(ctx context.Context) ([]GetTagPlanCountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getTagPlanCounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetTagPlanCountsRow{}
+	for rows.Next() {
+		var i GetTagPlanCountsRow
+		if err := rows.Scan(&i.Name, &i.PlanCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getUntaggedPlanCount = `-- name: GetUntaggedPlanCount :one
+SELECT COUNT(*) AS count FROM plans
+WHERE id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)
+`
+
+func (q *Queries) GetUntaggedPlanCount(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getUntaggedPlanCount)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const getVersionCount = `-- name: GetVersionCount :one
 SELECT COUNT(*) FROM plan_versions WHERE plan_id = ?
 `
@@ -788,6 +836,54 @@ func (q *Queries) ListConnectors(ctx context.Context) ([]Connector, error) {
 			&i.Enabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listUntaggedPlans = `-- name: ListUntaggedPlans :many
+SELECT id, file_name, title, created_at, modified_at, file_size, word_count
+FROM plans
+WHERE id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)
+ORDER BY modified_at DESC
+`
+
+type ListUntaggedPlansRow struct {
+	ID         int64     `json:"id"`
+	FileName   string    `json:"file_name"`
+	Title      string    `json:"title"`
+	CreatedAt  time.Time `json:"created_at"`
+	ModifiedAt time.Time `json:"modified_at"`
+	FileSize   int64     `json:"file_size"`
+	WordCount  int64     `json:"word_count"`
+}
+
+func (q *Queries) ListUntaggedPlans(ctx context.Context) ([]ListUntaggedPlansRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUntaggedPlans)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListUntaggedPlansRow{}
+	for rows.Next() {
+		var i ListUntaggedPlansRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FileName,
+			&i.Title,
+			&i.CreatedAt,
+			&i.ModifiedAt,
+			&i.FileSize,
+			&i.WordCount,
 		); err != nil {
 			return nil, err
 		}
