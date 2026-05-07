@@ -9,6 +9,7 @@ import (
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/sync/errgroup"
 )
 
 // Command builders.
@@ -372,16 +373,29 @@ func LoadAllTagsForPanelCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 
-		tags, err := svc.GetAllTags(ctx)
-		if err != nil {
-			return screens.ErrorMsg{Error: err}
-		}
-		counts, err := svc.GetTagPlanCounts(ctx)
-		if err != nil {
-			return screens.ErrorMsg{Error: err}
-		}
-		untaggedCount, err := svc.GetUntaggedPlanCount(ctx)
-		if err != nil {
+		errGroup, eggCtx := errgroup.WithContext(ctx)
+		var tags []claudeviewer.Tag
+		errGroup.Go(func() error {
+			var err error
+			tags, err = svc.GetAllTags(eggCtx)
+			return err
+		})
+
+		var counts map[string]int
+		errGroup.Go(func() error {
+			var err error
+			counts, err = svc.GetTagPlanCounts(eggCtx)
+			return err
+		})
+
+		var untaggedCount int64
+		errGroup.Go(func() error {
+			var err error
+			untaggedCount, err = svc.GetUntaggedPlanCount(eggCtx)
+			return err
+		})
+
+		if err := errGroup.Wait(); err != nil {
 			return screens.ErrorMsg{Error: err}
 		}
 		return screens.AllTagsForPanelLoadedMsg{Tags: tags, Counts: counts, UntaggedCount: int(untaggedCount)}
