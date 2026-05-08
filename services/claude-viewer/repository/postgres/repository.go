@@ -140,7 +140,7 @@ func planSummaryFromListRow(r ListAllPlansWithTagsRow) dto.PlanSummary {
 		tags[i] = dto.Tag{
 			ID: int64(tagID),
 		}
-		if i < len(r.TagNames)-1 {
+		if i < len(r.TagNames) {
 			tags[i].Name = r.TagNames[i]
 		}
 	}
@@ -820,45 +820,13 @@ func (r *Repository) ListUntaggedPlans(ctx context.Context) ([]dto.PlanSummary, 
 }
 
 func (r *Repository) ListPlansWithTags(ctx context.Context) ([]dto.PlanSummary, error) {
-	rows, err := r.q.ListAllPlansWithTagsExpanded(ctx)
+	rows, err := r.q.ListAllPlansWithTags(ctx)
 	if err != nil {
 		return nil, err
 	}
-	type entry struct {
-		summary dto.PlanSummary
-		idx     int
-	}
-	seen := make(map[int64]*entry, len(rows))
-	var order []int64
-	for _, row := range rows {
-		id := int64(row.ID)
-		e, exists := seen[id]
-		if !exists {
-			e = &entry{
-				summary: dto.PlanSummary{
-					ID:         id,
-					FileName:   row.FileName,
-					Title:      row.Title,
-					CreatedAt:  timestamptzToTime(row.CreatedAt),
-					ModifiedAt: timestamptzToTime(row.ModifiedAt),
-					FileSize:   row.FileSize,
-					WordCount:  row.WordCount,
-				},
-				idx: len(order),
-			}
-			seen[id] = e
-			order = append(order, id)
-		}
-		if row.TagID.Valid && row.TagName.Valid {
-			e.summary.Tags = append(e.summary.Tags, dto.Tag{
-				ID:   int64(row.TagID.Int32),
-				Name: row.TagName.String,
-			})
-		}
-	}
-	result := make([]dto.PlanSummary, len(order))
-	for i, id := range order {
-		result[i] = seen[id].summary
+	result := make([]dto.PlanSummary, len(rows))
+	for i, row := range rows {
+		result[i] = planSummaryFromListRow(row)
 	}
 	return result, nil
 }

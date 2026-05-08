@@ -243,16 +243,6 @@ LEFT JOIN plan_tags pt ON t.id = pt.tag_id
 GROUP BY t.id, t.name
 ORDER BY t.name ASC;
 
--- name: ListAllPlansWithTagsExpanded :many
-SELECT
-    p.id, p.file_name, p.title, p.created_at, p.modified_at, p.file_size, p.word_count,
-    t.id  AS tag_id,
-    t.name AS tag_name
-FROM plans p
-LEFT JOIN plan_tags pt ON p.id = pt.plan_id
-LEFT JOIN tags t      ON pt.tag_id = t.id
-ORDER BY p.modified_at DESC, t.name ASC;
-
 -- name: GetUntaggedPlanCount :one
 SELECT COUNT(*) AS count FROM plans
 WHERE id NOT IN (SELECT DISTINCT plan_id FROM plan_tags);

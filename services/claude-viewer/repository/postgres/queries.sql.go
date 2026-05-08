@@ -678,14 +678,13 @@ FROM plans p
          LEFT JOIN (
     SELECT
         pt.plan_id,
-        array_agg(DISTINCT t.id ORDER BY t.id)::int4[] AS tag_ids,
-        array_agg(DISTINCT t.name ORDER BY t.name)::text[] AS tag_names
-
+        array_agg(t.id ORDER BY t.name)::int4[] AS tag_ids,
+        array_agg(t.name ORDER BY t.name)::text[] AS tag_names
     FROM plan_tags pt
              JOIN tags t ON pt.tag_id = t.id
     GROUP BY pt.plan_id
 ) t ON t.plan_id = p.id
-ORDER BY p.id
+ORDER BY p.modified_at DESC
 `
 
 type ListAllPlansWithTagsRow struct {
@@ -719,59 +718,6 @@ func (q *Queries) ListAllPlansWithTags(ctx context.Context) ([]ListAllPlansWithT
 			&i.WordCount,
 			&i.TagIds,
 			&i.TagNames,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listAllPlansWithTagsExpanded = `-- name: ListAllPlansWithTagsExpanded :many
-SELECT
-    p.id, p.file_name, p.title, p.created_at, p.modified_at, p.file_size, p.word_count,
-    t.id   AS tag_id,
-    t.name AS tag_name
-FROM plans p
-LEFT JOIN plan_tags pt ON p.id = pt.plan_id
-LEFT JOIN tags t       ON pt.tag_id = t.id
-ORDER BY p.modified_at DESC, t.name ASC
-`
-
-type ListAllPlansWithTagsExpandedRow struct {
-	ID         int32              `json:"id"`
-	FileName   string             `json:"file_name"`
-	Title      string             `json:"title"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	ModifiedAt pgtype.Timestamptz `json:"modified_at"`
-	FileSize   int64              `json:"file_size"`
-	WordCount  int64              `json:"word_count"`
-	TagID      pgtype.Int4        `json:"tag_id"`
-	TagName    pgtype.Text        `json:"tag_name"`
-}
-
-func (q *Queries) ListAllPlansWithTagsExpanded(ctx context.Context) ([]ListAllPlansWithTagsExpandedRow, error) {
-	rows, err := q.db.Query(ctx, listAllPlansWithTagsExpanded)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListAllPlansWithTagsExpandedRow{}
-	for rows.Next() {
-		var i ListAllPlansWithTagsExpandedRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.FileName,
-			&i.Title,
-			&i.CreatedAt,
-			&i.ModifiedAt,
-			&i.FileSize,
-			&i.WordCount,
-			&i.TagID,
-			&i.TagName,
 		); err != nil {
 			return nil, err
 		}

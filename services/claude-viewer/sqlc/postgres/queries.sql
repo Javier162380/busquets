@@ -30,14 +30,13 @@ FROM plans p
          LEFT JOIN (
     SELECT
         pt.plan_id,
-        array_agg(DISTINCT t.id ORDER BY t.id)::int4[] AS tag_ids,
-        array_agg(DISTINCT t.name ORDER BY t.name)::text[] AS tag_names
-
+        array_agg(t.id ORDER BY t.name)::int4[] AS tag_ids,
+        array_agg(t.name ORDER BY t.name)::text[] AS tag_names
     FROM plan_tags pt
              JOIN tags t ON pt.tag_id = t.id
     GROUP BY pt.plan_id
 ) t ON t.plan_id = p.id
-ORDER BY p.id;
+ORDER BY p.modified_at DESC;
 
 -- name: ListAllPlansWithPagination :many
 SELECT id, file_name, title, created_at, modified_at, file_size, word_count
@@ -243,16 +242,6 @@ FROM tags t
 LEFT JOIN plan_tags pt ON t.id = pt.tag_id
 GROUP BY t.id, t.name
 ORDER BY t.name ASC;
-
--- name: ListAllPlansWithTagsExpanded :many
-SELECT
-    p.id, p.file_name, p.title, p.created_at, p.modified_at, p.file_size, p.word_count,
-    t.id   AS tag_id,
-    t.name AS tag_name
-FROM plans p
-LEFT JOIN plan_tags pt ON p.id = pt.plan_id
-LEFT JOIN tags t       ON pt.tag_id = t.id
-ORDER BY p.modified_at DESC, t.name ASC;
 
 -- name: GetUntaggedPlanCount :one
 SELECT COUNT(*) AS count FROM plans
