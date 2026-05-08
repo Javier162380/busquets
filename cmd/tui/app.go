@@ -196,7 +196,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.Versions) == 0 {
 			// No versions - show message in App's status bar and stay on current screen.
 			a.statusBar.SetError("No versions found")
-			return a, nil
+			return a, ClearStatusCmd(500 * time.Millisecond) //nolint:gci // skip
 		}
 		// Versions exist - push versions screen with data.
 		return a, a.pushVersionsScreenWithData(msg.PlanName, msg.Versions)

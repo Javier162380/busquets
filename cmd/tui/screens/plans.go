@@ -259,11 +259,11 @@ func (s *PlansScreen) handleTagPanelKey(key string, msg tea.KeyMsg) (Screen, tea
 	}
 
 	switch key {
-	case "j", "down":
+	case "down":
 		tag := s.tagPanel.MoveDown()
 		return s, s.applyTagFilter(tag)
 
-	case "k", "up":
+	case "up":
 		tag := s.tagPanel.MoveUp()
 		return s, s.applyTagFilter(tag)
 
