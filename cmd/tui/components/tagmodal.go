@@ -118,7 +118,6 @@ func (m *TagModal) Update(msg tea.Msg) tea.Cmd {
 					Tags:     tags,
 				}
 			}
-
 		case "tab":
 			// Switch focus
 			if m.focus == TagModalFocusTagList {

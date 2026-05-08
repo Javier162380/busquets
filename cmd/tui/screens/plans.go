@@ -2,6 +2,7 @@ package screens
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -24,17 +25,24 @@ type PlansScreen struct {
 	searchBar *components.SearchBar
 	tagModal  *components.TagModal
 	tagFilter *components.TagFilter
+	tagPanel  *components.TagPanel
 
 	// State.
-	layout       types.Layout
-	focus        types.Focus
-	plans        []claudeviewer.PlanSummary
-	current      *claudeviewer.PlanDetail
-	searchQuery  string    // Current active search query (empty = show all).
-	tagFilters   []string  // Active tag filters.
-	showingModal bool      // Whether tag modal is shown.
-	lastKey      string    // Last key pressed in editor (for double-key detection).
-	lastKeyTime  time.Time // Time of last key press in editor.
+	layout        types.Layout
+	focus         types.Focus
+	plans         []claudeviewer.PlanSummary            // filtered view shown in list
+	allPlans      []claudeviewer.PlanSummary            // full unfiltered source of truth
+	allTags       []claudeviewer.Tag                    // all tags in the system (including unassigned)
+	tagPlanCounts map[string]int                        // authoritative plan count per tag from DB
+	tagPlanMap    map[string][]claudeviewer.PlanSummary // map tags to a planSummary
+	untaggedCount int                                   // number of plans with no tags assigned
+	displayMode   string                                // one of DisplayModePlanContent, DisplayModeTagPlanContent
+	current       *claudeviewer.PlanDetail
+	searchQuery   string    // Current active search query (empty = show all).
+	tagFilters    []string  // Active tag filters.
+	showingModal  bool      // Whether tag modal is shown.
+	lastKey       string    // Last key pressed in editor (for double-key detection).
+	lastKeyTime   time.Time // Time of last key press in editor.
 
 	// Dimensions.
 	width  int
@@ -48,21 +56,22 @@ type PlansScreen struct {
 }
 
 // NewPlansScreen creates a new plans screen.
-func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *PlansScreen {
+func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefault bool, displayMode string) *PlansScreen {
 	panelWidth := (width - 3) / 2
 	contentHeight := height - 4
 
 	p := PlansScreen{
-		list:      components.NewList(nil, panelWidth, contentHeight),
-		viewer:    components.NewViewer(panelWidth, contentHeight),
-		editor:    components.NewEditor(width-4, contentHeight),
-		searchBar: components.NewSearchBar(panelWidth),
-		tagModal:  components.NewTagModal(),
-		tagFilter: components.NewTagFilter(panelWidth),
-		layout:    types.LayoutSplit,
-		focus:     types.FocusList,
-		width:     width,
-		height:    height,
+		list:        components.NewList(nil, panelWidth, contentHeight),
+		viewer:      components.NewViewer(panelWidth, contentHeight),
+		editor:      components.NewEditor(width-4, contentHeight),
+		searchBar:   components.NewSearchBar(panelWidth),
+		tagModal:    components.NewTagModal(),
+		tagFilter:   components.NewTagFilter(panelWidth),
+		layout:      types.LayoutSplit,
+		focus:       types.FocusList,
+		width:       width,
+		height:      height,
+		displayMode: displayMode,
 		borderStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(styles.BorderColor),
@@ -71,6 +80,13 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 
 	if renderMarkdownByDefault {
 		p.viewer.SetRenderMode(components.RenderModeGlamour)
+	}
+
+	if displayMode == claudeviewer.DisplayModeTagPlanContent {
+		tagsW, _, _ := p.panelWidths()
+		p.tagPanel = components.NewTagPanel(tagsW-4, contentHeight-4)
+		p.tagPanel.Focus()
+		p.focus = types.FocusTagPanel
 	}
 
 	return &p
@@ -109,12 +125,36 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s.handleKey(msg)
 
 	case PlansLoadedMsg:
-		s.plans = msg.Plans
-		s.updateListItems()
-		if len(s.plans) > 0 {
-			return s, s.loadPlanDetail(s.plans[0].FileName)
+		if !msg.IsFiltered {
+			s.allPlans = msg.Plans
 		}
+		s.plans = msg.Plans
+		if s.tagPanel != nil {
+			s.rebuildTagPanelEntries()
+		}
+		s.updateListItems()
+		s.list.Select(0)
+		var cmds []tea.Cmd
+		if len(s.plans) > 0 {
+			cmds = append(cmds, s.loadPlanDetail(s.plans[0].FileName))
+		}
+		if s.tagPanel != nil && !msg.IsFiltered {
+			cmds = append(cmds, func() tea.Msg { return LoadAllTagsForPanelMsg{} })
+		}
+		return s, tea.Batch(cmds...)
+
+	case AllTagsForPanelLoadedMsg:
+		s.allTags = msg.Tags
+		s.tagPlanCounts = msg.Counts
+		s.untaggedCount = msg.UntaggedCount
+		s.tagPlanMap = msg.TagPlanMap
+		s.rebuildTagPanelEntries()
 		return s, nil
+
+	case components.CreateTagRequestedMsg:
+		return s, func() tea.Msg {
+			return CreateTagMsg{Name: msg.Name}
+		}
 
 	case PlanDetailLoadedMsg:
 		s.current = msg.Detail
@@ -175,6 +215,10 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		cmd = s.viewer.Update(msg)
 	case types.FocusEditor:
 		cmd = s.editor.Update(msg)
+	case types.FocusTagPanel:
+		if s.tagPanel != nil {
+			cmd = s.tagPanel.Update(msg)
+		}
 	default:
 		return s, cmd
 	}
@@ -196,9 +240,89 @@ func (s *PlansScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		return s.handleSearchKey(key, msg)
 	case types.FocusTagFilter:
 		return s.handleTagFilterKey(key, msg)
+	case types.FocusTagPanel:
+		return s.handleTagPanelKey(key, msg)
 	}
 
 	return s, nil
+}
+
+// handleTagPanelKey handles keys while the tag panel has focus.
+func (s *PlansScreen) handleTagPanelKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
+	if s.tagPanel == nil {
+		return s, nil
+	}
+
+	// While the creation input is open, delegate all keys to the panel.
+	if s.tagPanel.IsCreating() {
+		return s, s.tagPanel.Update(msg)
+	}
+
+	switch key {
+	case "down":
+		tag := s.tagPanel.MoveDown()
+		return s, s.applyTagFilter(tag)
+
+	case "up":
+		tag := s.tagPanel.MoveUp()
+		return s, s.applyTagFilter(tag)
+
+	case "enter", "tab":
+		s.tagPanel.Blur()
+		s.focus = types.FocusList
+		return s, nil
+
+	case "/":
+		s.tagPanel.Blur()
+		s.focus = types.FocusSearch
+		return s, s.searchBar.Focus()
+
+	case "n":
+		return s, s.tagPanel.StartCreating()
+	}
+
+	return s, nil
+}
+
+// applyTagFilter filters the plan list by tag. Uses tagPlanMap for instant in-memory
+// filtering when available; falls back to async service calls while the map loads.
+func (s *PlansScreen) applyTagFilter(tag string) tea.Cmd {
+	if tag == "" {
+		s.plans = s.allPlans
+		s.updateListItems()
+		s.list.Select(0)
+		if len(s.plans) > 0 {
+			return s.loadPlanDetail(s.plans[0].FileName)
+		}
+		return nil
+	}
+
+	if s.tagPlanMap != nil {
+		var mapKey string
+		if tag == components.UntaggedSentinel {
+			mapKey = "" // untagged plans are stored under "" in the service map
+		} else {
+			mapKey = tag
+		}
+		s.plans = s.tagPlanMap[mapKey]
+		if s.plans == nil {
+			s.plans = []claudeviewer.PlanSummary{}
+		}
+		s.updateListItems()
+		s.list.Select(0)
+		if len(s.plans) > 0 {
+			return s.loadPlanDetail(s.plans[0].FileName)
+		}
+		return nil
+	}
+
+	// Map not yet loaded — fall back to async service call.
+	if tag == components.UntaggedSentinel {
+		return func() tea.Msg { return LoadUntaggedPlansMsg{} }
+	}
+	return func() tea.Msg {
+		return SearchPlansWithTagsMsg{Tags: []string{tag}, MatchAll: false}
+	}
 }
 
 // handleListKey handles keys in list focus mode.
@@ -273,8 +397,13 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		}
 
 	case "tab":
-		if s.current != nil {
-			s.focus = types.FocusContent
+		s.focus = types.FocusContent
+		return s, nil
+
+	case "shift+tab":
+		if s.displayMode == claudeviewer.DisplayModeTagPlanContent && s.tagPanel != nil {
+			s.focus = types.FocusTagPanel
+			s.tagPanel.Focus()
 		}
 		return s, nil
 
@@ -286,6 +415,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 			}
 		}
 		return s, cmd
+
 	case "j", "k":
 		now := time.Now()
 		if s.lastKey == key && now.Sub(s.lastKeyTime) < 500*time.Millisecond {
@@ -318,13 +448,24 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
 	case "tab":
-		// Switch back to list panel (left side) in split view.
+		// In three-panel mode, complete the cycle: content → tag panel.
+		// In split view, content → list.
 		if s.layout == types.LayoutSplit {
-			s.focus = types.FocusList
+			if s.displayMode == claudeviewer.DisplayModeTagPlanContent && s.tagPanel != nil {
+				s.tagPanel.Focus()
+				s.focus = types.FocusTagPanel
+			} else {
+				s.focus = types.FocusList
+			}
 			return s, nil
 		}
 		return s, nil
 
+	case "shift+tab":
+		if s.displayMode == claudeviewer.DisplayModeTagPlanContent {
+			s.focus = types.FocusList
+			return s, nil
+		}
 	case "esc":
 		// Back to list (split view) or back to split view (fullscreen).
 		if s.layout == types.LayoutFullscreen {
@@ -545,7 +686,11 @@ func (s *PlansScreen) View() string {
 			mainContent = s.renderFullscreenViewer()
 		}
 	default:
-		mainContent = s.renderSplitView()
+		if s.displayMode == claudeviewer.DisplayModeTagPlanContent && s.tagPanel != nil {
+			mainContent = s.renderThreePanelView()
+		} else {
+			mainContent = s.renderSplitView()
+		}
 	}
 
 	// Overlay tag modal if showing.
@@ -610,6 +755,65 @@ func (s *PlansScreen) renderSplitView() string {
 	divider := s.renderDivider(contentHeight)
 
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, divider, rightPanel)
+}
+
+// renderThreePanelView renders the three-panel layout: tags | list | content.
+func (s *PlansScreen) renderThreePanelView() string {
+	tagsW, plansW, viewW := s.panelWidths()
+	contentHeight := s.height - 4
+	innerH := contentHeight - 4
+
+	listInnerH := innerH
+	if s.searchBar.IsActive() {
+		listInnerH -= 3
+	}
+	s.tagPanel.SetSize(tagsW-4, innerH)
+	s.list.SetSize(plansW-4, listInnerH)
+	s.viewer.SetSize(viewW-4, innerH)
+	s.searchBar.SetWidth(plansW - 4)
+
+	activeBorder := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.AccentColor)
+
+	tagBorder := s.borderStyle
+	listBorder := s.borderStyle
+	contentBorder := s.borderStyle
+	switch s.focus {
+	case types.FocusTagPanel:
+		tagBorder = activeBorder
+	case types.FocusList:
+		listBorder = activeBorder
+	case types.FocusContent:
+		contentBorder = activeBorder
+	default:
+	}
+
+	tagPanelView := tagBorder.
+		Width(tagsW).
+		Height(contentHeight).
+		Render(s.tagPanel.View())
+
+	var listContent string
+	if s.list.ItemCount() == 0 {
+		listContent = styles.InactiveStyle.Render("No items.")
+	} else {
+		listContent = s.list.View()
+	}
+	if s.searchBar.IsActive() {
+		listContent = lipgloss.JoinVertical(lipgloss.Left, listContent, s.searchBar.View())
+	}
+	listView := listBorder.
+		Width(plansW).
+		Height(contentHeight).
+		Render(listContent)
+
+	rightView := contentBorder.
+		Width(viewW).
+		Height(contentHeight).
+		Render(s.viewer.View())
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, tagPanelView, listView, rightView)
 }
 
 // renderFullscreenViewer renders fullscreen content view.
@@ -679,17 +883,94 @@ func (s *PlansScreen) RenderedMarkdownByDefault(enabled bool) {
 // getViewerWidth calculates the current viewer width based on layout.
 func (s *PlansScreen) getViewerWidth() int {
 	if s.layout == types.LayoutFullscreen {
-		// Fullscreen: full width minus border padding
 		return s.width - 4
 	}
-	// Split view: half width minus divider and border padding
+	if s.displayMode == claudeviewer.DisplayModeTagPlanContent && s.tagPanel != nil {
+		_, _, viewW := s.panelWidths()
+		return viewW - 4
+	}
 	panelWidth := (s.width - 3) / 2
 	return panelWidth - 4
+}
+
+// panelWidths returns the widths for the three-panel layout.
+func (s *PlansScreen) panelWidths() (int, int, int) {
+	return s.width / 5, (s.width * 3) / 10, s.width - s.width/5 - (s.width*3)/10 - 4
+}
+
+// rebuildTagPanelEntries updates the tag panel using authoritative DB counts.
+// tagPlanCounts (from GetTagPlanCounts) is the source of truth; allTags provides
+// the full tag list so unassigned tags still appear.
+func (s *PlansScreen) rebuildTagPanelEntries() {
+	if s.tagPanel == nil {
+		return
+	}
+	counts := s.tagPlanCounts
+	if counts == nil {
+		// Fall back to counting from plan summaries until DB counts arrive.
+		counts = make(map[string]int)
+		for _, plan := range s.allPlans {
+			for _, tag := range plan.Tags {
+				if tag.Name != "" {
+					counts[tag.Name]++
+				}
+			}
+		}
+	}
+	seen := make(map[string]bool)
+	var entries []components.TagPanelEntry
+	for _, tag := range s.allTags {
+		if tag.Name == "" {
+			continue
+		}
+		seen[tag.Name] = true
+		entries = append(entries, components.TagPanelEntry{Name: tag.Name, Count: counts[tag.Name]})
+	}
+	// Include any tags found only in plan summaries (safety net).
+	for name := range counts {
+		if name != "" && !seen[name] {
+			entries = append(entries, components.TagPanelEntry{Name: name, Count: counts[name]})
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].Name < entries[j].Name
+	})
+	s.tagPanel.SetEntries(entries, len(s.allPlans), s.untaggedCount)
+}
+
+// SetDisplayMode switches the screen between display modes.
+func (s *PlansScreen) SetDisplayMode(mode string) {
+	s.displayMode = mode
+	if mode == claudeviewer.DisplayModeTagPlanContent {
+		if s.tagPanel == nil {
+			tagsW, _, _ := s.panelWidths()
+			contentHeight := s.height - 4
+			s.tagPanel = components.NewTagPanel(tagsW-4, contentHeight-4)
+		}
+		s.rebuildTagPanelEntries()
+		s.tagPanel.Focus()
+		s.focus = types.FocusTagPanel
+	} else {
+		s.tagPanel = nil
+		if s.focus == types.FocusTagPanel {
+			s.focus = types.FocusList
+		}
+		// Restore full unfiltered list.
+		if len(s.allPlans) > 0 {
+			s.plans = s.allPlans
+			s.updateListItems()
+		}
+	}
 }
 
 // ShortHelp returns key binding help.
 func (s *PlansScreen) ShortHelp() string {
 	switch s.focus {
+	case types.FocusTagPanel:
+		if s.tagPanel != nil && s.tagPanel.IsCreating() {
+			return "enter: create tag | esc: cancel"
+		}
+		return fmt.Sprintf("j/k: navigate tags | enter/tab: plans | /: search | n: new tag | q: quit | Plans: %d", len(s.plans))
 	case types.FocusList:
 		searchHelp := "/: search | T: tags"
 		if s.searchQuery != "" || len(s.tagFilters) > 0 {
@@ -707,7 +988,11 @@ func (s *PlansScreen) ShortHelp() string {
 			}
 			searchHelp = fmt.Sprintf("/: search | T: tags | c: clear [%s]", activeFilters)
 		}
-		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | v: fullscreen | e: edit | s: sync | S: settings | r: rsync | d: dump | C: connectors | %s | Plans: %d", searchHelp, len(s.plans))
+		tagNav := ""
+		if s.displayMode == claudeviewer.DisplayModeTagPlanContent {
+			tagNav = "shift+tab: tags | "
+		}
+		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | r: rsync | d: dump | C: connectors | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
 	case types.FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeGlamour {
@@ -737,6 +1022,9 @@ func (s *PlansScreen) ShortHelp() string {
 
 // IsInputMode returns true when capturing text input.
 func (s *PlansScreen) IsInputMode() bool {
+	if s.focus == types.FocusTagPanel && s.tagPanel != nil && s.tagPanel.IsCreating() {
+		return true
+	}
 	return s.focus == types.FocusEditor || s.focus == types.FocusSearch || s.focus == types.FocusTagFilter || s.showingModal
 }
 
@@ -834,7 +1122,8 @@ func (s *PlansScreen) dumpPlans() tea.Cmd {
 
 // PlansLoadedMsg is sent when plans are loaded.
 type PlansLoadedMsg struct {
-	Plans []claudeviewer.PlanSummary
+	Plans      []claudeviewer.PlanSummary
+	IsFiltered bool // when true, only s.plans is updated, not s.allPlans
 }
 
 // PlanDetailLoadedMsg is sent when plan detail is loaded.
@@ -884,6 +1173,16 @@ type RSyncResultMsg struct {
 // DumpResultMsg is sent when dump completes.
 type DumpResultMsg struct {
 	Count int
+	Error error
+}
+
+// CreateTagMsg requests creating a new tag.
+type CreateTagMsg struct {
+	Name string
+}
+
+// CreateTagResultMsg is sent when tag creation completes.
+type CreateTagResultMsg struct {
 	Error error
 }
 
@@ -956,4 +1255,18 @@ type SearchPlansWithTagsMsg struct {
 	Query    string
 	Tags     []string
 	MatchAll bool
+}
+
+// LoadAllTagsForPanelMsg requests loading all tags for the tag panel.
+type LoadAllTagsForPanelMsg struct{}
+
+// LoadUntaggedPlansMsg requests loading plans with no tags.
+type LoadUntaggedPlansMsg struct{}
+
+// AllTagsForPanelLoadedMsg carries all tags, their plan counts, and the tag→plans map.
+type AllTagsForPanelLoadedMsg struct {
+	Tags          []claudeviewer.Tag
+	Counts        map[string]int
+	UntaggedCount int
+	TagPlanMap    map[string][]claudeviewer.PlanSummary
 }

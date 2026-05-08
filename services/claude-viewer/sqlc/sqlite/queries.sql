@@ -235,3 +235,20 @@ FROM plans p
 JOIN plan_tags pt ON p.id = pt.plan_id
 WHERE pt.tag_id = ?
 ORDER BY p.modified_at DESC;
+
+-- name: GetTagPlanCounts :many
+SELECT t.name, COUNT(DISTINCT pt.plan_id) AS plan_count
+FROM tags t
+LEFT JOIN plan_tags pt ON t.id = pt.tag_id
+GROUP BY t.id, t.name
+ORDER BY t.name ASC;
+
+-- name: GetUntaggedPlanCount :one
+SELECT COUNT(*) AS count FROM plans
+WHERE id NOT IN (SELECT DISTINCT plan_id FROM plan_tags);
+
+-- name: ListUntaggedPlans :many
+SELECT id, file_name, title, created_at, modified_at, file_size, word_count
+FROM plans
+WHERE id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)
+ORDER BY modified_at DESC;

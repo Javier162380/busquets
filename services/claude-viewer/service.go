@@ -140,6 +140,56 @@ func (s *Service) GetAllTags(ctx context.Context) ([]dto.Tag, error) {
 	return s.db.ListAllTags(ctx)
 }
 
+// GetTagPlanCounts returns a map of tag name → number of plans tagged with it.
+func (s *Service) GetTagPlanCounts(ctx context.Context) (map[string]int, error) {
+	return s.db.GetTagPlanCounts(ctx)
+}
+
+// GetUntaggedPlanCount returns the number of plans with no tags.
+func (s *Service) GetUntaggedPlanCount(ctx context.Context) (int64, error) {
+	return s.db.GetUntaggedPlanCount(ctx)
+}
+
+// ListPlansWithTags returns all plans with their tags reliably populated via a single JOIN query.
+// Plans with no tags have an empty Tags slice.
+func (s *Service) ListPlansWithTags(ctx context.Context) ([]PlanSummary, error) {
+	plans, err := s.db.ListPlansWithTags(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.toSummaries(ctx, plans), nil
+}
+
+// BuildTagPlanMap returns a map of tag name → plans carrying that tag.
+// Plans with no tags are stored under the empty string key "".
+func (s *Service) BuildTagPlanMap(ctx context.Context) (map[string][]PlanSummary, error) {
+	plans, err := s.ListPlansWithTags(ctx)
+	if err != nil {
+		return nil, err
+	}
+	m := make(map[string][]PlanSummary)
+	for _, p := range plans {
+		if len(p.Tags) == 0 {
+			m[""] = append(m[""], p)
+		}
+		for _, t := range p.Tags {
+			if t.Name != "" {
+				m[t.Name] = append(m[t.Name], p)
+			}
+		}
+	}
+	return m, nil
+}
+
+// ListUntaggedPlansWithReadingTime returns plans with no tags, including reading time.
+func (s *Service) ListUntaggedPlansWithReadingTime(ctx context.Context) ([]PlanSummary, error) {
+	plans, err := s.db.ListUntaggedPlans(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return s.toSummaries(ctx, plans), nil
+}
+
 // DeleteTag deletes a tag by ID. This will also remove all plan-tag associations
 // within a transaction (first removes associations, then the tag).
 func (s *Service) DeleteTag(ctx context.Context, id int64) error {

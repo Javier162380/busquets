@@ -29,6 +29,7 @@ type UnifiedService interface {
 	SyncPlans(ctx context.Context) (int, error)
 	RSyncPlans(ctx context.Context) (int, error)
 	DumpPlans(ctx context.Context) (int, error)
+	CreateTag(ctx context.Context, name string, description, color *string) (claudeviewer.Tag, error)
 	RenderMarkdown(content string) (string, error)
 	GetSetting(ctx context.Context, variableName string) (claudeviewer.Setting, bool, error)
 	SetSetting(ctx context.Context, varName string, values claudeviewer.SettingValues) error
@@ -45,6 +46,10 @@ type UnifiedService interface {
 	IsWatchModeRunning() bool
 	UpdateWatchInterval(intervalSeconds float64)
 	GetAllTags(ctx context.Context) ([]claudeviewer.Tag, error)
+	GetTagPlanCounts(ctx context.Context) (map[string]int, error)
+	GetUntaggedPlanCount(ctx context.Context) (int64, error)
+	ListUntaggedPlansWithReadingTime(ctx context.Context) ([]claudeviewer.PlanSummary, error)
+	BuildTagPlanMap(ctx context.Context) (map[string][]claudeviewer.PlanSummary, error)
 	GetPlanTags(ctx context.Context, fileName string) ([]claudeviewer.Tag, error)
 	SetPlanTags(ctx context.Context, fileName string, tagNames []string) error
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]claudeviewer.PlanSummary, error)
@@ -80,6 +85,7 @@ type App struct {
 
 	isDarkModeEnabled       bool
 	renderMarkDownByDefault bool
+	displayMode             string
 }
 
 // New creates a new TUI application.
@@ -114,8 +120,15 @@ func (a *App) Init() tea.Cmd {
 	}
 	a.renderMarkDownByDefault = renderMarkDownByDefault
 
+	setting, exists, _ = a.service.GetSetting(a.ctx, claudeviewer.SettingDefaultDisplayMode)
+	displayMode := claudeviewer.DisplayModePlanContent
+	if exists && setting.IsString() {
+		displayMode = setting.GetStringValue()
+	}
+	a.displayMode = displayMode
+
 	// Create initial plans screen.
-	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault)
+	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault, displayMode)
 	a.stack = append(a.stack, plansScreen)
 
 	// Start watching for watch results and load initial plans.
@@ -183,7 +196,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.Versions) == 0 {
 			// No versions - show message in App's status bar and stay on current screen.
 			a.statusBar.SetError("No versions found")
-			return a, nil
+			return a, ClearStatusCmd(500 * time.Millisecond) //nolint:gci // skip
 		}
 		// Versions exist - push versions screen with data.
 		return a, a.pushVersionsScreenWithData(msg.PlanName, msg.Versions)
@@ -242,6 +255,44 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case screens.DumpPlansMsg:
 		a.statusBar.SetLoading("Dumping plans from database to source directory...")
 		return a, DumpPlansCmd(a.ctx, a.service)
+
+	case screens.DisplayModeChangedMsg:
+		setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingDefaultDisplayMode)
+		mode := claudeviewer.DisplayModePlanContent
+		if exists && setting.IsString() {
+			mode = setting.GetStringValue()
+		}
+		a.displayMode = mode
+		for _, screen := range a.stack {
+			if s, ok := screen.(*screens.PlansScreen); ok {
+				s.SetDisplayMode(mode)
+			}
+		}
+		if mode == claudeviewer.DisplayModeTagPlanContent {
+			return a, LoadAllTagsForPanelCmd(a.ctx, a.service)
+		}
+		return a, nil
+
+	case screens.LoadAllTagsForPanelMsg:
+		return a, LoadAllTagsForPanelCmd(a.ctx, a.service)
+
+	case screens.AllTagsForPanelLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+
+	case screens.CreateTagMsg:
+		return a, CreateTagCmd(a.ctx, a.service, msg.Name)
+
+	case screens.CreateTagResultMsg:
+		if msg.Error != nil {
+			a.statusBar.SetError("Failed to create tag: " + msg.Error.Error())
+			return a, ClearStatusCmd(2 * time.Second)
+		}
+		a.statusBar.SetSuccess("Tag created")
+		return a, tea.Batch(
+			LoadPlansCmd(a.ctx, a.service),
+			LoadAllTagsForPanelCmd(a.ctx, a.service),
+			ClearStatusCmd(1*time.Second),
+		)
 
 	case screens.ErrorMsg:
 		// Show error in App's status bar (which is rendered).
@@ -442,6 +493,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case screens.SearchPlansWithTagsMsg:
 		return a, SearchPlansWithTagsCmd(a.ctx, a.service, msg.Query, msg.Tags, msg.MatchAll)
+
+	case screens.LoadUntaggedPlansMsg:
+		return a, LoadUntaggedPlansCmd(a.ctx, a.service)
 
 	case components.DeleteTagMsg:
 		return a, DeleteTagsCmd(a.ctx, a.service, msg.TagID, msg.CurrentPlan)

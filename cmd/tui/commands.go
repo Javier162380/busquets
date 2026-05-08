@@ -9,6 +9,7 @@ import (
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/sync/errgroup"
 )
 
 // Command builders.
@@ -132,6 +133,17 @@ func RsyncPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 			return screens.RSyncResultMsg{Error: err}
 		}
 		return screens.RSyncResultMsg{Count: count}
+	}
+}
+
+// CreateTagCmd creates a new tag via the service.
+func CreateTagCmd(ctx context.Context, svc UnifiedService, name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		_, err := svc.CreateTag(ctx, name, nil, nil)
+		return screens.CreateTagResultMsg{Error: err}
 	}
 }
 
@@ -355,6 +367,62 @@ func WatchChannelListenerCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 	}
 }
 
+// LoadAllTagsForPanelCmd loads all tags, their plan counts, and the untagged count for the tag panel.
+func LoadAllTagsForPanelCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		errGroup, eggCtx := errgroup.WithContext(ctx)
+		var tags []claudeviewer.Tag
+		errGroup.Go(func() error {
+			var err error
+			tags, err = svc.GetAllTags(eggCtx)
+			return err
+		})
+
+		var counts map[string]int
+		errGroup.Go(func() error {
+			var err error
+			counts, err = svc.GetTagPlanCounts(eggCtx)
+			return err
+		})
+
+		var untaggedCount int64
+		errGroup.Go(func() error {
+			var err error
+			untaggedCount, err = svc.GetUntaggedPlanCount(eggCtx)
+			return err
+		})
+
+		var tagPlanMap map[string][]claudeviewer.PlanSummary
+		errGroup.Go(func() error {
+			var err error
+			tagPlanMap, err = svc.BuildTagPlanMap(eggCtx)
+			return err
+		})
+
+		if err := errGroup.Wait(); err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.AllTagsForPanelLoadedMsg{Tags: tags, Counts: counts, UntaggedCount: int(untaggedCount), TagPlanMap: tagPlanMap}
+	}
+}
+
+// LoadUntaggedPlansCmd loads plans with no tags assigned.
+func LoadUntaggedPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+
+		plans, err := svc.ListUntaggedPlansWithReadingTime(ctx)
+		if err != nil {
+			return screens.ErrorMsg{Error: err}
+		}
+		return screens.PlansLoadedMsg{Plans: plans, IsFiltered: true}
+	}
+}
+
 // ClearStatusCmd clears the status bar after a delay.
 func ClearStatusCmd(delay time.Duration) tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg {
@@ -418,7 +486,7 @@ func SearchPlansWithTagsCmd(ctx context.Context, svc UnifiedService, query strin
 		if err != nil {
 			return screens.ErrorMsg{Error: err}
 		}
-		return screens.PlansLoadedMsg{Plans: plans}
+		return screens.PlansLoadedMsg{Plans: plans, IsFiltered: true}
 	}
 }
 

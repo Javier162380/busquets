@@ -23,6 +23,13 @@ const (
 	SettingRenderMarkdownByDefault = "render_markdown_by_default"
 	SettingWatchModeEnabled        = "watch_mode_enabled"
 	SettingWatchIntervalSeconds    = "watch_interval_seconds"
+	SettingDefaultDisplayMode      = "default_display_mode"
+)
+
+// Display mode values for SettingDefaultDisplayMode.
+const (
+	DisplayModePlanContent    = "plan_content"     //nolint:gci    // two-panel: list + content (default)
+	DisplayModeTagPlanContent = "tag_plan_content" // three-panel: tags + list + content
 )
 
 type Setting struct {

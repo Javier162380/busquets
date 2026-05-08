@@ -12,10 +12,11 @@ import (
 )
 
 type SettingDefinition struct {
-	Name        string
-	Description string
-	Type        string
-	Default     claudeviewer.SettingValues
+	Name          string
+	Description   string
+	Type          string
+	Default       claudeviewer.SettingValues
+	AllowedValues []string // non-nil: cycle through these on Enter/Space (string settings)
 }
 
 var KnownSettings = []SettingDefinition{
@@ -48,6 +49,12 @@ var KnownSettings = []SettingDefinition{
 		Description: "Watch mode sync interval (seconds)",
 		Type:        claudeviewer.SettingTypeNumber,
 		Default:     claudeviewer.SettingValues{NumberValue: new(float64(5))},
+	},
+	{
+		Name:          claudeviewer.SettingDefaultDisplayMode,
+		Description:   "Default plans screen layout",
+		Type:          claudeviewer.SettingTypeString,
+		AllowedValues: []string{claudeviewer.DisplayModePlanContent, claudeviewer.DisplayModeTagPlanContent},
 	},
 }
 
@@ -128,6 +135,10 @@ func (s *SettingsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			return s, func() tea.Msg {
 				return RenderMarkDownByDefaultMsg{}
 			}
+		case claudeviewer.SettingDefaultDisplayMode:
+			return s, func() tea.Msg {
+				return DisplayModeChangedMsg{}
+			}
 		}
 
 		return s, nil
@@ -199,6 +210,23 @@ func (s *SettingsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 				setting.EditBuffer = fmt.Sprintf("%.0f", *setting.Value.NumberValue)
 			} else {
 				setting.EditBuffer = ""
+			}
+
+		case claudeviewer.SettingTypeString:
+			if len(setting.Definition.AllowedValues) > 0 {
+				current := ""
+				if setting.Value.StringValue != nil {
+					current = *setting.Value.StringValue
+				}
+				next := setting.Definition.AllowedValues[0]
+				for i, v := range setting.Definition.AllowedValues {
+					if v == current {
+						next = setting.Definition.AllowedValues[(i+1)%len(setting.Definition.AllowedValues)]
+						break
+					}
+				}
+				setting.Value.StringValue = &next
+				return s, s.saveSetting(setting.Definition.Name, setting.Value)
 			}
 		}
 		return s, nil
@@ -281,6 +309,12 @@ func (s *SettingsScreen) renderSettingItem(index int, setting *SettingItem) stri
 		} else if setting.Value.NumberValue != nil {
 			value = lipgloss.NewStyle().Foreground(styles.ForegroundColor).Render(fmt.Sprintf("%.0f", *setting.Value.NumberValue))
 		}
+	case claudeviewer.SettingTypeString:
+		if setting.Value.StringValue != nil {
+			value = lipgloss.NewStyle().Foreground(styles.ForegroundColor).Render("[" + *setting.Value.StringValue + "]")
+		} else if len(setting.Definition.AllowedValues) > 0 {
+			value = lipgloss.NewStyle().Foreground(styles.ForegroundColor).Render("[" + setting.Definition.AllowedValues[0] + "]")
+		}
 	}
 
 	desc := styles.MutedStyle.Render(setting.Definition.Description)
@@ -341,5 +375,7 @@ type SettingUpdateResultMsg struct {
 type ThemeChangedMsg struct{}
 
 type RenderMarkDownByDefaultMsg struct{}
+
+type DisplayModeChangedMsg struct{}
 
 type OpenSettingsMsg struct{}

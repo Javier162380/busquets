@@ -64,11 +64,21 @@ func (d ListItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 		return
 	}
 
+	title := i.Title()
+	// Truncate title so it never wraps inside the panel.
+	maxWidth := m.Width() - 4 // "❯ " prefix (2) + margin (2)
+	if maxWidth > 0 {
+		runes := []rune(title)
+		if len(runes) > maxWidth {
+			title = string(runes[:maxWidth-1]) + "…"
+		}
+	}
+
 	var str string
 	if index == m.Index() {
-		str = styles.ActiveStyle.Render(fmt.Sprintf("❯ %s", i.Title()))
+		str = styles.ActiveStyle.Render(fmt.Sprintf("❯ %s", title))
 	} else {
-		str = styles.InactiveStyle.Render(fmt.Sprintf("  %s", i.Title()))
+		str = styles.InactiveStyle.Render(fmt.Sprintf("  %s", title))
 	}
 
 	fmt.Fprint(w, str)

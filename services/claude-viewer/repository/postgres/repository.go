@@ -140,7 +140,7 @@ func planSummaryFromListRow(r ListAllPlansWithTagsRow) dto.PlanSummary {
 		tags[i] = dto.Tag{
 			ID: int64(tagID),
 		}
-		if i < len(r.TagNames)-1 {
+		if i < len(r.TagNames) {
 			tags[i].Name = r.TagNames[i]
 		}
 	}
@@ -781,6 +781,54 @@ func (r *Repository) GetTagByID(ctx context.Context, id int64) (dto.Tag, error) 
 		return dto.Tag{}, err
 	}
 	return tagToDomain(tag), nil
+}
+
+func (r *Repository) GetTagPlanCounts(ctx context.Context) (map[string]int, error) {
+	rows, err := r.q.GetTagPlanCounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[string]int, len(rows))
+	for _, row := range rows {
+		counts[row.Name] = int(row.PlanCount)
+	}
+	return counts, nil
+}
+
+func (r *Repository) GetUntaggedPlanCount(ctx context.Context) (int64, error) {
+	return r.q.GetUntaggedPlanCount(ctx)
+}
+
+func (r *Repository) ListUntaggedPlans(ctx context.Context) ([]dto.PlanSummary, error) {
+	rows, err := r.q.ListUntaggedPlans(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.PlanSummary, len(rows))
+	for i, row := range rows {
+		result[i] = dto.PlanSummary{
+			ID:         int64(row.ID),
+			FileName:   row.FileName,
+			Title:      row.Title,
+			CreatedAt:  timestamptzToTime(row.CreatedAt),
+			ModifiedAt: timestamptzToTime(row.ModifiedAt),
+			FileSize:   row.FileSize,
+			WordCount:  row.WordCount,
+		}
+	}
+	return result, nil
+}
+
+func (r *Repository) ListPlansWithTags(ctx context.Context) ([]dto.PlanSummary, error) {
+	rows, err := r.q.ListAllPlansWithTags(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.PlanSummary, len(rows))
+	for i, row := range rows {
+		result[i] = planSummaryFromListRow(row)
+	}
+	return result, nil
 }
 
 func (r *Repository) ListAllTags(ctx context.Context) ([]dto.Tag, error) {
