@@ -461,6 +461,11 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		}
 		return s, nil
 
+	case "shift+tab":
+		if s.displayMode == claudeviewer.DisplayModeTagPlanContent {
+			s.focus = types.FocusList
+			return s, nil
+		}
 	case "esc":
 		// Back to list (split view) or back to split view (fullscreen).
 		if s.layout == types.LayoutFullscreen {
