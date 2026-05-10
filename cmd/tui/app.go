@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
@@ -55,15 +56,6 @@ type UnifiedService interface {
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]claudeviewer.PlanSummary, error)
 	DeleteTag(ctx context.Context, id int64) error
 }
-
-// WatchResultMsg wraps watch sync results from service.
-type WatchResultMsg struct {
-	Count int
-	Error error
-}
-
-// ClearStatusMsg signals to clear the status bar message.
-type ClearStatusMsg struct{}
 
 // App is the root TUI application model.
 type App struct {
@@ -184,39 +176,33 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 
-	case screens.PopScreenMsg:
+	case messages.PopScreenMsg:
 		return a, a.popScreen()
 
-	case screens.RequestVersionsScreenMsg:
-		// Check if versions exist before navigating.
+	case messages.RequestVersionsScreenMsg:
 		return a, LoadVersionsForNavigationCmd(a.ctx, a.service, msg.PlanName)
 
-	case screens.VersionsNavigationResultMsg:
-		// Check if versions exist.
+	case messages.VersionsNavigationResultMsg:
 		if len(msg.Versions) == 0 {
-			// No versions - show message in App's status bar and stay on current screen.
 			a.statusBar.SetError("No versions found")
-			return a, ClearStatusCmd(500 * time.Millisecond) //nolint:gci // skip
+			return a, ClearStatusCmd(500 * time.Millisecond)
 		}
-		// Versions exist - push versions screen with data.
 		return a, a.pushVersionsScreenWithData(msg.PlanName, msg.Versions)
 
-	case screens.CloseHelpMsg:
+	case messages.CloseHelpMsg:
 		a.showHelp = false
 		return a, nil
 
-	// Service result messages - handle and delegate.
-	case screens.PlansLoadedMsg:
-		// Delegate to current screen.
+	case messages.PlansLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
-	case screens.PlanDetailLoadedMsg:
+	case messages.PlanDetailLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
-	case screens.VersionsLoadedMsg:
+	case messages.VersionsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
-	case screens.SaveResultMsg:
+	case messages.SaveResultMsg:
 		switch {
 		case msg.Error != nil:
 			a.statusBar.SetError("Unable to save result")
@@ -227,16 +213,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, ClearStatusCmd(500 * time.Millisecond)
 
-	case screens.SyncResultMsg:
+	case messages.SyncResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError("Sync failed: " + msg.Error.Error())
 			return a, nil
 		}
-		// Show success message and reload plans.
 		a.statusBar.SetSuccess(fmt.Sprintf("Synced %d plans", msg.Count))
 		return a, tea.Batch(LoadPlansCmd(a.ctx, a.service), ClearStatusCmd(1*time.Second))
 
-	case screens.RSyncResultMsg:
+	case messages.RSyncResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError("RSync failed: " + msg.Error.Error())
 			return a, nil
@@ -244,7 +229,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.statusBar.SetSuccess(fmt.Sprintf("Rsync succeeded: %d plans sync from remote into the local directory", msg.Count))
 		return a, LoadPlansCmd(a.ctx, a.service)
 
-	case screens.DumpResultMsg:
+	case messages.DumpResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError("Dump failed: " + msg.Error.Error())
 			return a, ClearStatusCmd(500 * time.Millisecond)
@@ -252,11 +237,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.statusBar.SetSuccess(fmt.Sprintf("Dumped %d plans to source directory", msg.Count))
 		return a, ClearStatusCmd(500 * time.Millisecond)
 
-	case screens.DumpPlansMsg:
+	case messages.DumpPlansMsg:
 		a.statusBar.SetLoading("Dumping plans from database to source directory...")
 		return a, DumpPlansCmd(a.ctx, a.service)
 
-	case screens.DisplayModeChangedMsg:
+	case messages.DisplayModeChangedMsg:
 		setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingDefaultDisplayMode)
 		mode := claudeviewer.DisplayModePlanContent
 		if exists && setting.IsString() {
@@ -273,16 +258,16 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, nil
 
-	case screens.LoadAllTagsForPanelMsg:
+	case messages.LoadAllTagsForPanelMsg:
 		return a, LoadAllTagsForPanelCmd(a.ctx, a.service)
 
-	case screens.AllTagsForPanelLoadedMsg:
+	case messages.AllTagsForPanelLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
-	case screens.CreateTagMsg:
+	case messages.CreateTagMsg:
 		return a, CreateTagCmd(a.ctx, a.service, msg.Name)
 
-	case screens.CreateTagResultMsg:
+	case messages.CreateTagResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError("Failed to create tag: " + msg.Error.Error())
 			return a, ClearStatusCmd(2 * time.Second)
@@ -294,84 +279,76 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ClearStatusCmd(1*time.Second),
 		)
 
-	case screens.ErrorMsg:
-		// Show error in App's status bar (which is rendered).
+	case messages.ErrorMsg:
 		a.statusBar.SetError(msg.Error.Error())
 		return a, ClearStatusCmd(500 * time.Millisecond)
 
-	// Internal command messages from screens.
-	case screens.LoadPlanDetailMsg:
+	case messages.LoadPlanDetailMsg:
 		return a, LoadPlanDetailCmd(a.ctx, a.service, msg.FileName)
 
-	case screens.SavePlanMsg:
+	case messages.SavePlanMsg:
 		return a, SavePlanCmd(a.ctx, a.service, msg.FileName, msg.Content, msg.Modified)
 
-	case screens.SyncPlansMsg:
+	case messages.SyncPlansMsg:
 		a.statusBar.SetLoading("Syncing plans...")
 		return a, SyncPlansCmd(a.ctx, a.service)
 
-	case screens.RSyncPlansMsg:
+	case messages.RSyncPlansMsg:
 		a.statusBar.SetLoading("Rsyncing plans from remote directory into the LLM directory...")
 		return a, RsyncPlansCmd(a.ctx, a.service)
 
-	case screens.LoadVersionsMsg:
+	case messages.LoadVersionsMsg:
 		return a, LoadVersionsCmd(a.ctx, a.service, msg.PlanName)
 
-	case screens.SearchPlansMsg:
+	case messages.SearchPlansMsg:
 		return a, SearchPlansCmd(a.ctx, a.service, msg.Query)
 
-	case screens.SearchVersionsMsg:
+	case messages.SearchVersionsMsg:
 		return a, SearchVersionsCmd(a.ctx, a.service, msg.PlanName, msg.Query)
 
-	case screens.ClearSearchMsg:
+	case messages.ClearSearchMsg:
 		return a, LoadPlansCmd(a.ctx, a.service)
 
-	case screens.RestoreVersionMsg:
+	case messages.RestoreVersionMsg:
 		a.statusBar.SetLoading("Restoring version...")
 		return a, RestoreVersionCmd(a.ctx, a.service, msg.PlanName, msg.VersionNumber)
 
-	case screens.RestoreResultMsg:
+	case messages.RestoreResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError("Restore failed: " + msg.Error.Error())
 			return a, nil
 		}
 		a.statusBar.SetSuccess("Version restored successfully")
-		// Pop versions screen to go back to plans.
 		a.popScreen()
-		// Sync and reload plans to show restored content.
 		return a, tea.Batch(
 			SyncPlansCmd(a.ctx, a.service),
 			LoadPlansCmd(a.ctx, a.service),
 		)
 
-	// Settings messages.
-	case screens.OpenSettingsMsg:
+	case messages.OpenSettingsMsg:
 		return a, a.pushSettingsScreen()
 
-	case screens.LoadSettingsMsg:
+	case messages.LoadSettingsMsg:
 		return a, LoadSettingsCmd(a.ctx, a.service, msg.SettingNames)
 
-	case screens.SaveSettingMsg:
+	case messages.SaveSettingMsg:
 		return a, SetSettingCmd(a.ctx, a.service, msg.Name, msg.Values)
 
-	case screens.SettingsLoadedMsg:
+	case messages.SettingsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
-	case screens.SettingUpdateResultMsg:
+	case messages.SettingUpdateResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError("Failed to save setting: " + msg.Error.Error())
 		} else {
 			a.statusBar.SetSuccess("Setting saved")
 		}
 
-		// Handle watch mode toggle
 		if msg.Success && msg.SettingName == claudeviewer.SettingWatchModeEnabled {
-			// Retrieve the new value
 			setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingWatchModeEnabled)
 			if exists && setting.IsBoolean() {
 				enabled := setting.GetBooleanValue()
 				if enabled {
-					// Get interval
 					intervalSetting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingWatchIntervalSeconds)
 					intervalSeconds := 5.0
 					if exists && intervalSetting.IsNumber() {
@@ -386,7 +363,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		// Handle interval changes while watch mode is running
 		if msg.Success && msg.SettingName == claudeviewer.SettingWatchIntervalSeconds {
 			if a.service.IsWatchModeRunning() {
 				setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingWatchIntervalSeconds)
@@ -398,8 +374,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return a.delegateToCurrentScreen(msg)
 
-	// Watch mode messages.
-	case WatchResultMsg:
+	case messages.WatchResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError(fmt.Sprintf("Auto-sync failed: %v", msg.Error))
 		} else if msg.Count > 0 {
@@ -410,54 +385,52 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				ClearStatusCmd(1*time.Second),
 			)
 		}
-		// Always re-schedule listener
 		return a, WatchChannelListenerCmd(a.ctx, a.service)
 
-	case ClearStatusMsg:
+	case messages.ClearStatusMsg:
 		a.statusBar.Clear()
 		return a, nil
 
-	// Connector messages.
-	case screens.SendToConnectorMsg:
+	case messages.SendToConnectorMsg:
 		a.statusBar.SetLoading("Sending to connector...")
 		return a, SendToConnectorCmd(a.ctx, a.service, msg.PlanFileName)
 
-	case screens.SendToConnectorResultMsg:
+	case messages.SendToConnectorResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError("Send failed: " + msg.Error.Error())
 		} else {
 			a.statusBar.SetSuccess("Sent successfully!")
 		}
 		return a, ClearStatusCmd(1 * time.Second)
-	// Connector configuration messages.
-	case screens.OpenConnectorsMsg:
+
+	case messages.OpenConnectorsMsg:
 		return a, a.pushConnectorsScreen()
 
-	case screens.LoadConnectorsMsg:
+	case messages.LoadConnectorsMsg:
 		return a, LoadConnectorsCmd(a.ctx, a.service)
 
-	case screens.ConnectorsLoadedMsg:
+	case messages.ConnectorsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
-	case screens.LoadConnectorSettingsMsg:
+	case messages.LoadConnectorSettingsMsg:
 		return a, LoadConnectorSettingsCmd(a.ctx, a.service, msg.ConnectorName)
 
-	case screens.ConnectorSettingsLoadedMsg:
+	case messages.ConnectorSettingsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
-	case screens.EnableConnectorMsg:
+	case messages.EnableConnectorMsg:
 		a.statusBar.SetLoading("Enabling connector...")
 		return a, EnableConnectorCmd(a.ctx, a.service, msg.Name)
 
-	case screens.DisableConnectorMsg:
+	case messages.DisableConnectorMsg:
 		a.statusBar.SetLoading("Disabling connector...")
 		return a, DisableConnectorCmd(a.ctx, a.service)
 
-	case screens.SaveConnectorSettingMsg:
+	case messages.SaveConnectorSettingMsg:
 		a.statusBar.SetLoading("Saving...")
 		return a, SaveConnectorSettingCmd(a.ctx, a.service, msg.ConnectorName, msg.Key, msg.Value, msg.IsSecret)
 
-	case screens.ConnectorUpdateResultMsg:
+	case messages.ConnectorUpdateResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError(msg.Error.Error())
 		} else {
@@ -465,11 +438,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a.delegateToCurrentScreen(msg)
 
-	case screens.ValidateConnectorMsg:
+	case messages.ValidateConnectorMsg:
 		a.statusBar.SetLoading("Validating...")
 		return a, ValidateConnectorCmd(a.ctx, a.service, msg.Name)
 
-	case screens.ValidateConnectorResultMsg:
+	case messages.ValidateConnectorResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError("Validation failed: " + msg.Error.Error())
 		} else {
@@ -477,24 +450,23 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return a, ClearStatusCmd(1 * time.Second)
 
-	// Tag messages.
-	case screens.LoadTagsForModalMsg:
+	case messages.LoadTagsForModalMsg:
 		return a, LoadTagsForModalCmd(a.ctx, a.service, msg.FileName)
 
 	case components.TagsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
-	case screens.SetPlanTagsMsg:
+	case messages.SetPlanTagsMsg:
 		a.statusBar.SetLoading("Saving tags...")
 		return a, tea.Batch(
 			SetPlanTagsCmd(a.ctx, a.service, msg.FileName, msg.Tags),
 			ClearStatusCmd(1*time.Second),
 		)
 
-	case screens.SearchPlansWithTagsMsg:
+	case messages.SearchPlansWithTagsMsg:
 		return a, SearchPlansWithTagsCmd(a.ctx, a.service, msg.Query, msg.Tags, msg.MatchAll)
 
-	case screens.LoadUntaggedPlansMsg:
+	case messages.LoadUntaggedPlansMsg:
 		return a, LoadUntaggedPlansCmd(a.ctx, a.service)
 
 	case components.DeleteTagMsg:
@@ -506,22 +478,19 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.statusBar.SetSuccess("Deleted tag")
 		}
-
 		return a, tea.Batch(
 			ClearStatusCmd(500*time.Millisecond), LoadTagsForModalCmd(a.ctx, a.service, msg.FileName),
 		)
 
-	case screens.ThemeChangedMsg:
-		// Get current dark mode setting and apply theme.
+	case messages.ThemeChangedMsg:
 		setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingDarkModeEnabled)
-		darkMode := true // default
+		darkMode := true
 		if exists && setting.IsBoolean() {
 			darkMode = setting.GetBooleanValue()
 		}
 		a.isDarkModeEnabled = darkMode
 		styles.SetDarkMode(darkMode)
 
-		// Update all screens in the stack that support dark mode.
 		for _, screen := range a.stack {
 			switch s := screen.(type) {
 			case *screens.PlansScreen:
@@ -531,8 +500,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return a, nil
-	case screens.RenderMarkDownByDefaultMsg:
-		// Get current render markdown by default setting.
+
+	case messages.RenderMarkDownByDefaultMsg:
 		setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingRenderMarkdownByDefault)
 		renderMarkDownByDefault := false
 		if exists && setting.IsBoolean() {
@@ -551,7 +520,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, nil
 	}
 
-	// Delegate other messages to current screen.
 	return a.delegateToCurrentScreen(msg)
 }
 
@@ -574,24 +542,18 @@ func (a *App) View() string {
 		return "Loading..."
 	}
 
-	// If help is shown, render help overlay.
 	if a.showHelp {
 		return a.help.View()
 	}
 
-	// Get current screen view.
 	var mainContent string
 	if len(a.stack) > 0 {
 		current := a.stack[len(a.stack)-1]
 		mainContent = current.View()
-
-		// Update status bar with screen's help.
 		a.statusBar.SetHelp(current.ShortHelp())
 	}
 
-	// Render status bar (footer).
 	status := a.statusBar.View()
-
 	return fmt.Sprintf("%s\n%s", mainContent, status)
 }
 

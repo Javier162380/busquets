@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -22,9 +22,9 @@ func LoadPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 
 		plans, err := svc.ListAllPlansWithReadingTime(ctx)
 		if err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
-		return screens.PlansLoadedMsg{Plans: plans}
+		return messages.PlansLoadedMsg{Plans: plans}
 	}
 }
 
@@ -36,9 +36,9 @@ func SearchPlansCmd(ctx context.Context, svc UnifiedService, query string) tea.C
 
 		plans, err := svc.SearchPlansWithReadingTime(ctx, query)
 		if err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
-		return screens.PlansLoadedMsg{Plans: plans}
+		return messages.PlansLoadedMsg{Plans: plans}
 	}
 }
 
@@ -50,9 +50,9 @@ func LoadPlanDetailCmd(ctx context.Context, svc UnifiedService, fileName string)
 
 		detail, err := svc.GetPlanDetailByFileName(ctx, fileName)
 		if err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
-		return screens.PlanDetailLoadedMsg{Detail: detail}
+		return messages.PlanDetailLoadedMsg{Detail: detail}
 	}
 }
 
@@ -64,9 +64,9 @@ func LoadVersionsCmd(ctx context.Context, svc UnifiedService, planName string) t
 
 		versions, err := svc.GetPlanVersionHistory(ctx, planName, 0, 100)
 		if err != nil {
-			return screens.VersionErrorMsg{Error: err}
+			return messages.VersionErrorMsg{Error: err}
 		}
-		return screens.VersionsLoadedMsg{Versions: versions}
+		return messages.VersionsLoadedMsg{Versions: versions}
 	}
 }
 
@@ -78,9 +78,9 @@ func LoadVersionsForNavigationCmd(ctx context.Context, svc UnifiedService, planN
 
 		versions, err := svc.GetPlanVersionHistory(ctx, planName, 0, 100)
 		if err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
-		return screens.VersionsNavigationResultMsg{
+		return messages.VersionsNavigationResultMsg{
 			PlanName: planName,
 			Versions: versions,
 		}
@@ -102,9 +102,9 @@ func SavePlanCmd(ctx context.Context, svc UnifiedService, fileName, content stri
 
 		result, err := svc.UpdatePlan(ctx, req)
 		if err != nil {
-			return screens.SaveResultMsg{Error: err}
+			return messages.SaveResultMsg{Error: err}
 		}
-		return screens.SaveResultMsg{Result: result}
+		return messages.SaveResultMsg{Result: result}
 	}
 }
 
@@ -116,9 +116,9 @@ func SyncPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 
 		count, err := svc.SyncPlans(ctx)
 		if err != nil {
-			return screens.SyncResultMsg{Error: err}
+			return messages.SyncResultMsg{Error: err}
 		}
-		return screens.SyncResultMsg{Count: count}
+		return messages.SyncResultMsg{Count: count}
 	}
 }
 
@@ -130,9 +130,9 @@ func RsyncPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 
 		count, err := svc.RSyncPlans(ctx)
 		if err != nil {
-			return screens.RSyncResultMsg{Error: err}
+			return messages.RSyncResultMsg{Error: err}
 		}
-		return screens.RSyncResultMsg{Count: count}
+		return messages.RSyncResultMsg{Count: count}
 	}
 }
 
@@ -143,7 +143,7 @@ func CreateTagCmd(ctx context.Context, svc UnifiedService, name string) tea.Cmd 
 		defer cancel()
 
 		_, err := svc.CreateTag(ctx, name, nil, nil)
-		return screens.CreateTagResultMsg{Error: err}
+		return messages.CreateTagResultMsg{Error: err}
 	}
 }
 
@@ -155,23 +155,23 @@ func DumpPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 
 		count, err := svc.DumpPlans(ctx)
 		if err != nil {
-			return screens.DumpResultMsg{Error: err}
+			return messages.DumpResultMsg{Error: err}
 		}
-		return screens.DumpResultMsg{Count: count}
+		return messages.DumpResultMsg{Count: count}
 	}
 }
 
-// SearchVersionsCmd searches a plan over it's different versions.
+// SearchVersionsCmd searches a plan over its different versions.
 func SearchVersionsCmd(ctx context.Context, svc UnifiedService, currentPlanName, query string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		planVersions, err := svc.SearchVersions(ctx, currentPlanName, query)
 		if err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
 
-		return screens.VersionsLoadedMsg{Versions: planVersions}
+		return messages.VersionsLoadedMsg{Versions: planVersions}
 	}
 }
 
@@ -183,9 +183,9 @@ func RestoreVersionCmd(ctx context.Context, svc UnifiedService, planName string,
 
 		err := svc.RestorePlanVersion(ctx, planName, versionNumber)
 		if err != nil {
-			return screens.RestoreResultMsg{Error: err}
+			return messages.RestoreResultMsg{Error: err}
 		}
-		return screens.RestoreResultMsg{
+		return messages.RestoreResultMsg{
 			Success:  true,
 			PlanName: planName,
 		}
@@ -205,7 +205,7 @@ func LoadSettingsCmd(ctx context.Context, svc UnifiedService, settingNames []str
 				settings[name] = setting
 			}
 		}
-		return screens.SettingsLoadedMsg{Settings: settings}
+		return messages.SettingsLoadedMsg{Settings: settings}
 	}
 }
 
@@ -217,9 +217,9 @@ func SetSettingCmd(ctx context.Context, svc UnifiedService, name string, values 
 
 		err := svc.SetSetting(ctx, name, values)
 		if err != nil {
-			return screens.SettingUpdateResultMsg{Error: err}
+			return messages.SettingUpdateResultMsg{Error: err}
 		}
-		return screens.SettingUpdateResultMsg{
+		return messages.SettingUpdateResultMsg{
 			Success:     true,
 			SettingName: name,
 		}
@@ -234,9 +234,9 @@ func SendToConnectorCmd(ctx context.Context, svc UnifiedService, planFileName st
 
 		err := svc.SendToConnector(ctx, planFileName)
 		if err != nil {
-			return screens.SendToConnectorResultMsg{Success: false, Error: err}
+			return messages.SendToConnectorResultMsg{Success: false, Error: err}
 		}
-		return screens.SendToConnectorResultMsg{Success: true}
+		return messages.SendToConnectorResultMsg{Success: true}
 	}
 }
 
@@ -248,20 +248,19 @@ func LoadConnectorsCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 
 		connectors, err := svc.ListConnectors(ctx)
 		if err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
 
-		// Convert to screen types
-		statuses := make([]screens.ConnectorStatus, len(connectors))
+		statuses := make([]messages.ConnectorStatus, len(connectors))
 		for i, c := range connectors {
-			statuses[i] = screens.ConnectorStatus{
+			statuses[i] = messages.ConnectorStatus{
 				Name:        c.Name,
 				DisplayName: c.DisplayName,
 				Enabled:     c.Enabled,
 				Configured:  c.Configured,
 			}
 		}
-		return screens.ConnectorsLoadedMsg{Connectors: statuses}
+		return messages.ConnectorsLoadedMsg{Connectors: statuses}
 	}
 }
 
@@ -273,13 +272,12 @@ func LoadConnectorSettingsCmd(ctx context.Context, svc UnifiedService, connector
 
 		settings, err := svc.GetConnectorSettings(ctx, connectorName)
 		if err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
 
-		// Convert to screen types
-		values := make([]screens.ConnectorSettingValue, len(settings))
+		values := make([]messages.ConnectorSettingValue, len(settings))
 		for i, s := range settings {
-			values[i] = screens.ConnectorSettingValue{
+			values[i] = messages.ConnectorSettingValue{
 				Key:         s.Key,
 				DisplayName: s.DisplayName,
 				Description: s.Description,
@@ -288,7 +286,7 @@ func LoadConnectorSettingsCmd(ctx context.Context, svc UnifiedService, connector
 				Sensitive:   s.Sensitive,
 			}
 		}
-		return screens.ConnectorSettingsLoadedMsg{
+		return messages.ConnectorSettingsLoadedMsg{
 			ConnectorName: connectorName,
 			Settings:      values,
 		}
@@ -303,9 +301,9 @@ func EnableConnectorCmd(ctx context.Context, svc UnifiedService, name string) te
 
 		err := svc.EnableConnector(ctx, name)
 		if err != nil {
-			return screens.ConnectorUpdateResultMsg{Success: false, Error: err}
+			return messages.ConnectorUpdateResultMsg{Success: false, Error: err}
 		}
-		return screens.ConnectorUpdateResultMsg{Success: true}
+		return messages.ConnectorUpdateResultMsg{Success: true}
 	}
 }
 
@@ -317,9 +315,9 @@ func DisableConnectorCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 
 		err := svc.DisableConnector(ctx)
 		if err != nil {
-			return screens.ConnectorUpdateResultMsg{Success: false, Error: err}
+			return messages.ConnectorUpdateResultMsg{Success: false, Error: err}
 		}
-		return screens.ConnectorUpdateResultMsg{Success: true}
+		return messages.ConnectorUpdateResultMsg{Success: true}
 	}
 }
 
@@ -331,9 +329,9 @@ func SaveConnectorSettingCmd(ctx context.Context, svc UnifiedService, connectorN
 
 		err := svc.ConfigureConnector(ctx, connectorName, key, value, isSecret)
 		if err != nil {
-			return screens.ConnectorUpdateResultMsg{Success: false, Error: err}
+			return messages.ConnectorUpdateResultMsg{Success: false, Error: err}
 		}
-		return screens.ConnectorUpdateResultMsg{Success: true}
+		return messages.ConnectorUpdateResultMsg{Success: true}
 	}
 }
 
@@ -345,9 +343,9 @@ func ValidateConnectorCmd(ctx context.Context, svc UnifiedService, connectorName
 
 		err := svc.ValidateConnector(ctx, connectorName)
 		if err != nil {
-			return screens.ValidateConnectorResultMsg{Success: false, Error: err}
+			return messages.ValidateConnectorResultMsg{Success: false, Error: err}
 		}
-		return screens.ValidateConnectorResultMsg{Success: true}
+		return messages.ValidateConnectorResultMsg{Success: true}
 	}
 }
 
@@ -359,7 +357,7 @@ func WatchChannelListenerCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 		case <-ctx.Done():
 			return nil
 		case result := <-svc.GetWatchResultChannel():
-			return WatchResultMsg{
+			return messages.WatchResultMsg{
 				Count: result.Count,
 				Error: result.Error,
 			}
@@ -403,9 +401,9 @@ func LoadAllTagsForPanelCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 		})
 
 		if err := errGroup.Wait(); err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
-		return screens.AllTagsForPanelLoadedMsg{Tags: tags, Counts: counts, UntaggedCount: int(untaggedCount), TagPlanMap: tagPlanMap}
+		return messages.AllTagsForPanelLoadedMsg{Tags: tags, Counts: counts, UntaggedCount: int(untaggedCount), TagPlanMap: tagPlanMap}
 	}
 }
 
@@ -417,16 +415,16 @@ func LoadUntaggedPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 
 		plans, err := svc.ListUntaggedPlansWithReadingTime(ctx)
 		if err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
-		return screens.PlansLoadedMsg{Plans: plans, IsFiltered: true}
+		return messages.PlansLoadedMsg{Plans: plans, IsFiltered: true}
 	}
 }
 
 // ClearStatusCmd clears the status bar after a delay.
 func ClearStatusCmd(delay time.Duration) tea.Cmd {
 	return tea.Tick(delay, func(time.Time) tea.Msg {
-		return ClearStatusMsg{}
+		return messages.ClearStatusMsg{}
 	})
 }
 
@@ -436,16 +434,14 @@ func LoadTagsForModalCmd(ctx context.Context, svc UnifiedService, fileName strin
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
-		// Load all tags.
 		allTags, err := svc.GetAllTags(ctx)
 		if err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
 
-		// Load plan tags.
 		planTags, err := svc.GetPlanTags(ctx, fileName)
 		if err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
 
 		return components.TagsLoadedMsg{
@@ -464,15 +460,14 @@ func SetPlanTagsCmd(ctx context.Context, svc UnifiedService, fileName string, ta
 
 		err := svc.SetPlanTags(ctx, fileName, tags)
 		if err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
 
-		// Reload plans after setting tags.
 		plans, err := svc.ListAllPlansWithReadingTime(ctx)
 		if err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
-		return screens.PlansLoadedMsg{Plans: plans}
+		return messages.PlansLoadedMsg{Plans: plans}
 	}
 }
 
@@ -484,13 +479,13 @@ func SearchPlansWithTagsCmd(ctx context.Context, svc UnifiedService, query strin
 
 		plans, err := svc.SearchPlansWithTags(ctx, query, tags, matchAll)
 		if err != nil {
-			return screens.ErrorMsg{Error: err}
+			return messages.ErrorMsg{Error: err}
 		}
-		return screens.PlansLoadedMsg{Plans: plans, IsFiltered: true}
+		return messages.PlansLoadedMsg{Plans: plans, IsFiltered: true}
 	}
 }
 
-// DeleteTagsCmd delete a tag command.
+// DeleteTagsCmd deletes a tag.
 func DeleteTagsCmd(ctx context.Context, svc UnifiedService, tagID int64, fileName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)

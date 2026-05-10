@@ -5,6 +5,7 @@ import (
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
@@ -85,7 +86,7 @@ func (s *VersionsScreen) Init() tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg {
-		return LoadVersionsMsg{PlanName: s.planName}
+		return messages.LoadVersionsMsg{PlanName: s.planName}
 	}
 }
 
@@ -95,7 +96,7 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case tea.KeyMsg:
 		return s.handleKey(msg)
 
-	case VersionsLoadedMsg:
+	case messages.VersionsLoadedMsg:
 		s.versions = msg.Versions
 		s.updateListItems()
 		if len(s.versions) > 0 {
@@ -155,13 +156,13 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 			s.searchQuery = ""
 			s.searchBar.Reset()
 			return s, func() tea.Msg {
-				return LoadVersionsMsg{PlanName: s.planName}
+				return messages.LoadVersionsMsg{PlanName: s.planName}
 			}
 		}
 		return s, nil
 	case "esc":
 		return s, func() tea.Msg {
-			return PopScreenMsg{}
+			return messages.PopScreenMsg{}
 		}
 	case "v":
 		if s.current != nil {
@@ -253,7 +254,7 @@ func (s *VersionsScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, te
 		s.focus = types.FocusList
 		s.searchBar.Blur()
 		return s, func() tea.Msg {
-			return SearchVersionsMsg{Query: query, PlanName: s.planName}
+			return messages.SearchVersionsMsg{Query: query, PlanName: s.planName}
 		}
 	}
 
@@ -420,7 +421,7 @@ func (s *VersionsScreen) updateListItems() {
 
 func (s *VersionsScreen) restoreVersion() tea.Cmd {
 	return func() tea.Msg {
-		return RestoreVersionMsg{
+		return messages.RestoreVersionMsg{
 			PlanName:      s.planName,
 			VersionNumber: s.current.VersionNumber,
 		}
@@ -428,41 +429,3 @@ func (s *VersionsScreen) restoreVersion() tea.Cmd {
 }
 
 // Message types for versions screen.
-
-// LoadVersionsMsg requests loading versions.
-type LoadVersionsMsg struct {
-	PlanName string
-}
-
-// VersionsLoadedMsg is sent when versions are loaded.
-type VersionsLoadedMsg struct {
-	Versions []claudeviewer.PlanVersionDetail
-}
-
-// VersionErrorMsg is sent on error.
-type VersionErrorMsg struct {
-	Error error
-}
-
-// PopScreenMsg requests popping the current screen.
-type PopScreenMsg struct{}
-
-// RestoreVersionMsg requests restoring a version.
-type RestoreVersionMsg struct {
-	PlanName      string
-	VersionNumber int64
-}
-
-// RestoreResultMsg is sent when restore completes.
-type RestoreResultMsg struct {
-	Success  bool
-	PlanName string
-	Error    error
-}
-
-type SearchVersionsMsg struct {
-	PlanName string
-	Query    string
-}
-
-type ClearVersionSearchMsg struct{}

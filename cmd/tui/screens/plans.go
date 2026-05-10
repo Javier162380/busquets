@@ -8,6 +8,7 @@ import (
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
@@ -94,7 +95,7 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 
 // Init initializes the screen.
 func (s *PlansScreen) Init() tea.Cmd {
-	return nil // Plans loaded via PlansLoadedMsg from App.
+	return nil // Plans loaded via messages.PlansLoadedMsg from App.
 }
 
 // Update handles messages.
@@ -108,7 +109,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		case components.SavePlanTagsMsg:
 			s.showingModal = false
 			return s, func() tea.Msg {
-				return SavePlanTagsMsg{
+				return messages.SavePlanTagsMsg{
 					FileName: msg.FileName,
 					Tags:     msg.Tags,
 				}
@@ -124,7 +125,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case tea.KeyMsg:
 		return s.handleKey(msg)
 
-	case PlansLoadedMsg:
+	case messages.PlansLoadedMsg:
 		if !msg.IsFiltered {
 			s.allPlans = msg.Plans
 		}
@@ -139,11 +140,11 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			cmds = append(cmds, s.loadPlanDetail(s.plans[0].FileName))
 		}
 		if s.tagPanel != nil && !msg.IsFiltered {
-			cmds = append(cmds, func() tea.Msg { return LoadAllTagsForPanelMsg{} })
+			cmds = append(cmds, func() tea.Msg { return messages.LoadAllTagsForPanelMsg{} })
 		}
 		return s, tea.Batch(cmds...)
 
-	case AllTagsForPanelLoadedMsg:
+	case messages.AllTagsForPanelLoadedMsg:
 		s.allTags = msg.Tags
 		s.tagPlanCounts = msg.Counts
 		s.untaggedCount = msg.UntaggedCount
@@ -153,17 +154,17 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 
 	case components.CreateTagRequestedMsg:
 		return s, func() tea.Msg {
-			return CreateTagMsg{Name: msg.Name}
+			return messages.CreateTagMsg{Name: msg.Name}
 		}
 
-	case PlanDetailLoadedMsg:
+	case messages.PlanDetailLoadedMsg:
 		s.current = msg.Detail
 		viewerWidth := s.getViewerWidth()
 		s.viewer.SetContent(content.NewPlanContent(msg.Detail, s.isDarkModeEnabled, s.focus, viewerWidth))
 		s.editor.SetContent(msg.Detail.Content)
 		return s, nil
 
-	case SaveResultMsg:
+	case messages.SaveResultMsg:
 		if msg.Error == nil && msg.Result.Success && !msg.Result.HasConflict {
 			s.focus = types.FocusContent
 			s.editor.Blur()
@@ -174,10 +175,10 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		}
 		return s, nil
 
-	case OpenTagModalMsg:
+	case messages.OpenTagModalMsg:
 		// Load all tags and current plan tags, then open modal.
 		return s, func() tea.Msg {
-			return LoadTagsForModalMsg{FileName: msg.FileName}
+			return messages.LoadTagsForModalMsg{FileName: msg.FileName}
 		}
 
 	case components.TagsLoadedMsg:
@@ -186,19 +187,19 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.showingModal = true
 		return s, nil
 
-	case SavePlanTagsMsg:
+	case messages.SavePlanTagsMsg:
 		// Save tags via service layer.
 		return s, func() tea.Msg {
-			return SetPlanTagsMsg{
+			return messages.SetPlanTagsMsg{
 				FileName: msg.FileName,
 				Tags:     msg.Tags,
 			}
 		}
 
-	case FilterByTagsMsg:
+	case messages.FilterByTagsMsg:
 		// Apply tag filter.
 		return s, func() tea.Msg {
-			return SearchPlansWithTagsMsg{
+			return messages.SearchPlansWithTagsMsg{
 				Query:    s.searchQuery,
 				Tags:     msg.Tags,
 				MatchAll: msg.MatchAll,
@@ -318,10 +319,10 @@ func (s *PlansScreen) applyTagFilter(tag string) tea.Cmd {
 
 	// Map not yet loaded — fall back to async service call.
 	if tag == components.UntaggedSentinel {
-		return func() tea.Msg { return LoadUntaggedPlansMsg{} }
+		return func() tea.Msg { return messages.LoadUntaggedPlansMsg{} }
 	}
 	return func() tea.Msg {
-		return SearchPlansWithTagsMsg{Tags: []string{tag}, MatchAll: false}
+		return messages.SearchPlansWithTagsMsg{Tags: []string{tag}, MatchAll: false}
 	}
 }
 
@@ -341,7 +342,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		// Open tag modal for current plan.
 		if s.current != nil {
 			return s, func() tea.Msg {
-				return OpenTagModalMsg{FileName: s.current.FileName}
+				return messages.OpenTagModalMsg{FileName: s.current.FileName}
 			}
 		}
 		return s, nil
@@ -354,7 +355,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 			s.searchBar.Reset()
 			s.tagFilter.Reset()
 			return s, func() tea.Msg {
-				return ClearSearchMsg{}
+				return messages.ClearSearchMsg{}
 			}
 		}
 		return s, nil
@@ -388,12 +389,12 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 
 	case "S":
 		return s, func() tea.Msg {
-			return OpenSettingsMsg{}
+			return messages.OpenSettingsMsg{}
 		}
 
 	case "C":
 		return s, func() tea.Msg {
-			return OpenConnectorsMsg{}
+			return messages.OpenConnectorsMsg{}
 		}
 
 	case "tab":
@@ -499,7 +500,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		// View versions - check if versions exist first.
 		if s.current != nil {
 			return s, func() tea.Msg {
-				return RequestVersionsScreenMsg{PlanName: s.current.FileName}
+				return messages.RequestVersionsScreenMsg{PlanName: s.current.FileName}
 			}
 		}
 		return s, nil
@@ -508,7 +509,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		// Transmit to connector.
 		if s.current != nil {
 			return s, func() tea.Msg {
-				return SendToConnectorMsg{PlanFileName: s.current.FileName}
+				return messages.SendToConnectorMsg{PlanFileName: s.current.FileName}
 			}
 		}
 		return s, nil
@@ -634,7 +635,7 @@ func (s *PlansScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		s.focus = types.FocusList
 		s.searchBar.Blur()
 		return s, func() tea.Msg {
-			return SearchPlansMsg{Query: query}
+			return messages.SearchPlansMsg{Query: query}
 		}
 	}
 
@@ -658,7 +659,7 @@ func (s *PlansScreen) handleTagFilterKey(key string, msg tea.KeyMsg) (Screen, te
 		s.focus = types.FocusList
 		s.tagFilter.Blur()
 		return s, func() tea.Msg {
-			return FilterByTagsMsg{
+			return messages.FilterByTagsMsg{
 				Tags:     tags,
 				MatchAll: s.tagFilter.MatchAll(),
 			}
@@ -970,7 +971,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.tagPanel != nil && s.tagPanel.IsCreating() {
 			return "enter: create tag | esc: cancel"
 		}
-		return fmt.Sprintf("j/k: navigate tags | enter/tab: plans | /: search | n: new tag | q: quit | Plans: %d", len(s.plans))
+		return fmt.Sprintf("j/k: navigate tags | tab: plans | /: search | n: new tag | q: quit | Plans: %d", len(s.plans))
 	case types.FocusList:
 		searchHelp := "/: search | T: tags"
 		if s.searchQuery != "" || len(s.tagFilters) > 0 {
@@ -999,7 +1000,7 @@ func (s *PlansScreen) ShortHelp() string {
 			mode = "RENDERED"
 		}
 		if s.layout == types.LayoutSplit {
-			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s)	 | tab: list | esc: back", mode)
+			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | tab: list | esc: back", mode)
 		}
 		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | e: edit | v: versions | t: transmit | esc: back", mode)
 	case types.FocusEditor:
@@ -1086,13 +1087,13 @@ func (s *PlansScreen) updateListItems() {
 
 func (s *PlansScreen) loadPlanDetail(fileName string) tea.Cmd {
 	return func() tea.Msg {
-		return LoadPlanDetailMsg{FileName: fileName}
+		return messages.LoadPlanDetailMsg{FileName: fileName}
 	}
 }
 
 func (s *PlansScreen) savePlan() tea.Cmd {
 	return func() tea.Msg {
-		return SavePlanMsg{
+		return messages.SavePlanMsg{
 			FileName: s.current.FileName,
 			Content:  s.editor.Content(),
 			Modified: s.current.ModifiedAt,
@@ -1102,171 +1103,18 @@ func (s *PlansScreen) savePlan() tea.Cmd {
 
 func (s *PlansScreen) syncPlans() tea.Cmd {
 	return func() tea.Msg {
-		return SyncPlansMsg{}
+		return messages.SyncPlansMsg{}
 	}
 }
 
 func (s *PlansScreen) rsyncPlans() tea.Cmd {
 	return func() tea.Msg {
-		return RSyncPlansMsg{}
+		return messages.RSyncPlansMsg{}
 	}
 }
 
 func (s *PlansScreen) dumpPlans() tea.Cmd {
 	return func() tea.Msg {
-		return DumpPlansMsg{}
+		return messages.DumpPlansMsg{}
 	}
-}
-
-// Message types for plans screen.
-
-// PlansLoadedMsg is sent when plans are loaded.
-type PlansLoadedMsg struct {
-	Plans      []claudeviewer.PlanSummary
-	IsFiltered bool // when true, only s.plans is updated, not s.allPlans
-}
-
-// PlanDetailLoadedMsg is sent when plan detail is loaded.
-type PlanDetailLoadedMsg struct {
-	Detail *claudeviewer.PlanDetail
-}
-
-// LoadPlanDetailMsg requests loading a plan detail.
-type LoadPlanDetailMsg struct {
-	FileName string
-}
-
-// SavePlanMsg requests saving a plan.
-type SavePlanMsg struct {
-	FileName string
-	Content  string
-	Modified time.Time
-}
-
-// SyncPlansMsg requests syncing plans.
-type SyncPlansMsg struct{}
-
-// RSyncPlansMsg request resync plans from the viewer directory back into the LLM directory.
-type RSyncPlansMsg struct{}
-
-// DumpPlansMsg requests dumping all plans from the database to the source plans directory.
-type DumpPlansMsg struct{}
-
-// SaveResultMsg is sent when save completes.
-type SaveResultMsg struct {
-	Result *claudeviewer.UpdatePlanResult
-	Error  error
-}
-
-// SyncResultMsg is sent when sync completes.
-type SyncResultMsg struct {
-	Count int
-	Error error
-}
-
-// RSyncResultMsg is sent when rsync completes.
-type RSyncResultMsg struct {
-	Count int
-	Error error
-}
-
-// DumpResultMsg is sent when dump completes.
-type DumpResultMsg struct {
-	Count int
-	Error error
-}
-
-// CreateTagMsg requests creating a new tag.
-type CreateTagMsg struct {
-	Name string
-}
-
-// CreateTagResultMsg is sent when tag creation completes.
-type CreateTagResultMsg struct {
-	Error error
-}
-
-// ErrorMsg is sent on error.
-type ErrorMsg struct {
-	Error error
-}
-
-// RequestVersionsScreenMsg requests checking versions before navigation.
-type RequestVersionsScreenMsg struct {
-	PlanName string
-}
-
-// VersionsNavigationResultMsg carries the result of version check.
-type VersionsNavigationResultMsg struct {
-	PlanName string
-	Versions []claudeviewer.PlanVersionDetail
-}
-
-// SearchPlansMsg requests searching plans.
-type SearchPlansMsg struct {
-	PlanName string
-	Query    string
-}
-
-// ClearSearchMsg requests clearing search and loading all plans.
-type ClearSearchMsg struct{}
-
-// SendToConnectorMsg requests sending current plan to connector.
-type SendToConnectorMsg struct {
-	PlanFileName string
-}
-
-// SendToConnectorResultMsg is the result of sending to connector.
-type SendToConnectorResultMsg struct {
-	Success bool
-	Error   error
-}
-
-// OpenTagModalMsg requests opening the tag modal for a plan.
-type OpenTagModalMsg struct {
-	FileName string
-}
-
-// LoadTagsForModalMsg requests loading tags for the modal.
-type LoadTagsForModalMsg struct {
-	FileName string
-}
-
-// SavePlanTagsMsg requests saving tags for a plan.
-type SavePlanTagsMsg struct {
-	FileName string
-	Tags     []string
-}
-
-// SetPlanTagsMsg requests setting tags via service layer.
-type SetPlanTagsMsg struct {
-	FileName string
-	Tags     []string
-}
-
-// FilterByTagsMsg requests filtering plans by tags.
-type FilterByTagsMsg struct {
-	Tags     []string
-	MatchAll bool
-}
-
-// SearchPlansWithTagsMsg requests searching plans with tag filter.
-type SearchPlansWithTagsMsg struct {
-	Query    string
-	Tags     []string
-	MatchAll bool
-}
-
-// LoadAllTagsForPanelMsg requests loading all tags for the tag panel.
-type LoadAllTagsForPanelMsg struct{}
-
-// LoadUntaggedPlansMsg requests loading plans with no tags.
-type LoadUntaggedPlansMsg struct{}
-
-// AllTagsForPanelLoadedMsg carries all tags, their plan counts, and the tag→plans map.
-type AllTagsForPanelLoadedMsg struct {
-	Tags          []claudeviewer.Tag
-	Counts        map[string]int
-	UntaggedCount int
-	TagPlanMap    map[string][]claudeviewer.PlanSummary
 }

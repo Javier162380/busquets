@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -11,29 +12,11 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ConnectorStatus represents a connector's current state.
-type ConnectorStatus struct {
-	Name        string
-	DisplayName string
-	Enabled     bool
-	Configured  bool
-}
-
-// ConnectorSettingValue holds a setting's definition and current value.
-type ConnectorSettingValue struct {
-	Key         string
-	DisplayName string
-	Description string
-	Value       string
-	Required    bool
-	Sensitive   bool
-}
-
 // ConnectorsScreen handles connector configuration.
 type ConnectorsScreen struct {
 	// State
-	connectors      []ConnectorStatus
-	settings        []ConnectorSettingValue
+	connectors      []messages.ConnectorStatus
+	settings        []messages.ConnectorSettingValue
 	selectedConn    int
 	selectedSetting int
 	currentConnName string
@@ -73,7 +56,7 @@ func NewConnectorsScreen(width, height int) *ConnectorsScreen {
 // Init initializes the screen.
 func (s *ConnectorsScreen) Init() tea.Cmd {
 	return func() tea.Msg {
-		return LoadConnectorsMsg{}
+		return messages.LoadConnectorsMsg{}
 	}
 }
 
@@ -83,29 +66,29 @@ func (s *ConnectorsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case tea.KeyMsg:
 		return s.handleKey(msg)
 
-	case ConnectorsLoadedMsg:
+	case messages.ConnectorsLoadedMsg:
 		s.connectors = msg.Connectors
 		// Load settings for first connector if available
 		if len(s.connectors) > 0 {
 			s.currentConnName = s.connectors[0].Name
 			return s, func() tea.Msg {
-				return LoadConnectorSettingsMsg{ConnectorName: s.currentConnName}
+				return messages.LoadConnectorSettingsMsg{ConnectorName: s.currentConnName}
 			}
 		}
 		return s, nil
 
-	case ConnectorSettingsLoadedMsg:
+	case messages.ConnectorSettingsLoadedMsg:
 		if msg.ConnectorName == s.currentConnName {
 			s.settings = msg.Settings
 			s.selectedSetting = 0
 		}
 		return s, nil
 
-	case ConnectorUpdateResultMsg:
+	case messages.ConnectorUpdateResultMsg:
 		if msg.Success {
 			// Reload connectors to refresh status
 			return s, func() tea.Msg {
-				return LoadConnectorsMsg{}
+				return messages.LoadConnectorsMsg{}
 			}
 		}
 		return s, nil
@@ -134,7 +117,7 @@ func (s *ConnectorsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
 	case "esc":
 		return s, func() tea.Msg {
-			return PopScreenMsg{}
+			return messages.PopScreenMsg{}
 		}
 
 	case "tab":
@@ -154,7 +137,7 @@ func (s *ConnectorsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 				s.selectedConn++
 				s.currentConnName = s.connectors[s.selectedConn].Name
 				return s, func() tea.Msg {
-					return LoadConnectorSettingsMsg{ConnectorName: s.currentConnName}
+					return messages.LoadConnectorSettingsMsg{ConnectorName: s.currentConnName}
 				}
 			}
 		}
@@ -170,7 +153,7 @@ func (s *ConnectorsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 				s.selectedConn--
 				s.currentConnName = s.connectors[s.selectedConn].Name
 				return s, func() tea.Msg {
-					return LoadConnectorSettingsMsg{ConnectorName: s.currentConnName}
+					return messages.LoadConnectorSettingsMsg{ConnectorName: s.currentConnName}
 				}
 			}
 		}
@@ -184,7 +167,7 @@ func (s *ConnectorsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		}
 
 		return s, func() tea.Msg {
-			return LoadConnectorSettingsMsg{ConnectorName: s.currentConnName}
+			return messages.LoadConnectorSettingsMsg{ConnectorName: s.currentConnName}
 		}
 
 	case "e":
@@ -212,7 +195,7 @@ func (s *ConnectorsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 			if len(s.connectors) > 0 {
 				conn := s.connectors[s.selectedConn]
 				return s, func() tea.Msg {
-					return EnableConnectorMsg{Name: conn.Name}
+					return messages.EnableConnectorMsg{Name: conn.Name}
 				}
 			}
 		}
@@ -222,7 +205,7 @@ func (s *ConnectorsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		// Disable connector (only from left panel)
 		if !s.focusRight && len(s.connectors) > 0 {
 			return s, func() tea.Msg {
-				return DisableConnectorMsg{}
+				return messages.DisableConnectorMsg{}
 			}
 		}
 		return s, nil
@@ -231,7 +214,7 @@ func (s *ConnectorsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		// Validate current connector settings
 		if s.currentConnName != "" {
 			return s, func() tea.Msg {
-				return ValidateConnectorMsg{Name: s.currentConnName}
+				return messages.ValidateConnectorMsg{Name: s.currentConnName}
 			}
 		}
 		return s, nil
@@ -258,7 +241,7 @@ func (s *ConnectorsScreen) handleEditKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 			s.editing = false
 			s.input.Blur()
 			return s, func() tea.Msg {
-				return SaveConnectorSettingMsg{
+				return messages.SaveConnectorSettingMsg{
 					ConnectorName: s.currentConnName,
 					Key:           setting.Key,
 					Value:         value,
@@ -443,58 +426,3 @@ func (s *ConnectorsScreen) IsInputMode() bool {
 }
 
 // Message types for connectors screen.
-
-// OpenConnectorsMsg requests opening the connectors screen.
-type OpenConnectorsMsg struct{}
-
-// LoadConnectorsMsg requests loading connectors list.
-type LoadConnectorsMsg struct{}
-
-// ConnectorsLoadedMsg carries loaded connectors.
-type ConnectorsLoadedMsg struct {
-	Connectors []ConnectorStatus
-}
-
-// LoadConnectorSettingsMsg requests loading a connector's settings.
-type LoadConnectorSettingsMsg struct {
-	ConnectorName string
-}
-
-// ConnectorSettingsLoadedMsg carries connector settings with values.
-type ConnectorSettingsLoadedMsg struct {
-	ConnectorName string
-	Settings      []ConnectorSettingValue
-}
-
-// EnableConnectorMsg requests enabling a connector.
-type EnableConnectorMsg struct {
-	Name string
-}
-
-// DisableConnectorMsg requests disabling all connectors.
-type DisableConnectorMsg struct{}
-
-// SaveConnectorSettingMsg requests saving a connector setting.
-type SaveConnectorSettingMsg struct {
-	ConnectorName string
-	Key           string
-	Value         string
-	IsSecret      bool
-}
-
-// ConnectorUpdateResultMsg carries result of connector operations.
-type ConnectorUpdateResultMsg struct {
-	Success bool
-	Error   error
-}
-
-// ValidateConnectorMsg requests validating a connector's settings.
-type ValidateConnectorMsg struct {
-	Name string
-}
-
-// ValidateConnectorResultMsg carries the validation result.
-type ValidateConnectorResultMsg struct {
-	Success bool
-	Error   error
-}

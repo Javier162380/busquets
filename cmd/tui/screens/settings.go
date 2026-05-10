@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
@@ -101,7 +102,7 @@ func (s *SettingsScreen) Init() tea.Cmd {
 		names[i] = def.Name
 	}
 	return func() tea.Msg {
-		return LoadSettingsMsg{SettingNames: names}
+		return messages.LoadSettingsMsg{SettingNames: names}
 	}
 }
 
@@ -110,7 +111,7 @@ func (s *SettingsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case tea.KeyMsg:
 		return s.handleKey(msg)
 
-	case SettingsLoadedMsg:
+	case messages.SettingsLoadedMsg:
 		for i := range s.settings {
 			name := s.settings[i].Definition.Name
 			if setting, ok := msg.Settings[name]; ok {
@@ -119,7 +120,7 @@ func (s *SettingsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		}
 		return s, nil
 
-	case SettingUpdateResultMsg:
+	case messages.SettingUpdateResultMsg:
 		if msg.Error != nil {
 			return s, nil
 		}
@@ -129,15 +130,15 @@ func (s *SettingsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		switch s.settings[s.cursor].Definition.Name {
 		case claudeviewer.SettingDarkModeEnabled:
 			return s, func() tea.Msg {
-				return ThemeChangedMsg{}
+				return messages.ThemeChangedMsg{}
 			}
 		case claudeviewer.SettingRenderMarkdownByDefault:
 			return s, func() tea.Msg {
-				return RenderMarkDownByDefaultMsg{}
+				return messages.RenderMarkDownByDefaultMsg{}
 			}
 		case claudeviewer.SettingDefaultDisplayMode:
 			return s, func() tea.Msg {
-				return DisplayModeChangedMsg{}
+				return messages.DisplayModeChangedMsg{}
 			}
 		}
 
@@ -176,7 +177,7 @@ func (s *SettingsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
 	case "esc":
 		return s, func() tea.Msg {
-			return PopScreenMsg{}
+			return messages.PopScreenMsg{}
 		}
 
 	case "j", "down":
@@ -346,36 +347,9 @@ func (s *SettingsScreen) IsInputMode() bool {
 
 func (s *SettingsScreen) saveSetting(name string, values claudeviewer.SettingValues) tea.Cmd {
 	return func() tea.Msg {
-		return SaveSettingMsg{
+		return messages.SaveSettingMsg{
 			Name:   name,
 			Values: values,
 		}
 	}
 }
-
-type LoadSettingsMsg struct {
-	SettingNames []string
-}
-
-type SettingsLoadedMsg struct {
-	Settings map[string]claudeviewer.Setting
-}
-
-type SaveSettingMsg struct {
-	Name   string
-	Values claudeviewer.SettingValues
-}
-
-type SettingUpdateResultMsg struct {
-	Success     bool
-	SettingName string
-	Error       error
-}
-
-type ThemeChangedMsg struct{}
-
-type RenderMarkDownByDefaultMsg struct{}
-
-type DisplayModeChangedMsg struct{}
-
-type OpenSettingsMsg struct{}

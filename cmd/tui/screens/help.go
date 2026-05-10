@@ -1,6 +1,7 @@
 package screens
 
 import (
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -30,7 +31,7 @@ func (s *HelpScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		if msg.String() == "?" || msg.String() == "esc" || msg.String() == "q" {
 			return s, func() tea.Msg {
-				return CloseHelpMsg{}
+				return messages.CloseHelpMsg{}
 			}
 		}
 	}
@@ -134,6 +135,3 @@ func (s *HelpScreen) ShortHelp() string {
 func (s *HelpScreen) IsInputMode() bool {
 	return false
 }
-
-// CloseHelpMsg requests closing the help screen.
-type CloseHelpMsg struct{}
