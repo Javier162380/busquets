@@ -57,12 +57,12 @@ type PlansScreen struct {
 }
 
 // NewPlansScreen creates a new plans screen.
-func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefault bool, displayMode string) *PlansScreen {
+func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefault, focus bool, displayMode string) *PlansScreen {
 	panelWidth := (width - 3) / 2
 	contentHeight := height - 4
 
 	p := PlansScreen{
-		list:        components.NewList(nil, panelWidth, contentHeight),
+		list:        components.NewList(nil, panelWidth, contentHeight, focus),
 		viewer:      components.NewViewer(panelWidth, contentHeight),
 		editor:      components.NewEditor(width-4, contentHeight),
 		searchBar:   components.NewSearchBar(panelWidth),
@@ -268,9 +268,10 @@ func (s *PlansScreen) handleTagPanelKey(key string, msg tea.KeyMsg) (Screen, tea
 		tag := s.tagPanel.MoveUp()
 		return s, s.applyTagFilter(tag)
 
-	case "enter", "tab":
+	case "tab":
 		s.tagPanel.Blur()
 		s.focus = types.FocusList
+		s.list.Focus()
 		return s, nil
 
 	case "/":
@@ -334,12 +335,10 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		return s, s.searchBar.Focus()
 
 	case "T":
-		// Open tag filter.
 		s.focus = types.FocusTagFilter
 		return s, s.tagFilter.Focus()
 
 	case "m":
-		// Open tag modal for current plan.
 		if s.current != nil {
 			return s, func() tea.Msg {
 				return messages.OpenTagModalMsg{FileName: s.current.FileName}
@@ -348,7 +347,6 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		return s, nil
 
 	case "c":
-		// Clear search or tag filter.
 		if s.searchQuery != "" || len(s.tagFilters) > 0 {
 			s.searchQuery = ""
 			s.tagFilters = nil
@@ -399,12 +397,14 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 
 	case "tab":
 		s.focus = types.FocusContent
+		s.list.Blur()
 		return s, nil
 
 	case "shift+tab":
 		if s.displayMode == claudeviewer.DisplayModeTagPlanContent && s.tagPanel != nil {
 			s.focus = types.FocusTagPanel
 			s.tagPanel.Focus()
+			s.list.Blur()
 		}
 		return s, nil
 
@@ -455,8 +455,10 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 			if s.displayMode == claudeviewer.DisplayModeTagPlanContent && s.tagPanel != nil {
 				s.tagPanel.Focus()
 				s.focus = types.FocusTagPanel
+				s.list.Blur()
 			} else {
 				s.focus = types.FocusList
+				s.list.Focus()
 			}
 			return s, nil
 		}
@@ -465,6 +467,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 	case "shift+tab":
 		if s.displayMode == claudeviewer.DisplayModeTagPlanContent {
 			s.focus = types.FocusList
+			s.list.Focus()
 			return s, nil
 		}
 	case "esc":

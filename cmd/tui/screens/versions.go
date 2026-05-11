@@ -45,7 +45,7 @@ func NewVersionsScreen(planName string, width, height int, isDarkModeEnabled, re
 	contentHeight := height - 4
 
 	v := &VersionsScreen{
-		list:      components.NewList(nil, panelWidth, contentHeight),
+		list:      components.NewList(nil, panelWidth, contentHeight, true),
 		viewer:    components.NewViewer(panelWidth, contentHeight),
 		searchBar: components.NewSearchBar(panelWidth),
 		layout:    types.LayoutSplit,
