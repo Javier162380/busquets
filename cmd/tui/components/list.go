@@ -41,11 +41,15 @@ func (i ListItem) FilterValue() string { return i.title }
 func (i ListItem) Data() interface{} { return i.data }
 
 // ListItemDelegate is a custom delegate for rendering list items.
-type ListItemDelegate struct{}
+type ListItemDelegate struct {
+	focus bool
+}
 
 // NewListItemDelegate creates a new delegate with custom styling.
-func NewListItemDelegate() ListItemDelegate {
-	return ListItemDelegate{}
+func NewListItemDelegate(focus bool) ListItemDelegate {
+	return ListItemDelegate{
+		focus: focus,
+	}
 }
 
 // Height returns the height of each item.
@@ -75,9 +79,12 @@ func (d ListItemDelegate) Render(w io.Writer, m list.Model, index int, item list
 	}
 
 	var str string
-	if index == m.Index() {
+	switch {
+	case index == m.Index() && d.focus:
 		str = styles.ActiveStyle.Render(fmt.Sprintf("❯ %s", title))
-	} else {
+	case index == m.Index() && !d.focus:
+		str = styles.InactiveStyle.Render(fmt.Sprintf("❯ %s", title))
+	default:
 		str = styles.InactiveStyle.Render(fmt.Sprintf("  %s", title))
 	}
 
@@ -92,14 +99,14 @@ type List struct {
 }
 
 // NewList creates a new list component.
-func NewList(items []ListItem, width, height int) *List {
+func NewList(items []ListItem, width, height int, focus bool) *List {
 	// Convert to list.Item slice.
 	listItems := make([]list.Item, len(items))
 	for i, item := range items {
 		listItems[i] = item
 	}
 
-	delegate := NewListItemDelegate()
+	delegate := NewListItemDelegate(focus)
 	l := list.New(listItems, delegate, width, height)
 
 	// Customize the list appearance.
@@ -172,4 +179,18 @@ func (l *List) ItemCount() int {
 // Select moves selection to the given index.
 func (l *List) Select(index int) {
 	l.model.Select(index)
+}
+
+// Focus set the focus on the delegate list.
+func (l *List) Focus() {
+	l.model.SetDelegate(ListItemDelegate{
+		focus: true,
+	})
+}
+
+// Blur blur the cursor on the delegate list.
+func (l *List) Blur() {
+	l.model.SetDelegate(ListItemDelegate{
+		focus: false,
+	})
 }

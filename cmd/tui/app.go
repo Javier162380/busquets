@@ -120,7 +120,7 @@ func (a *App) Init() tea.Cmd {
 	a.displayMode = displayMode
 
 	// Create initial plans screen.
-	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault, displayMode)
+	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault, displayMode == claudeviewer.DisplayModePlanContent, displayMode)
 	a.stack = append(a.stack, plansScreen)
 
 	// Start watching for watch results and load initial plans.
