@@ -193,49 +193,51 @@ func (s *Service) syncSinglePlan(ctx context.Context, fileName string) (bool, er
 		return false, fmt.Errorf("failed to stat file: %w", err)
 	}
 
-	// Update or insert plan
+	now := s.nowProvider.Now()
+
+	// Resolve tag names to IDs before the transaction (creates tags if needed).
+	tagIDs, err := s.resolveTagIDs(ctx, normalizedTags, now)
+	if err != nil {
+		return false, fmt.Errorf("failed to resolve tag IDs: %w", err)
+	}
+
 	if planExists {
-		// Update existing plan
-		err = s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
-			Title:      title,
-			Content:    contentToStore,
-			ModifiedAt: info.ModTime(),
-			IndexedAt:  s.nowProvider.Now(),
-			FileSize:   info.Size(),
-			WordCount:  int64(wordCount),
-			FileName:   fileName,
+		err = s.db.UpdatePlanWithTags(ctx, dto.UpdatePlanWithTagsParams{
+			Plan: dto.UpdatePlanParams{
+				FileName:   fileName,
+				Title:      title,
+				Content:    contentToStore,
+				ModifiedAt: info.ModTime(),
+				IndexedAt:  now,
+				FileSize:   info.Size(),
+				WordCount:  int64(wordCount),
+			},
+			TagIDs:     tagIDs,
+			AssignedAt: now,
 		})
 		if err != nil {
-			return false, fmt.Errorf("failed to update plan: %w", err)
+			return false, fmt.Errorf("failed to update plan with tags: %w", err)
 		}
-
-		// Update tags
-		if err := s.SetPlanTags(ctx, fileName, normalizedTags); err != nil {
-			return false, fmt.Errorf("failed to set plan tags: %w", err)
-		}
-
 		return true, nil
 	}
 
-	// Insert new plan
-	err = s.db.InsertPlan(ctx, dto.InsertPlanParams{
-		FileName:   fileName,
-		FilePath:   destPath,
-		Title:      title,
-		Content:    contentToStore,
-		CreatedAt:  info.ModTime(),
-		ModifiedAt: info.ModTime(),
-		IndexedAt:  s.nowProvider.Now(),
-		FileSize:   info.Size(),
-		WordCount:  int64(wordCount),
+	err = s.db.InsertPlanWithTags(ctx, dto.InsertPlanWithTagsParams{
+		Plan: dto.InsertPlanParams{
+			FileName:   fileName,
+			FilePath:   destPath,
+			Title:      title,
+			Content:    contentToStore,
+			CreatedAt:  info.ModTime(),
+			ModifiedAt: info.ModTime(),
+			IndexedAt:  now,
+			FileSize:   info.Size(),
+			WordCount:  int64(wordCount),
+		},
+		TagIDs:     tagIDs,
+		AssignedAt: now,
 	})
 	if err != nil {
-		return false, fmt.Errorf("failed to insert plan: %w", err)
-	}
-
-	// Set tags for new plan
-	if err := s.SetPlanTags(ctx, fileName, normalizedTags); err != nil {
-		return false, fmt.Errorf("failed to set plan tags: %w", err)
+		return false, fmt.Errorf("failed to insert plan with tags: %w", err)
 	}
 
 	return true, nil

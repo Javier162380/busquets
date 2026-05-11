@@ -130,3 +130,17 @@ type RestorePlanVersionParams struct {
 	Plan    UpdatePlanParams
 	Version InsertPlanVersionParams
 }
+
+// InsertPlanWithTagsParams holds the plan insert and its tag associations for an atomic write.
+type InsertPlanWithTagsParams struct {
+	Plan       InsertPlanParams
+	TagIDs     []int64
+	AssignedAt time.Time
+}
+
+// UpdatePlanWithTagsParams holds the plan update and its tag associations for an atomic write.
+type UpdatePlanWithTagsParams struct {
+	Plan       UpdatePlanParams
+	TagIDs     []int64
+	AssignedAt time.Time
+}

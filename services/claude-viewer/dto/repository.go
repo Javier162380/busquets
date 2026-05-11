@@ -13,6 +13,8 @@ type Repository interface {
 	GetPlanByFileName(ctx context.Context, fileName string) (Plan, error)
 	InsertPlan(ctx context.Context, params InsertPlanParams) error
 	UpdatePlan(ctx context.Context, params UpdatePlanParams) error
+	InsertPlanWithTags(ctx context.Context, params InsertPlanWithTagsParams) error
+	UpdatePlanWithTags(ctx context.Context, params UpdatePlanWithTagsParams) error
 	DeletePlan(ctx context.Context, fileName string) error
 	ListAllPlans(ctx context.Context) ([]PlanSummary, error)
 	ListAllPlansWithPagination(ctx context.Context, params PaginationParams) ([]PlanSummary, error)

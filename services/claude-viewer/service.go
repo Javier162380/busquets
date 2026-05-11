@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
+	"github.com/Javier162380/claude-plan-viewer/internal/retrier"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
 	"github.com/yuin/goldmark"
@@ -196,34 +197,52 @@ func (s *Service) DeleteTag(ctx context.Context, id int64) error {
 	return s.db.DeleteTag(ctx, id)
 }
 
+// resolveTagIDs converts tag names to IDs, creating any that don't exist.
+// Retries handle the concurrent sync race where two goroutines try to create the same tag simultaneously.
+func (s *Service) resolveTagIDs(ctx context.Context, tagNames []string, now time.Time) ([]int64, error) {
+	r := retrier.NewRetrier(3, 50*time.Millisecond)
+	tagIDs := make([]int64, 0, len(tagNames))
+
+	for _, tagName := range tagNames {
+		var tag dto.Tag
+		err := r.Do(ctx, func(ctx context.Context) error {
+			t, err := s.db.GetTagByName(ctx, tagName)
+			if dto.IsNotFound(err) {
+				t, err = s.db.InsertTag(ctx, dto.InsertTagParams{
+					Name:       tagName,
+					CreatedAt:  now,
+					ModifiedAt: now,
+				})
+			}
+			if err != nil {
+				return err
+			}
+			tag = t
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to get or create tag %s: %w", tagName, err)
+		}
+		tagIDs = append(tagIDs, tag.ID)
+	}
+	return tagIDs, nil
+}
+
 // SetPlanTags sets the tags for a plan, replacing any existing tags.
 // Tag names will be normalized (lowercase, trimmed).
 // If a tag doesn't exist, it will be created automatically.
 func (s *Service) SetPlanTags(ctx context.Context, fileName string, tagNames []string) error {
-	// Normalize tag names
 	tagNames = NormalizeTags(tagNames)
 
-	// Get plan by filename
 	plan, err := s.db.GetPlanByFileName(ctx, fileName)
 	if err != nil {
 		return fmt.Errorf("failed to get plan: %w", err)
 	}
 
-	tagIDs := make([]int64, 0, len(tagNames))
 	now := s.nowProvider.Now()
-	for _, tagName := range tagNames {
-		tag, err := s.db.GetTagByName(ctx, tagName)
-		if dto.IsNotFound(err) {
-			tag, err = s.db.InsertTag(ctx, dto.InsertTagParams{
-				Name:       tagName,
-				CreatedAt:  now,
-				ModifiedAt: now,
-			})
-		}
-		if err != nil {
-			return fmt.Errorf("failed to get or create tag %s: %w", tagName, err)
-		}
-		tagIDs = append(tagIDs, tag.ID)
+	tagIDs, err := s.resolveTagIDs(ctx, tagNames, now)
+	if err != nil {
+		return err
 	}
 
 	return s.db.SetPlanTags(ctx, plan.ID, tagIDs, now)

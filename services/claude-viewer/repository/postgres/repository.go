@@ -282,6 +282,138 @@ func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams
 	})
 }
 
+func (r *Repository) InsertPlanWithTags(ctx context.Context, params dto.InsertPlanWithTagsParams) error {
+	if r.pool == nil {
+		return errors.New("transaction support not available")
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+
+	qtx := r.q.WithTx(tx)
+
+	if err := qtx.InsertPlan(ctx, InsertPlanParams{
+		FileName:   params.Plan.FileName,
+		FilePath:   params.Plan.FilePath,
+		Title:      params.Plan.Title,
+		Content:    params.Plan.Content,
+		CreatedAt:  timeToTimestamptz(params.Plan.CreatedAt),
+		ModifiedAt: timeToTimestamptz(params.Plan.ModifiedAt),
+		IndexedAt:  timeToTimestamptz(params.Plan.IndexedAt),
+		FileSize:   params.Plan.FileSize,
+		WordCount:  params.Plan.WordCount,
+	}); err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
+		return fmt.Errorf("failed to insert plan: %w", err)
+	}
+
+	plan, err := qtx.GetPlanByFileName(ctx, params.Plan.FileName)
+	if err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
+		return fmt.Errorf("failed to get inserted plan: %w", err)
+	}
+
+	for _, tagID := range params.TagIDs {
+		if err := qtx.AddTagToPlan(ctx, AddTagToPlanParams{
+			PlanID:     int64(plan.ID),
+			TagID:      tagID,
+			AssignedAt: timeToTimestamptz(params.AssignedAt),
+		}); err != nil {
+			rollbackErr := tx.Rollback(ctx)
+			if rollbackErr != nil {
+				return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+			}
+			return fmt.Errorf("failed to add tag to plan: %w", err)
+		}
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
+	}
+	return err
+}
+
+func (r *Repository) UpdatePlanWithTags(ctx context.Context, params dto.UpdatePlanWithTagsParams) error {
+	if r.pool == nil {
+		return errors.New("transaction support not available")
+	}
+
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+
+	qtx := r.q.WithTx(tx)
+
+	if err := qtx.UpdatePlan(ctx, UpdatePlanParams{
+		FileName:   params.Plan.FileName,
+		Title:      params.Plan.Title,
+		Content:    params.Plan.Content,
+		ModifiedAt: timeToTimestamptz(params.Plan.ModifiedAt),
+		IndexedAt:  timeToTimestamptz(params.Plan.IndexedAt),
+		FileSize:   params.Plan.FileSize,
+		WordCount:  params.Plan.WordCount,
+	}); err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
+		return fmt.Errorf("failed to update plan: %w", err)
+	}
+
+	plan, err := qtx.GetPlanByFileName(ctx, params.Plan.FileName)
+	if err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
+		return fmt.Errorf("failed to get plan: %w", err)
+	}
+
+	if err := qtx.RemoveAllTagsFromPlan(ctx, int64(plan.ID)); err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
+		return fmt.Errorf("failed to clear plan tags: %w", err)
+	}
+
+	for _, tagID := range params.TagIDs {
+		if err := qtx.AddTagToPlan(ctx, AddTagToPlanParams{
+			PlanID:     int64(plan.ID),
+			TagID:      tagID,
+			AssignedAt: timeToTimestamptz(params.AssignedAt),
+		}); err != nil {
+			rollbackErr := tx.Rollback(ctx)
+			if rollbackErr != nil {
+				return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+			}
+			return fmt.Errorf("failed to add tag to plan: %w", err)
+		}
+	}
+
+	err = tx.Commit(ctx)
+	if err != nil {
+		rollbackErr := tx.Rollback(ctx)
+		if rollbackErr != nil {
+			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		}
+	}
+	return err
+}
+
 func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
 	if r.pool == nil {
 		return errors.New("transaction support not available")
