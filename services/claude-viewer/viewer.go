@@ -40,12 +40,6 @@ func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName string) 
 		return nil, err
 	}
 
-	// Get tags for the plan
-	tags, err := s.db.GetPlanTags(ctx, plan.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get plan tags: %w", err)
-	}
-
 	renderedHTML, err := s.RenderMarkdown(plan.Content)
 	if err != nil {
 		return nil, err
@@ -63,7 +57,7 @@ func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName string) 
 			ModifiedAt:  plan.ModifiedAt,
 			FileSize:    plan.FileSize,
 			ReadingTime: readingTime,
-			Tags:        tags,
+			Tags:        plan.Tags,
 		},
 		Content:      plan.Content,
 		RenderedHTML: renderedHTML,
