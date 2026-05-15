@@ -51,8 +51,7 @@ CREATE TABLE IF NOT EXISTS connector_settings (
     setting_key TEXT NOT NULL,
     setting_value TEXT NOT NULL,
     is_secret BOOLEAN NOT NULL DEFAULT FALSE,
-    UNIQUE(connector_name, setting_key),
-    FOREIGN KEY (connector_name) REFERENCES connectors(name) ON DELETE CASCADE
+    UNIQUE(connector_name, setting_key)
 );
 
 -- +goose Down

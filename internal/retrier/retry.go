@@ -27,14 +27,13 @@ func NewRetrier(maxAttempts int, backOffTime time.Duration) *Retrier {
 
 func (r *Retrier) Do(ctx context.Context, retriableFunc RetriableFunc) error {
 	retryCount := 0
-	err := retriableFunc(ctx)
-	err = handleRetriableError(err)
+	err := handleRetriableError(retriableFunc(ctx))
 	if err == nil {
 		return nil
 	}
 
 	retryCount++
-	if retryCount >= r.MaxAttempts {
+	if retryCount > r.MaxAttempts {
 		return err
 	}
 
@@ -47,16 +46,12 @@ func (r *Retrier) Do(ctx context.Context, retriableFunc RetriableFunc) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-ticker.C:
-			err = retriableFunc(ctx)
-			if err == nil {
-				return nil
-			}
-			err = handleRetriableError(err)
+			err = handleRetriableError(retriableFunc(ctx))
 			if err == nil {
 				return nil
 			}
 			retryCount++
-			if retryCount >= r.MaxAttempts {
+			if retryCount > r.MaxAttempts {
 				return err
 			}
 		}

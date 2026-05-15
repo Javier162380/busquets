@@ -1,4 +1,5 @@
-package tui
+// Package commands represents a file with all the possible commands used by the TUI.
+package commands
 
 import (
 	"context"
@@ -15,7 +16,7 @@ import (
 // Command builders.
 
 // LoadPlansCmd loads all plans from the service.
-func LoadPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+func LoadPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -29,7 +30,7 @@ func LoadPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 }
 
 // SearchPlansCmd searches plans by query.
-func SearchPlansCmd(ctx context.Context, svc UnifiedService, query string) tea.Cmd {
+func SearchPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService, query string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -43,7 +44,7 @@ func SearchPlansCmd(ctx context.Context, svc UnifiedService, query string) tea.C
 }
 
 // LoadPlanDetailCmd loads a specific plan's details.
-func LoadPlanDetailCmd(ctx context.Context, svc UnifiedService, fileName string) tea.Cmd {
+func LoadPlanDetailCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -57,7 +58,7 @@ func LoadPlanDetailCmd(ctx context.Context, svc UnifiedService, fileName string)
 }
 
 // LoadVersionsCmd loads version history for a plan.
-func LoadVersionsCmd(ctx context.Context, svc UnifiedService, planName string) tea.Cmd {
+func LoadVersionsCmd(ctx context.Context, svc claudeviewer.UnifiedService, planName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -71,7 +72,7 @@ func LoadVersionsCmd(ctx context.Context, svc UnifiedService, planName string) t
 }
 
 // LoadVersionsForNavigationCmd checks versions before navigating to versions screen.
-func LoadVersionsForNavigationCmd(ctx context.Context, svc UnifiedService, planName string) tea.Cmd {
+func LoadVersionsForNavigationCmd(ctx context.Context, svc claudeviewer.UnifiedService, planName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -88,7 +89,7 @@ func LoadVersionsForNavigationCmd(ctx context.Context, svc UnifiedService, planN
 }
 
 // SavePlanCmd saves a plan and syncs to source directory.
-func SavePlanCmd(ctx context.Context, svc UnifiedService, fileName, content string, lastModified time.Time) tea.Cmd {
+func SavePlanCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, content string, lastModified time.Time) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
@@ -109,7 +110,7 @@ func SavePlanCmd(ctx context.Context, svc UnifiedService, fileName, content stri
 }
 
 // SyncPlansCmd syncs plans from the source directory.
-func SyncPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+func SyncPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -123,7 +124,7 @@ func SyncPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 }
 
 // RsyncPlansCmd syncs plans from the viewer directory back to the source directory.
-func RsyncPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+func RsyncPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -137,7 +138,7 @@ func RsyncPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 }
 
 // CreateTagCmd creates a new tag via the service.
-func CreateTagCmd(ctx context.Context, svc UnifiedService, name string) tea.Cmd {
+func CreateTagCmd(ctx context.Context, svc claudeviewer.UnifiedService, name string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
@@ -148,7 +149,7 @@ func CreateTagCmd(ctx context.Context, svc UnifiedService, name string) tea.Cmd 
 }
 
 // DumpPlansCmd writes all plans from the database back to the source plans directory.
-func DumpPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+func DumpPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
@@ -162,7 +163,7 @@ func DumpPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 }
 
 // SearchVersionsCmd searches a plan over its different versions.
-func SearchVersionsCmd(ctx context.Context, svc UnifiedService, currentPlanName, query string) tea.Cmd {
+func SearchVersionsCmd(ctx context.Context, svc claudeviewer.UnifiedService, currentPlanName, query string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -176,7 +177,7 @@ func SearchVersionsCmd(ctx context.Context, svc UnifiedService, currentPlanName,
 }
 
 // RestoreVersionCmd restores a plan to a previous version.
-func RestoreVersionCmd(ctx context.Context, svc UnifiedService, planName string, versionNumber int64) tea.Cmd {
+func RestoreVersionCmd(ctx context.Context, svc claudeviewer.UnifiedService, planName string, versionNumber int64) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -193,7 +194,7 @@ func RestoreVersionCmd(ctx context.Context, svc UnifiedService, planName string,
 }
 
 // LoadSettingsCmd loads settings by name.
-func LoadSettingsCmd(ctx context.Context, svc UnifiedService, settingNames []string) tea.Cmd {
+func LoadSettingsCmd(ctx context.Context, svc claudeviewer.UnifiedService, settingNames []string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -210,7 +211,7 @@ func LoadSettingsCmd(ctx context.Context, svc UnifiedService, settingNames []str
 }
 
 // SetSettingCmd updates a setting.
-func SetSettingCmd(ctx context.Context, svc UnifiedService, name string, values claudeviewer.SettingValues) tea.Cmd {
+func SetSettingCmd(ctx context.Context, svc claudeviewer.UnifiedService, name string, values claudeviewer.SettingValues) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -227,7 +228,7 @@ func SetSettingCmd(ctx context.Context, svc UnifiedService, name string, values 
 }
 
 // SendToConnectorCmd sends a plan to the enabled connector.
-func SendToConnectorCmd(ctx context.Context, svc UnifiedService, planFileName string) tea.Cmd {
+func SendToConnectorCmd(ctx context.Context, svc claudeviewer.UnifiedService, planFileName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
@@ -241,7 +242,7 @@ func SendToConnectorCmd(ctx context.Context, svc UnifiedService, planFileName st
 }
 
 // LoadConnectorsCmd loads all available connectors with their status.
-func LoadConnectorsCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+func LoadConnectorsCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -265,7 +266,7 @@ func LoadConnectorsCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 }
 
 // LoadConnectorSettingsCmd loads settings for a specific connector.
-func LoadConnectorSettingsCmd(ctx context.Context, svc UnifiedService, connectorName string) tea.Cmd {
+func LoadConnectorSettingsCmd(ctx context.Context, svc claudeviewer.UnifiedService, connectorName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -294,7 +295,7 @@ func LoadConnectorSettingsCmd(ctx context.Context, svc UnifiedService, connector
 }
 
 // EnableConnectorCmd enables a specific connector.
-func EnableConnectorCmd(ctx context.Context, svc UnifiedService, name string) tea.Cmd {
+func EnableConnectorCmd(ctx context.Context, svc claudeviewer.UnifiedService, name string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -308,7 +309,7 @@ func EnableConnectorCmd(ctx context.Context, svc UnifiedService, name string) te
 }
 
 // DisableConnectorCmd disables all connectors.
-func DisableConnectorCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+func DisableConnectorCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -322,7 +323,7 @@ func DisableConnectorCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 }
 
 // SaveConnectorSettingCmd saves a connector setting.
-func SaveConnectorSettingCmd(ctx context.Context, svc UnifiedService, connectorName, key, value string, isSecret bool) tea.Cmd {
+func SaveConnectorSettingCmd(ctx context.Context, svc claudeviewer.UnifiedService, connectorName, key, value string, isSecret bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -336,7 +337,7 @@ func SaveConnectorSettingCmd(ctx context.Context, svc UnifiedService, connectorN
 }
 
 // ValidateConnectorCmd validates a connector's settings.
-func ValidateConnectorCmd(ctx context.Context, svc UnifiedService, connectorName string) tea.Cmd {
+func ValidateConnectorCmd(ctx context.Context, svc claudeviewer.UnifiedService, connectorName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
@@ -351,7 +352,7 @@ func ValidateConnectorCmd(ctx context.Context, svc UnifiedService, connectorName
 
 // WatchChannelListenerCmd listens to the service's watch result channel
 // and converts results into WatchResultMsg for the TUI to handle.
-func WatchChannelListenerCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+func WatchChannelListenerCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		select {
 		case <-ctx.Done():
@@ -366,7 +367,7 @@ func WatchChannelListenerCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 }
 
 // LoadAllTagsForPanelCmd loads all tags, their plan counts, and the untagged count for the tag panel.
-func LoadAllTagsForPanelCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+func LoadAllTagsForPanelCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
@@ -408,7 +409,7 @@ func LoadAllTagsForPanelCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
 }
 
 // LoadUntaggedPlansCmd loads plans with no tags assigned.
-func LoadUntaggedPlansCmd(ctx context.Context, svc UnifiedService) tea.Cmd {
+func LoadUntaggedPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -429,7 +430,7 @@ func ClearStatusCmd(delay time.Duration) tea.Cmd {
 }
 
 // LoadTagsForModalCmd loads all tags and current plan tags for the tag modal.
-func LoadTagsForModalCmd(ctx context.Context, svc UnifiedService, fileName string) tea.Cmd {
+func LoadTagsForModalCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -453,7 +454,7 @@ func LoadTagsForModalCmd(ctx context.Context, svc UnifiedService, fileName strin
 }
 
 // SetPlanTagsCmd sets tags for a plan.
-func SetPlanTagsCmd(ctx context.Context, svc UnifiedService, fileName string, tags []string) tea.Cmd {
+func SetPlanTagsCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName string, tags []string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -472,7 +473,7 @@ func SetPlanTagsCmd(ctx context.Context, svc UnifiedService, fileName string, ta
 }
 
 // SearchPlansWithTagsCmd searches plans with text query and tag filters.
-func SearchPlansWithTagsCmd(ctx context.Context, svc UnifiedService, query string, tags []string, matchAll bool) tea.Cmd {
+func SearchPlansWithTagsCmd(ctx context.Context, svc claudeviewer.UnifiedService, query string, tags []string, matchAll bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
@@ -486,7 +487,7 @@ func SearchPlansWithTagsCmd(ctx context.Context, svc UnifiedService, query strin
 }
 
 // DeleteTagsCmd deletes a tag.
-func DeleteTagsCmd(ctx context.Context, svc UnifiedService, tagID int64, fileName string) tea.Cmd {
+func DeleteTagsCmd(ctx context.Context, svc claudeviewer.UnifiedService, tagID int64, fileName string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()

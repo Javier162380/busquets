@@ -37,6 +37,10 @@ test: ## Run tests
 	@echo "Running tests..."
 	go test -v ./...
 
+test-integration: ## Run integration tests (SQLite + Postgres, requires Docker)
+	@echo "Running integration tests..."
+	TESTCONTAINERS_RYUK_DISABLED=true INTEGRATION=1 go test -count=1 -v ./services/claude-viewer/...
+
 lint: ## Lint project
 	 @echo "Linting project..."
 	 golangci-lint run -c .golangci.yml

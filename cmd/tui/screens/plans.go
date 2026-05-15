@@ -738,27 +738,42 @@ func (s *PlansScreen) renderSplitView() string {
 	s.tagFilter.SetWidth(panelWidth - 4)
 
 	// Build left panel content.
-	leftContent := s.list.View()
+	plansListContent := s.list.View()
 	if s.searchBar.IsActive() {
-		leftContent = lipgloss.JoinVertical(lipgloss.Left, leftContent, s.searchBar.View())
+		plansListContent = lipgloss.JoinVertical(lipgloss.Left, plansListContent, s.searchBar.View())
 	}
 	if s.tagFilter.IsActive() {
-		leftContent = lipgloss.JoinVertical(lipgloss.Left, leftContent, s.tagFilter.View())
+		plansListContent = lipgloss.JoinVertical(lipgloss.Left, plansListContent, s.tagFilter.View())
 	}
 
-	leftPanel := s.borderStyle.
+	activeBorder := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.AccentColor)
+
+	plansListContentBorder := s.borderStyle
+	plansContentBorder := s.borderStyle
+
+	switch s.focus {
+	case types.FocusList:
+		plansListContentBorder = activeBorder
+	case types.FocusContent:
+		plansContentBorder = activeBorder
+	default:
+	}
+
+	plansListView := plansListContentBorder.
 		Width(panelWidth).
 		Height(contentHeight).
-		Render(leftContent)
+		Render(plansListContent)
 
-	rightPanel := s.borderStyle.
+	planContentView := plansContentBorder.
 		Width(panelWidth).
 		Height(contentHeight).
 		Render(s.viewer.View())
 
 	divider := s.renderDivider(contentHeight)
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, divider, rightPanel)
+	return lipgloss.JoinHorizontal(lipgloss.Top, plansListView, divider, planContentView)
 }
 
 // renderThreePanelView renders the three-panel layout: tags | list | content.

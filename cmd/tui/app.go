@@ -6,6 +6,7 @@ import (
 	"io"
 	"time"
 
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/commands"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
@@ -15,47 +16,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/davecgh/go-spew/spew"
 )
-
-// UnifiedService is the interface the TUI expects from the service.
-type UnifiedService interface {
-	ListAllPlansWithReadingTime(ctx context.Context) ([]claudeviewer.PlanSummary, error)
-	GetPlanDetailByFileName(ctx context.Context, fileName string) (*claudeviewer.PlanDetail, error)
-	UpdatePlan(ctx context.Context, req claudeviewer.UpdatePlanRequest) (*claudeviewer.UpdatePlanResult, error)
-	SearchPlansWithReadingTime(ctx context.Context, query string) ([]claudeviewer.PlanSummary, error)
-	SavePlanVersion(ctx context.Context, planName, content string) error
-	GetPlanVersionHistory(ctx context.Context, planName string, offset, limit int64) ([]claudeviewer.PlanVersionDetail, error)
-	GetPlanVersion(ctx context.Context, planName string, versionNumber int64) (*claudeviewer.PlanVersionDetail, error)
-	SearchVersions(ctx context.Context, planName, query string) ([]claudeviewer.PlanVersionDetail, error)
-	RestorePlanVersion(ctx context.Context, planName string, versionNumber int64) error
-	SyncPlans(ctx context.Context) (int, error)
-	RSyncPlans(ctx context.Context) (int, error)
-	DumpPlans(ctx context.Context) (int, error)
-	CreateTag(ctx context.Context, name string, description, color *string) (claudeviewer.Tag, error)
-	RenderMarkdown(content string) (string, error)
-	GetSetting(ctx context.Context, variableName string) (claudeviewer.Setting, bool, error)
-	SetSetting(ctx context.Context, varName string, values claudeviewer.SettingValues) error
-	SendToConnector(ctx context.Context, planFileName string) error
-	ListConnectors(ctx context.Context) ([]claudeviewer.ConnectorInfo, error)
-	EnableConnector(ctx context.Context, name string) error
-	DisableConnector(ctx context.Context) error
-	ConfigureConnector(ctx context.Context, connectorName, key, value string, isSecret bool) error
-	GetConnectorSettings(ctx context.Context, connectorName string) ([]claudeviewer.ConnectorSettingInfo, error)
-	ValidateConnector(ctx context.Context, connectorName string) error
-	StartWatchMode(ctx context.Context, intervalSeconds float64) error
-	StopWatchMode(ctx context.Context) error
-	GetWatchResultChannel() <-chan claudeviewer.WatchResult
-	IsWatchModeRunning() bool
-	UpdateWatchInterval(intervalSeconds float64)
-	GetAllTags(ctx context.Context) ([]claudeviewer.Tag, error)
-	GetTagPlanCounts(ctx context.Context) (map[string]int, error)
-	GetUntaggedPlanCount(ctx context.Context) (int64, error)
-	ListUntaggedPlansWithReadingTime(ctx context.Context) ([]claudeviewer.PlanSummary, error)
-	BuildTagPlanMap(ctx context.Context) (map[string][]claudeviewer.PlanSummary, error)
-	GetPlanTags(ctx context.Context, fileName string) ([]claudeviewer.Tag, error)
-	SetPlanTags(ctx context.Context, fileName string, tagNames []string) error
-	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]claudeviewer.PlanSummary, error)
-	DeleteTag(ctx context.Context, id int64) error
-}
 
 // App is the root TUI application model.
 type App struct {
@@ -71,7 +31,7 @@ type App struct {
 	width  int
 	height int
 
-	service UnifiedService
+	service claudeviewer.UnifiedService
 
 	dump io.Writer
 
@@ -81,7 +41,7 @@ type App struct {
 }
 
 // New creates a new TUI application.
-func New(ctx context.Context, service UnifiedService) *App {
+func New(ctx context.Context, service claudeviewer.UnifiedService) *App {
 	return &App{
 		ctx:       ctx,
 		service:   service,
@@ -125,8 +85,8 @@ func (a *App) Init() tea.Cmd {
 
 	// Start watching for watch results and load initial plans.
 	return tea.Batch(
-		LoadPlansCmd(a.ctx, a.service),
-		WatchChannelListenerCmd(a.ctx, a.service),
+		commands.LoadPlansCmd(a.ctx, a.service),
+		commands.WatchChannelListenerCmd(a.ctx, a.service),
 	)
 }
 
@@ -180,12 +140,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, a.popScreen()
 
 	case messages.RequestVersionsScreenMsg:
-		return a, LoadVersionsForNavigationCmd(a.ctx, a.service, msg.PlanName)
+		return a, commands.LoadVersionsForNavigationCmd(a.ctx, a.service, msg.PlanName)
 
 	case messages.VersionsNavigationResultMsg:
 		if len(msg.Versions) == 0 {
 			a.statusBar.SetError("No versions found")
-			return a, ClearStatusCmd(500 * time.Millisecond)
+			return a, commands.ClearStatusCmd(500 * time.Millisecond)
 		}
 		return a, a.pushVersionsScreenWithData(msg.PlanName, msg.Versions)
 
@@ -211,35 +171,35 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case msg.Result.HasConflict:
 			a.statusBar.SetError(fmt.Sprintf("Unable to save result, conflict %s", msg.Result.ConflictInfo.Message))
 		}
-		return a, ClearStatusCmd(500 * time.Millisecond)
+		return a, commands.ClearStatusCmd(500 * time.Millisecond)
 
 	case messages.SyncResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError("Sync failed: " + msg.Error.Error())
-			return a, nil
+			return a, commands.ClearStatusCmd(500 * time.Millisecond)
 		}
 		a.statusBar.SetSuccess(fmt.Sprintf("Synced %d plans", msg.Count))
-		return a, tea.Batch(LoadPlansCmd(a.ctx, a.service), ClearStatusCmd(1*time.Second))
+		return a, tea.Batch(commands.LoadPlansCmd(a.ctx, a.service), commands.ClearStatusCmd(1*time.Second))
 
 	case messages.RSyncResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError("RSync failed: " + msg.Error.Error())
-			return a, nil
+			return a, commands.ClearStatusCmd(500 * time.Millisecond)
 		}
 		a.statusBar.SetSuccess(fmt.Sprintf("Rsync succeeded: %d plans sync from remote into the local directory", msg.Count))
-		return a, LoadPlansCmd(a.ctx, a.service)
+		return a, tea.Batch(commands.LoadPlansCmd(a.ctx, a.service), commands.ClearStatusCmd(500*time.Second))
 
 	case messages.DumpResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError("Dump failed: " + msg.Error.Error())
-			return a, ClearStatusCmd(500 * time.Millisecond)
+			return a, commands.ClearStatusCmd(500 * time.Millisecond)
 		}
 		a.statusBar.SetSuccess(fmt.Sprintf("Dumped %d plans to source directory", msg.Count))
-		return a, ClearStatusCmd(500 * time.Millisecond)
+		return a, commands.ClearStatusCmd(500 * time.Millisecond)
 
 	case messages.DumpPlansMsg:
 		a.statusBar.SetLoading("Dumping plans from database to source directory...")
-		return a, DumpPlansCmd(a.ctx, a.service)
+		return a, commands.DumpPlansCmd(a.ctx, a.service)
 
 	case messages.DisplayModeChangedMsg:
 		setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingDefaultDisplayMode)
@@ -254,64 +214,64 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		if mode == claudeviewer.DisplayModeTagPlanContent {
-			return a, LoadAllTagsForPanelCmd(a.ctx, a.service)
+			return a, commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
 		}
 		return a, nil
 
 	case messages.LoadAllTagsForPanelMsg:
-		return a, LoadAllTagsForPanelCmd(a.ctx, a.service)
+		return a, commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
 
 	case messages.AllTagsForPanelLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
 	case messages.CreateTagMsg:
-		return a, CreateTagCmd(a.ctx, a.service, msg.Name)
+		return a, commands.CreateTagCmd(a.ctx, a.service, msg.Name)
 
 	case messages.CreateTagResultMsg:
 		if msg.Error != nil {
 			a.statusBar.SetError("Failed to create tag: " + msg.Error.Error())
-			return a, ClearStatusCmd(2 * time.Second)
+			return a, commands.ClearStatusCmd(2 * time.Second)
 		}
 		a.statusBar.SetSuccess("Tag created")
 		return a, tea.Batch(
-			LoadPlansCmd(a.ctx, a.service),
-			LoadAllTagsForPanelCmd(a.ctx, a.service),
-			ClearStatusCmd(1*time.Second),
+			commands.LoadPlansCmd(a.ctx, a.service),
+			commands.LoadAllTagsForPanelCmd(a.ctx, a.service),
+			commands.ClearStatusCmd(1*time.Second),
 		)
 
 	case messages.ErrorMsg:
 		a.statusBar.SetError(msg.Error.Error())
-		return a, ClearStatusCmd(500 * time.Millisecond)
+		return a, commands.ClearStatusCmd(500 * time.Millisecond)
 
 	case messages.LoadPlanDetailMsg:
-		return a, LoadPlanDetailCmd(a.ctx, a.service, msg.FileName)
+		return a, commands.LoadPlanDetailCmd(a.ctx, a.service, msg.FileName)
 
 	case messages.SavePlanMsg:
-		return a, SavePlanCmd(a.ctx, a.service, msg.FileName, msg.Content, msg.Modified)
+		return a, commands.SavePlanCmd(a.ctx, a.service, msg.FileName, msg.Content, msg.Modified)
 
 	case messages.SyncPlansMsg:
 		a.statusBar.SetLoading("Syncing plans...")
-		return a, SyncPlansCmd(a.ctx, a.service)
+		return a, commands.SyncPlansCmd(a.ctx, a.service)
 
 	case messages.RSyncPlansMsg:
 		a.statusBar.SetLoading("Rsyncing plans from remote directory into the LLM directory...")
-		return a, RsyncPlansCmd(a.ctx, a.service)
+		return a, commands.RsyncPlansCmd(a.ctx, a.service)
 
 	case messages.LoadVersionsMsg:
-		return a, LoadVersionsCmd(a.ctx, a.service, msg.PlanName)
+		return a, commands.LoadVersionsCmd(a.ctx, a.service, msg.PlanName)
 
 	case messages.SearchPlansMsg:
-		return a, SearchPlansCmd(a.ctx, a.service, msg.Query)
+		return a, commands.SearchPlansCmd(a.ctx, a.service, msg.Query)
 
 	case messages.SearchVersionsMsg:
-		return a, SearchVersionsCmd(a.ctx, a.service, msg.PlanName, msg.Query)
+		return a, commands.SearchVersionsCmd(a.ctx, a.service, msg.PlanName, msg.Query)
 
 	case messages.ClearSearchMsg:
-		return a, LoadPlansCmd(a.ctx, a.service)
+		return a, commands.LoadPlansCmd(a.ctx, a.service)
 
 	case messages.RestoreVersionMsg:
 		a.statusBar.SetLoading("Restoring version...")
-		return a, RestoreVersionCmd(a.ctx, a.service, msg.PlanName, msg.VersionNumber)
+		return a, commands.RestoreVersionCmd(a.ctx, a.service, msg.PlanName, msg.VersionNumber)
 
 	case messages.RestoreResultMsg:
 		if msg.Error != nil {
@@ -321,18 +281,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.statusBar.SetSuccess("Version restored successfully")
 		a.popScreen()
 		return a, tea.Batch(
-			SyncPlansCmd(a.ctx, a.service),
-			LoadPlansCmd(a.ctx, a.service),
+			commands.SyncPlansCmd(a.ctx, a.service),
+			commands.LoadPlansCmd(a.ctx, a.service),
 		)
 
 	case messages.OpenSettingsMsg:
 		return a, a.pushSettingsScreen()
 
 	case messages.LoadSettingsMsg:
-		return a, LoadSettingsCmd(a.ctx, a.service, msg.SettingNames)
+		return a, commands.LoadSettingsCmd(a.ctx, a.service, msg.SettingNames)
 
 	case messages.SaveSettingMsg:
-		return a, SetSettingCmd(a.ctx, a.service, msg.Name, msg.Values)
+		return a, commands.SetSettingCmd(a.ctx, a.service, msg.Name, msg.Values)
 
 	case messages.SettingsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
@@ -372,7 +332,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-		return a.delegateToCurrentScreen(msg)
+		model, cmd := a.delegateToCurrentScreen(msg)
+		return model, tea.Batch(cmd, commands.ClearStatusCmd(500*time.Millisecond))
 
 	case messages.WatchResultMsg:
 		if msg.Error != nil {
@@ -380,12 +341,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else if msg.Count > 0 {
 			a.statusBar.SetSuccess(fmt.Sprintf("Auto-synced %d plans", msg.Count))
 			return a, tea.Batch(
-				LoadPlansCmd(a.ctx, a.service),
-				WatchChannelListenerCmd(a.ctx, a.service),
-				ClearStatusCmd(1*time.Second),
+				commands.LoadPlansCmd(a.ctx, a.service),
+				commands.WatchChannelListenerCmd(a.ctx, a.service),
+				commands.ClearStatusCmd(1*time.Second),
 			)
 		}
-		return a, WatchChannelListenerCmd(a.ctx, a.service)
+		return a, commands.WatchChannelListenerCmd(a.ctx, a.service)
 
 	case messages.ClearStatusMsg:
 		a.statusBar.Clear()
@@ -393,7 +354,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case messages.SendToConnectorMsg:
 		a.statusBar.SetLoading("Sending to connector...")
-		return a, SendToConnectorCmd(a.ctx, a.service, msg.PlanFileName)
+		return a, commands.SendToConnectorCmd(a.ctx, a.service, msg.PlanFileName)
 
 	case messages.SendToConnectorResultMsg:
 		if msg.Error != nil {
@@ -401,34 +362,34 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.statusBar.SetSuccess("Sent successfully!")
 		}
-		return a, ClearStatusCmd(1 * time.Second)
+		return a, commands.ClearStatusCmd(1 * time.Second)
 
 	case messages.OpenConnectorsMsg:
 		return a, a.pushConnectorsScreen()
 
 	case messages.LoadConnectorsMsg:
-		return a, LoadConnectorsCmd(a.ctx, a.service)
+		return a, commands.LoadConnectorsCmd(a.ctx, a.service)
 
 	case messages.ConnectorsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
 	case messages.LoadConnectorSettingsMsg:
-		return a, LoadConnectorSettingsCmd(a.ctx, a.service, msg.ConnectorName)
+		return a, commands.LoadConnectorSettingsCmd(a.ctx, a.service, msg.ConnectorName)
 
 	case messages.ConnectorSettingsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 
 	case messages.EnableConnectorMsg:
 		a.statusBar.SetLoading("Enabling connector...")
-		return a, EnableConnectorCmd(a.ctx, a.service, msg.Name)
+		return a, commands.EnableConnectorCmd(a.ctx, a.service, msg.Name)
 
 	case messages.DisableConnectorMsg:
 		a.statusBar.SetLoading("Disabling connector...")
-		return a, DisableConnectorCmd(a.ctx, a.service)
+		return a, commands.DisableConnectorCmd(a.ctx, a.service)
 
 	case messages.SaveConnectorSettingMsg:
 		a.statusBar.SetLoading("Saving...")
-		return a, SaveConnectorSettingCmd(a.ctx, a.service, msg.ConnectorName, msg.Key, msg.Value, msg.IsSecret)
+		return a, commands.SaveConnectorSettingCmd(a.ctx, a.service, msg.ConnectorName, msg.Key, msg.Value, msg.IsSecret)
 
 	case messages.ConnectorUpdateResultMsg:
 		if msg.Error != nil {
@@ -440,7 +401,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case messages.ValidateConnectorMsg:
 		a.statusBar.SetLoading("Validating...")
-		return a, ValidateConnectorCmd(a.ctx, a.service, msg.Name)
+		return a, commands.ValidateConnectorCmd(a.ctx, a.service, msg.Name)
 
 	case messages.ValidateConnectorResultMsg:
 		if msg.Error != nil {
@@ -448,10 +409,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			a.statusBar.SetSuccess("Connector validated successfully!")
 		}
-		return a, ClearStatusCmd(1 * time.Second)
+		return a, commands.ClearStatusCmd(1 * time.Second)
 
 	case messages.LoadTagsForModalMsg:
-		return a, LoadTagsForModalCmd(a.ctx, a.service, msg.FileName)
+		return a, commands.LoadTagsForModalCmd(a.ctx, a.service, msg.FileName)
 
 	case components.TagsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
@@ -459,18 +420,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.SetPlanTagsMsg:
 		a.statusBar.SetLoading("Saving tags...")
 		return a, tea.Batch(
-			SetPlanTagsCmd(a.ctx, a.service, msg.FileName, msg.Tags),
-			ClearStatusCmd(1*time.Second),
+			commands.SetPlanTagsCmd(a.ctx, a.service, msg.FileName, msg.Tags),
+			commands.ClearStatusCmd(1*time.Second),
 		)
 
 	case messages.SearchPlansWithTagsMsg:
-		return a, SearchPlansWithTagsCmd(a.ctx, a.service, msg.Query, msg.Tags, msg.MatchAll)
+		return a, commands.SearchPlansWithTagsCmd(a.ctx, a.service, msg.Query, msg.Tags, msg.MatchAll)
 
 	case messages.LoadUntaggedPlansMsg:
-		return a, LoadUntaggedPlansCmd(a.ctx, a.service)
+		return a, commands.LoadUntaggedPlansCmd(a.ctx, a.service)
 
 	case components.DeleteTagMsg:
-		return a, DeleteTagsCmd(a.ctx, a.service, msg.TagID, msg.CurrentPlan)
+		return a, commands.DeleteTagsCmd(a.ctx, a.service, msg.TagID, msg.CurrentPlan)
 
 	case components.DeleteTagCmdMsg:
 		if msg.Error != nil {
@@ -479,7 +440,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			a.statusBar.SetSuccess("Deleted tag")
 		}
 		return a, tea.Batch(
-			ClearStatusCmd(500*time.Millisecond), LoadTagsForModalCmd(a.ctx, a.service, msg.FileName),
+			commands.ClearStatusCmd(500*time.Millisecond), commands.LoadTagsForModalCmd(a.ctx, a.service, msg.FileName),
 		)
 
 	case messages.ThemeChangedMsg:

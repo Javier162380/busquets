@@ -3,6 +3,8 @@ package claudeviewer
 import (
 	"context"
 	"fmt"
+	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -15,10 +17,15 @@ import (
 	connectors_test "github.com/Javier162380/claude-plan-viewer/internal/connectors/test"
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+	postgresrepo "github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/postgres"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
 
 	"github.com/golang/mock/gomock"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"github.com/testcontainers/testcontainers-go"
+	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 // newTestRepository creates a new SQLite repository with migrations for testing.
@@ -91,7 +98,7 @@ And a list:
 Some ~~strikethrough~~ text.`
 )
 
-func setupTestService(t *testing.T) (*Service, string, string, func()) {
+func setupTestServiceBackendSQLite(t *testing.T) (*Service, string, string, func()) {
 	t.Helper()
 
 	tempDir, err := os.MkdirTemp(os.TempDir(), "claude-viewer-test-*")
@@ -127,6 +134,129 @@ func createTestPlanFile(t *testing.T, dir, filename, content string) {
 	err := os.WriteFile(path, []byte(content), 0o600)
 	require.NoError(t, err)
 }
+
+func setupTestServiceBackendPostgres(t *testing.T) (*Service, string, string, func()) {
+	t.Helper()
+	ctx := context.Background()
+
+	// Each call gets its own isolated database within the shared container.
+	dbName := fmt.Sprintf("testdb_%d", time.Now().UnixNano())
+	adminConnStr := pgDBConnStr(pgBaseConnStr, "postgres")
+
+	adminPool, err := pgxpool.New(ctx, adminConnStr)
+	require.NoError(t, err)
+	_, err = adminPool.Exec(ctx, "CREATE DATABASE "+dbName)
+	adminPool.Close()
+	require.NoError(t, err)
+
+	testConnStr := pgDBConnStr(pgBaseConnStr, dbName)
+
+	err = storage.RunPostgresMigrations(ctx, storage.PostgresConfig{ConnectionString: testConnStr})
+	require.NoError(t, err)
+
+	pool, err := storage.NewPostgresClient(ctx, storage.PostgresConfig{
+		ConnectionString: testConnStr,
+		MaxOpenConns:     5,
+		MaxIdleConns:     2,
+	})
+	require.NoError(t, err)
+
+	repo := postgresrepo.NewRepository(pool.Pool())
+
+	tempDir, err := os.MkdirTemp(os.TempDir(), "claude-viewer-pg-test-*")
+	require.NoError(t, err)
+
+	viewerDir := filepath.Join(tempDir, "viewer")
+	sourcePlansDir := filepath.Join(tempDir, "source")
+	require.NoError(t, os.MkdirAll(viewerDir, 0o755))
+	require.NoError(t, os.MkdirAll(sourcePlansDir, 0o755))
+
+	svc, err := New(repo, viewerDir, sourcePlansDir, true)
+	require.NoError(t, err)
+
+	fixedTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
+	svc.nowProvider = newMockNowProvider(fixedTime)
+
+	cleanup := func() {
+		pool.Close()
+		dropPool, err := pgxpool.New(ctx, adminConnStr)
+		if err == nil {
+			_, _ = dropPool.Exec(ctx, "DROP DATABASE "+dbName+" WITH (FORCE)")
+			dropPool.Close()
+		}
+		os.RemoveAll(tempDir)
+	}
+	return svc, sourcePlansDir, viewerDir, cleanup
+}
+
+// pgDBConnStr replaces the database name in a postgres:// connection URL.
+func pgDBConnStr(base, dbName string) string {
+	u, err := url.Parse(base)
+	if err != nil {
+		return base
+	}
+	u.Path = "/" + dbName
+	return u.String()
+}
+
+// ---- Backend registry ----
+
+type serviceSetupFn func(t *testing.T) (*Service, string, string, func())
+
+type backendSetup struct {
+	name    string
+	setupFn serviceSetupFn
+}
+
+var (
+	registeredBackends []backendSetup
+	pgBaseConnStr      string // set once in init() when INTEGRATION=1
+	pgContainerCancel  func() // terminates the shared container
+)
+
+func TestMain(m *testing.M) {
+	registeredBackends = append(registeredBackends, backendSetup{
+		name:    "sqlite",
+		setupFn: setupTestServiceBackendSQLite,
+	})
+
+	if os.Getenv("INTEGRATION") != "" {
+		ctx := context.Background()
+		pgContainer, err := tcpostgres.Run(ctx,
+			"postgres:16-alpine",
+			tcpostgres.WithDatabase("postgres"),
+			tcpostgres.WithUsername("test"),
+			tcpostgres.WithPassword("test"),
+			testcontainers.WithWaitStrategy(
+				wait.ForLog("database system is ready to accept connections").
+					WithOccurrence(2).
+					WithStartupTimeout(60*time.Second),
+			),
+		)
+		if err != nil {
+			log.Fatalf("failed to start postgres container: %v", err)
+		}
+		connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
+		if err != nil {
+			log.Fatalf("failed to get postgres connection string: %v", err)
+		}
+		pgBaseConnStr = connStr
+		pgContainerCancel = func() { _ = pgContainer.Terminate(context.Background()) }
+
+		registeredBackends = append(registeredBackends, backendSetup{
+			name:    "postgres",
+			setupFn: setupTestServiceBackendPostgres,
+		})
+	}
+
+	code := m.Run()
+	if pgContainerCancel != nil {
+		pgContainerCancel()
+	}
+	os.Exit(code)
+}
+
+// ---- Tests ----
 
 func TestUtilityFunctions(t *testing.T) {
 	t.Run("CountWords returns 0 for empty string", func(t *testing.T) {
@@ -205,8 +335,17 @@ func TestUtilityFunctions(t *testing.T) {
 }
 
 func TestMarkdownRendering(t *testing.T) {
-	service, _, _, cleanup := setupTestService(t)
-	defer cleanup()
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			service, _, _, cleanup := b.setupFn(t)
+			defer cleanup()
+			testMarkdownRendering(t, service)
+		})
+	}
+}
+
+func testMarkdownRendering(t *testing.T, service *Service) {
+	t.Helper()
 
 	t.Run("RenderMarkdown renders plain text", func(t *testing.T) {
 		html, err := service.RenderMarkdown("Hello world")
@@ -253,8 +392,18 @@ func TestMarkdownRendering(t *testing.T) {
 }
 
 func TestSyncOperations(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testSyncOperations(t, b.setupFn)
+		})
+	}
+}
+
+func testSyncOperations(t *testing.T, setup serviceSetupFn) {
+	t.Helper()
+
 	t.Run("SyncPlans with empty source directory", func(t *testing.T) {
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 
 		ctx := context.Background()
@@ -264,7 +413,7 @@ func TestSyncOperations(t *testing.T) {
 	})
 
 	t.Run("SyncPlans syncs new file", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 
 		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
@@ -281,7 +430,7 @@ func TestSyncOperations(t *testing.T) {
 	})
 
 	t.Run("SyncPlans updates modified file", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -303,7 +452,7 @@ func TestSyncOperations(t *testing.T) {
 	})
 
 	t.Run("SyncPlans skips unchanged files", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -319,7 +468,7 @@ func TestSyncOperations(t *testing.T) {
 	})
 
 	t.Run("SyncPlans handles multiple files concurrently", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -334,7 +483,7 @@ func TestSyncOperations(t *testing.T) {
 	})
 
 	t.Run("SyncPlans ignores non-markdown files", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -347,7 +496,7 @@ func TestSyncOperations(t *testing.T) {
 	})
 
 	t.Run("SyncPlans calculates word count correctly", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -364,8 +513,18 @@ func TestSyncOperations(t *testing.T) {
 }
 
 func TestRSyncOperations(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testRSyncOperations(t, b.setupFn)
+		})
+	}
+}
+
+func testRSyncOperations(t *testing.T, setup serviceSetupFn) {
+	t.Helper()
+
 	t.Run("RSyncPlans with empty source directory", func(t *testing.T) {
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 
 		ctx := context.Background()
@@ -375,52 +534,45 @@ func TestRSyncOperations(t *testing.T) {
 	})
 
 	t.Run("RSyncPlans copies missing file from source to viewer", func(t *testing.T) {
-		service, sourcePlansDir, viewerDir, cleanup := setupTestService(t)
+		service, sourcePlansDir, viewerDir, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		// Create and sync a plan first
 		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Delete the viewer file (simulating missing file)
 		err = os.Remove(filepath.Join(viewerDir, "test-plan.md"))
 		require.NoError(t, err)
 
-		// RSyncPlans should copy source -> viewer
 		count, err := service.RSyncPlans(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 1, count)
 
-		// Verify viewer file was restored
 		content, err := os.ReadFile(filepath.Join(viewerDir, "test-plan.md"))
 		require.NoError(t, err)
 		require.Equal(t, sampleMarkdown, string(content))
 	})
 
 	t.Run("RSyncPlans skips files that already exist in viewer", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		// Create and sync a plan
 		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// File exists in both source and viewer, so rsync should skip
 		count, err := service.RSyncPlans(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 0, count)
 	})
 
 	t.Run("RSyncPlans ignores non-markdown files", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		// Create a non-markdown file in source (won't be synced to DB)
 		createTestPlanFile(t, sourcePlansDir, "test.txt", "not markdown")
 
 		count, err := service.RSyncPlans(ctx)
@@ -429,25 +581,22 @@ func TestRSyncOperations(t *testing.T) {
 	})
 
 	t.Run("RSyncPlans skips files not in database", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		// Create a file in source but don't sync it (so it's not in DB)
 		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
 
-		// RSyncPlans should skip since file is not in DB
 		count, err := service.RSyncPlans(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 0, count)
 	})
 
 	t.Run("RSyncPlans handles multiple missing files", func(t *testing.T) {
-		service, sourcePlansDir, viewerDir, cleanup := setupTestService(t)
+		service, sourcePlansDir, viewerDir, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		// Create and sync multiple plans
 		for i := 1; i <= 5; i++ {
 			filename := "plan-" + strconv.Itoa(i) + ".md"
 			createTestPlanFile(t, sourcePlansDir, filename, sampleMarkdown)
@@ -455,19 +604,16 @@ func TestRSyncOperations(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Delete all viewer files
 		for i := 1; i <= 5; i++ {
 			filename := "plan-" + strconv.Itoa(i) + ".md"
 			err = os.Remove(filepath.Join(viewerDir, filename))
 			require.NoError(t, err)
 		}
 
-		// RSyncPlans should restore all 5 files
 		count, err := service.RSyncPlans(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 5, count)
 
-		// Verify all files were restored
 		for i := 1; i <= 5; i++ {
 			filename := "plan-" + strconv.Itoa(i) + ".md"
 			_, err := os.Stat(filepath.Join(viewerDir, filename))
@@ -476,11 +622,10 @@ func TestRSyncOperations(t *testing.T) {
 	})
 
 	t.Run("RSyncPlans only copies missing files not all files", func(t *testing.T) {
-		service, sourcePlansDir, viewerDir, cleanup := setupTestService(t)
+		service, sourcePlansDir, viewerDir, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		// Create and sync multiple plans
 		for i := 1; i <= 5; i++ {
 			filename := "plan-" + strconv.Itoa(i) + ".md"
 			createTestPlanFile(t, sourcePlansDir, filename, sampleMarkdown)
@@ -488,13 +633,11 @@ func TestRSyncOperations(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Delete only 2 viewer files
 		err = os.Remove(filepath.Join(viewerDir, "plan-2.md"))
 		require.NoError(t, err)
 		err = os.Remove(filepath.Join(viewerDir, "plan-4.md"))
 		require.NoError(t, err)
 
-		// RSyncPlans should only restore the 2 missing files
 		count, err := service.RSyncPlans(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 2, count)
@@ -502,8 +645,18 @@ func TestRSyncOperations(t *testing.T) {
 }
 
 func TestSearchAndListing(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testSearchAndListing(t, b.setupFn)
+		})
+	}
+}
+
+func testSearchAndListing(t *testing.T, setup serviceSetupFn) {
+	t.Helper()
+
 	t.Run("ListAllPlansWithReadingTime returns empty list for empty database", func(t *testing.T) {
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 
 		ctx := context.Background()
@@ -513,7 +666,7 @@ func TestSearchAndListing(t *testing.T) {
 	})
 
 	t.Run("ListAllPlansWithReadingTime returns all plans", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -531,7 +684,7 @@ func TestSearchAndListing(t *testing.T) {
 	})
 
 	t.Run("ListAllPlansWithReadingTime sorts by modified_at DESC", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -552,7 +705,7 @@ func TestSearchAndListing(t *testing.T) {
 	})
 
 	t.Run("SearchPlansWithReadingTime with empty query returns all plans", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -566,7 +719,7 @@ func TestSearchAndListing(t *testing.T) {
 	})
 
 	t.Run("SearchPlansWithReadingTime matches title", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -582,7 +735,7 @@ func TestSearchAndListing(t *testing.T) {
 	})
 
 	t.Run("SearchPlansWithReadingTime matches content", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -598,7 +751,7 @@ func TestSearchAndListing(t *testing.T) {
 	})
 
 	t.Run("SearchPlansWithReadingTime returns empty for no matches", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -612,7 +765,7 @@ func TestSearchAndListing(t *testing.T) {
 	})
 
 	t.Run("SearchPlansWithReadingTime is case insensitive", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -620,15 +773,25 @@ func TestSearchAndListing(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plans, err := service.SearchPlansWithReadingTime(ctx, "camelcase")
+		plans, err := service.SearchPlansWithReadingTime(ctx, "CamelCase")
 		require.NoError(t, err)
 		require.Len(t, plans, 1)
 	})
 }
 
 func TestPlanRetrieval(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testPlanRetrieval(t, b.setupFn)
+		})
+	}
+}
+
+func testPlanRetrieval(t *testing.T, setup serviceSetupFn) {
+	t.Helper()
+
 	t.Run("GetPlanByFileName returns plan for existing file", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -644,7 +807,7 @@ func TestPlanRetrieval(t *testing.T) {
 	})
 
 	t.Run("GetPlanByFileName returns error for non-existent file", func(t *testing.T) {
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -653,7 +816,7 @@ func TestPlanRetrieval(t *testing.T) {
 	})
 
 	t.Run("GetPlanDetailByFileName returns plan with rendered HTML", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -671,7 +834,7 @@ func TestPlanRetrieval(t *testing.T) {
 	})
 
 	t.Run("GetPlanDetailByFileName returns error for non-existent file", func(t *testing.T) {
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -680,7 +843,7 @@ func TestPlanRetrieval(t *testing.T) {
 	})
 
 	t.Run("GetPlanDetailByFileName calculates reading time correctly", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -696,8 +859,18 @@ func TestPlanRetrieval(t *testing.T) {
 }
 
 func TestUpdateOperations(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testUpdateOperations(t, b.setupFn)
+		})
+	}
+}
+
+func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
+	t.Helper()
+
 	t.Run("UpdatePlan succeeds when no conflict", func(t *testing.T) {
-		service, sourcePlansDir, viewerDir, cleanup := setupTestService(t)
+		service, sourcePlansDir, viewerDir, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -731,7 +904,7 @@ func TestUpdateOperations(t *testing.T) {
 	})
 
 	t.Run("UpdatePlan detects conflict when file modified externally", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -758,7 +931,7 @@ func TestUpdateOperations(t *testing.T) {
 	})
 
 	t.Run("UpdatePlan recalculates word count", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -786,7 +959,7 @@ func TestUpdateOperations(t *testing.T) {
 	})
 
 	t.Run("UpdatePlan updates database timestamps", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -813,12 +986,21 @@ func TestUpdateOperations(t *testing.T) {
 }
 
 func TestPagination(t *testing.T) {
-	// Token encoding/decoding tests
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testPagination(t, b.setupFn)
+		})
+	}
+}
+
+func testPagination(t *testing.T, setup serviceSetupFn) {
+	t.Helper()
+
+	// Token encoding/decoding tests — pure functions, no DB involved.
 	t.Run("EncodePaginationToken encodes offset to base64", func(t *testing.T) {
 		token := EncodePaginationToken(0)
 		require.NotEmpty(t, token)
 		require.True(t, len(token) > 0)
-		// Base64 encoded JSON should be decodable
 		decoded, err := DecodePaginationToken(token)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), decoded.Offset)
@@ -843,7 +1025,6 @@ func TestPagination(t *testing.T) {
 	})
 
 	t.Run("DecodePaginationToken clamps negative offset to 0", func(t *testing.T) {
-		// Manually create a token with negative offset
 		invalidToken := "eyJvZmZzZXQiOi0xMH0=" // base64 encoded {"offset":-10}
 		decoded, err := DecodePaginationToken(invalidToken)
 		require.NoError(t, err)
@@ -860,13 +1041,11 @@ func TestPagination(t *testing.T) {
 		}
 	})
 
-	// Paginated search tests
 	t.Run("ListAllPlansWithPaginationAndReadingTime returns first page", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		// Create 25 plans (more than the 20 page size)
 		for i := 0; i < 25; i++ {
 			filename := fmt.Sprintf("plan-%02d.md", i)
 			content := fmt.Sprintf("# Plan %d\n\nContent for plan %d.", i, i)
@@ -876,18 +1055,16 @@ func TestPagination(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Get first page
 		plans, err := service.ListAllPlansWithPaginationAndReadingTime(ctx, 20, 0)
 		require.NoError(t, err)
 		require.Equal(t, 20, len(plans))
 	})
 
 	t.Run("ListAllPlansWithPaginationAndReadingTime respects offset", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		// Create 25 plans
 		for i := 0; i < 25; i++ {
 			filename := fmt.Sprintf("plan-%02d.md", i)
 			content := fmt.Sprintf("# Plan %d\n\nContent for plan %d.", i, i)
@@ -897,16 +1074,13 @@ func TestPagination(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Get first page
 		firstPage, err := service.ListAllPlansWithPaginationAndReadingTime(ctx, 20, 0)
 		require.NoError(t, err)
 
-		// Get second page
 		secondPage, err := service.ListAllPlansWithPaginationAndReadingTime(ctx, 20, 20)
 		require.NoError(t, err)
 
-		require.Equal(t, 5, len(secondPage)) // Only 5 items left
-		// Verify no overlap between pages
+		require.Equal(t, 5, len(secondPage))
 		firstPageTitles := make(map[string]bool)
 		for _, p := range firstPage {
 			firstPageTitles[p.Title] = true
@@ -917,11 +1091,10 @@ func TestPagination(t *testing.T) {
 	})
 
 	t.Run("SearchPlansWithPaginationAndReadingTime returns matching results paginated", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		// Create plans with different titles
 		for i := 0; i < 15; i++ {
 			filename := fmt.Sprintf("plan-%02d.md", i)
 			content := fmt.Sprintf("# Backend Plan %d\n\nBackend implementation.", i)
@@ -936,24 +1109,21 @@ func TestPagination(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Search for "Backend" with limit 10, offset 0
 		results, err := service.SearchPlansWithPaginationAndReadingTime(ctx, "Backend", 10, 0)
 		require.NoError(t, err)
 		require.Equal(t, 10, len(results))
 
-		// All results should contain "Backend"
 		for _, plan := range results {
 			require.Contains(t, plan.Title, "Backend")
 		}
 
-		// Get next page
 		nextResults, err := service.SearchPlansWithPaginationAndReadingTime(ctx, "Backend", 10, 10)
 		require.NoError(t, err)
-		require.Equal(t, 5, len(nextResults)) // Only 5 Backend plans left
+		require.Equal(t, 5, len(nextResults))
 	})
 
 	t.Run("SearchPlansWithPaginationAndReadingTime empty query returns all paginated", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -966,19 +1136,17 @@ func TestPagination(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Search with empty query should behave like list all
 		results, err := service.SearchPlansWithPaginationAndReadingTime(ctx, "", 20, 0)
 		require.NoError(t, err)
 		require.Equal(t, 20, len(results))
 	})
 
 	t.Run("PaginatedSearch includes reading time calculations", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		// Create a plan with known word count
-		content := "# Test Plan\n\n" + strings.Repeat("word ", 400) // 400+ words
+		content := "# Test Plan\n\n" + strings.Repeat("word ", 400)
 		createTestPlanFile(t, sourcePlansDir, "test-plan.md", content)
 
 		_, err := service.SyncPlans(ctx)
@@ -989,13 +1157,12 @@ func TestPagination(t *testing.T) {
 		require.Equal(t, 1, len(results))
 
 		plan := results[0]
-		// Verify reading time is calculated (should be at least 2 minutes for 400+ words)
 		require.Greater(t, plan.ReadingTime, 0)
 		require.GreaterOrEqual(t, plan.ReadingTime, 2)
 	})
 
 	t.Run("ListAllPlansWithPaginationAndReadingTime with offset beyond results", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1003,14 +1170,13 @@ func TestPagination(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Request with offset way beyond available plans
 		results, err := service.ListAllPlansWithPaginationAndReadingTime(ctx, 20, 1000)
 		require.NoError(t, err)
 		require.Equal(t, 0, len(results))
 	})
 
 	t.Run("Pagination with custom page size", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1023,7 +1189,6 @@ func TestPagination(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Test with page size of 3
 		page1, err := service.ListAllPlansWithPaginationAndReadingTime(ctx, 3, 0)
 		require.NoError(t, err)
 		require.Equal(t, 3, len(page1))
@@ -1039,12 +1204,20 @@ func TestPagination(t *testing.T) {
 }
 
 func TestVersionOperations(t *testing.T) {
-	service, sourcePlansDir, _, cleanup := setupTestService(t)
-	defer cleanup()
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			service, sourcePlansDir, _, cleanup := b.setupFn(t)
+			defer cleanup()
+			testVersionOperations(t, service, sourcePlansDir)
+		})
+	}
+}
+
+func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string) {
+	t.Helper()
 	ctx := context.Background()
 
 	t.Run("SavePlanVersion creates new version", func(t *testing.T) {
-		// Create and sync a plan
 		testFile := filepath.Join(sourcePlansDir, "test-plan.md")
 		require.NoError(t, os.WriteFile(testFile, []byte(sampleMarkdown), 0o600))
 
@@ -1052,11 +1225,9 @@ func TestVersionOperations(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Save a version
 		err = service.SavePlanVersion(ctx, "test-plan.md", sampleMarkdown)
 		require.NoError(t, err)
 
-		// Verify version file exists
 		versionDir := filepath.Join(service.viewerDir, "versions", "test-plan.md")
 		entries, err := os.ReadDir(versionDir)
 		require.NoError(t, err)
@@ -1072,14 +1243,12 @@ func TestVersionOperations(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Save multiple versions
 		err = service.SavePlanVersion(ctx, "version-test.md", sampleMarkdown)
 		require.NoError(t, err)
 
 		err = service.SavePlanVersion(ctx, "version-test.md", sampleMarkdownUpdated)
 		require.NoError(t, err)
 
-		// Check version count
 		count, err := service.GetVersionCount(ctx, "version-test.md")
 		require.NoError(t, err)
 		require.Equal(t, int64(2), count)
@@ -1093,19 +1262,16 @@ func TestVersionOperations(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Save versions with small delays to ensure distinct timestamps
 		for i := 0; i < 3; i++ {
 			err = service.SavePlanVersion(ctx, "history-test.md", fmt.Sprintf("# Version %d\n\nContent %d", i+1, i+1))
 			require.NoError(t, err)
 			time.Sleep(10 * time.Millisecond)
 		}
 
-		// Get history
 		versions, err := service.GetPlanVersionHistory(ctx, "history-test.md", 0, 10)
 		require.NoError(t, err)
 		require.Equal(t, 3, len(versions))
 
-		// Verify descending order (highest version number first)
 		for i := 0; i < len(versions)-1; i++ {
 			require.Greater(t, versions[i].VersionNumber, versions[i+1].VersionNumber)
 		}
@@ -1119,12 +1285,10 @@ func TestVersionOperations(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Save a version with specific content
 		testContent := "# Specific Version\n\nThis is version 1"
 		err = service.SavePlanVersion(ctx, "specific-version.md", testContent)
 		require.NoError(t, err)
 
-		// Retrieve it
 		version, err := service.GetPlanVersion(ctx, "specific-version.md", 1)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), version.VersionNumber)
@@ -1139,18 +1303,15 @@ func TestVersionOperations(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Verify initial count is 0
 		count, err := service.GetVersionCount(ctx, "count-test.md")
 		require.NoError(t, err)
 		require.Equal(t, int64(0), count)
 
-		// Save versions
 		for i := 0; i < 5; i++ {
 			err = service.SavePlanVersion(ctx, "count-test.md", fmt.Sprintf("Version %d", i+1))
 			require.NoError(t, err)
 		}
 
-		// Check count increased
 		count, err = service.GetVersionCount(ctx, "count-test.md")
 		require.NoError(t, err)
 		require.Equal(t, int64(5), count)
@@ -1164,18 +1325,14 @@ func TestVersionOperations(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Save a valid version first
 		err = service.SavePlanVersion(ctx, "consistency-test.md", sampleMarkdown)
 		require.NoError(t, err)
 
-		// Verify version file exists
 		versionDir := filepath.Join(service.viewerDir, "versions", "consistency-test.md")
 		entries, err := os.ReadDir(versionDir)
 		require.NoError(t, err)
 		initialCount := len(entries)
 
-		// Note: We can't easily simulate DB failure, but we can verify that
-		// successful versions create both files and DB entries
 		count, err := service.GetVersionCount(ctx, "consistency-test.md")
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
@@ -1190,27 +1347,22 @@ func TestVersionOperations(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Create 7 versions
 		for i := 1; i <= 7; i++ {
 			err = service.SavePlanVersion(ctx, "cleanup-test.md", fmt.Sprintf("# Version %d", i))
 			require.NoError(t, err)
 		}
 
-		// Verify we have 7 versions
 		count, err := service.GetVersionCount(ctx, "cleanup-test.md")
 		require.NoError(t, err)
 		require.Equal(t, int64(7), count)
 
-		// Cleanup to keep only 5 most recent
 		err = service.CleanupOldVersions(ctx, "cleanup-test.md", 5)
 		require.NoError(t, err)
 
-		// Verify we now have 5 versions (the 5 most recent)
 		count, err = service.GetVersionCount(ctx, "cleanup-test.md")
 		require.NoError(t, err)
 		require.Equal(t, int64(5), count)
 
-		// Verify we kept the highest version numbers (7, 6, 5, 4, 3)
 		versions, err := service.GetPlanVersionHistory(ctx, "cleanup-test.md", 0, 10)
 		require.NoError(t, err)
 		require.Equal(t, 5, len(versions))
@@ -1231,9 +1383,7 @@ func TestVersionOperations(t *testing.T) {
 		version, err := service.GetPlanVersion(ctx, "markdown-test.md", 1)
 		require.NoError(t, err)
 
-		// Verify the content matches exactly
 		require.Equal(t, sampleMarkdownWithCode, version.Content)
-		// Verify code blocks are preserved
 		require.Contains(t, version.Content, "```go")
 		require.Contains(t, version.Content, "func main()")
 	})
@@ -1252,7 +1402,6 @@ func TestVersionOperations(t *testing.T) {
 		version, err := service.GetPlanVersion(ctx, "wordcount-test.md", 1)
 		require.NoError(t, err)
 
-		// Verify word count is reasonable (sampleMarkdown has multiple words)
 		require.Greater(t, version.WordCount, int64(0))
 		expectedCount := CountWords(sampleMarkdown)
 		require.Equal(t, int64(expectedCount), version.WordCount)
@@ -1262,27 +1411,23 @@ func TestVersionOperations(t *testing.T) {
 		testFile := filepath.Join(sourcePlansDir, "pagination-test.md")
 		require.NoError(t, os.WriteFile(testFile, []byte(sampleMarkdown), 0o600))
 
-		time.Sleep(100 * time.Millisecond) // Small delay to reduce SQLite lock contention
+		time.Sleep(100 * time.Millisecond)
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Create 10 versions
 		for i := 1; i <= 10; i++ {
 			err = service.SavePlanVersion(ctx, "pagination-test.md", fmt.Sprintf("# Version %d", i))
 			require.NoError(t, err)
 		}
 
-		// Get first page (3 items)
 		page1, err := service.GetPlanVersionHistory(ctx, "pagination-test.md", 0, 3)
 		require.NoError(t, err)
 		require.Equal(t, 3, len(page1))
 
-		// Get second page
 		page2, err := service.GetPlanVersionHistory(ctx, "pagination-test.md", 3, 3)
 		require.NoError(t, err)
 		require.Equal(t, 3, len(page2))
 
-		// Verify no overlap between pages
 		require.NotEqual(t, page1[0].ID, page2[0].ID)
 	})
 
@@ -1295,11 +1440,10 @@ func TestVersionOperations(t *testing.T) {
 		testFile := filepath.Join(sourcePlansDir, "sync-dir-test.md")
 		require.NoError(t, os.WriteFile(testFile, []byte(sampleMarkdown), 0o600))
 
-		time.Sleep(100 * time.Millisecond) // Small delay to reduce SQLite lock contention
+		time.Sleep(100 * time.Millisecond)
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Verify versions directory exists
 		versionBaseDir := filepath.Join(service.viewerDir, "versions")
 		info, err := os.Stat(versionBaseDir)
 		require.NoError(t, err)
@@ -1314,7 +1458,6 @@ func TestVersionOperations(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Create versions with different content
 		v1Content := "# Planning\nThis is about project planning and design"
 		v2Content := "# Implementation\nThis is about implementation details"
 		v3Content := "# Testing\nThis is about test cases"
@@ -1323,19 +1466,16 @@ func TestVersionOperations(t *testing.T) {
 		require.NoError(t, service.SavePlanVersion(ctx, "search-test.md", v2Content))
 		require.NoError(t, service.SavePlanVersion(ctx, "search-test.md", v3Content))
 
-		// Search for "planning"
 		results, err := service.SearchVersions(ctx, "search-test.md", "planning")
 		require.NoError(t, err)
 		require.Equal(t, 1, len(results), "should find 1 version with 'planning'")
 		require.Equal(t, int64(1), results[0].VersionNumber)
 
-		// Search for "implementation"
 		results, err = service.SearchVersions(ctx, "search-test.md", "implementation")
 		require.NoError(t, err)
 		require.Equal(t, 1, len(results), "should find 1 version with 'implementation'")
 		require.Equal(t, int64(2), results[0].VersionNumber)
 
-		// Search for non-existent term
 		results, err = service.SearchVersions(ctx, "search-test.md", "nonexistent")
 		require.NoError(t, err)
 		require.Equal(t, 0, len(results), "should find no versions with 'nonexistent'")
@@ -1343,11 +1483,21 @@ func TestVersionOperations(t *testing.T) {
 }
 
 func TestConnectorManager(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testConnectorManager(t, b.setupFn)
+		})
+	}
+}
+
+func testConnectorManager(t *testing.T, setup serviceSetupFn) {
+	t.Helper()
+
 	t.Run("GetEnabledConnector returns nil when none enabled", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1367,7 +1517,7 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1383,7 +1533,7 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1407,7 +1557,7 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1418,10 +1568,8 @@ func TestConnectorManager(t *testing.T) {
 
 		manager := connectors.NewManager(registry, service.DB())
 
-		// First enable
 		require.NoError(t, manager.EnableConnector(ctx, "mock-connector"))
 
-		// Then disable
 		err := manager.DisableConnector(ctx)
 		require.NoError(t, err)
 
@@ -1434,7 +1582,7 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1458,7 +1606,7 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1478,7 +1626,7 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1495,14 +1643,14 @@ func TestConnectorManager(t *testing.T) {
 		require.Equal(t, "mock-connector", statuses[0].Name)
 		require.Equal(t, "Mock Connector", statuses[0].DisplayName)
 		require.False(t, statuses[0].Enabled)
-		require.False(t, statuses[0].Configured) // No settings configured yet
+		require.False(t, statuses[0].Configured)
 	})
 
 	t.Run("ListAvailable shows configured status when required settings present", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1513,7 +1661,6 @@ func TestConnectorManager(t *testing.T) {
 
 		manager := connectors.NewManager(registry, service.DB())
 
-		// Set all required settings
 		require.NoError(t, manager.SetConnectorSetting(ctx, "mock-connector", "api_token", "token", true))
 		require.NoError(t, manager.SetConnectorSetting(ctx, "mock-connector", "channel_id", "123", false))
 
@@ -1527,7 +1674,7 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1541,7 +1688,6 @@ func TestConnectorManager(t *testing.T) {
 		err := manager.EnsureConnectorExists(ctx, "mock-connector")
 		require.NoError(t, err)
 
-		// Should not error on second call (idempotent)
 		err = manager.EnsureConnectorExists(ctx, "mock-connector")
 		require.NoError(t, err)
 	})
@@ -1550,7 +1696,7 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1566,7 +1712,7 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 
 		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
@@ -1589,7 +1735,7 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 
 		registry := connectors.NewRegistry()
@@ -1604,7 +1750,7 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1624,13 +1770,12 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
 		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
 
-		// Expect Validate and Send to be called with specific arguments
 		mockConn.EXPECT().Validate().Return(nil).Times(1)
 		mockConn.EXPECT().Send(gomock.Any(), "Test Title", "Test Content").Return(
 			&connectors.SendResult{Success: true, MessageID: "msg-123"},
@@ -1654,13 +1799,12 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
 		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
 
-		// Expect Validate to fail
 		mockConn.EXPECT().Validate().Return(fmt.Errorf("missing api_token")).Times(1)
 
 		registry := connectors.NewRegistry()
@@ -1680,7 +1824,7 @@ func TestConnectorManager(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1706,12 +1850,20 @@ func TestConnectorManager(t *testing.T) {
 }
 
 func TestServiceConnectorOperations(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testServiceConnectorOperations(t, b.setupFn)
+		})
+	}
+}
+
+func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
+	t.Helper()
+
 	t.Run("Operations fail when connector manager not set", func(t *testing.T) {
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
-
-		// Service has no connector manager by default
 
 		err := service.EnableConnector(ctx, "any")
 		require.Error(t, err)
@@ -1731,7 +1883,7 @@ func TestServiceConnectorOperations(t *testing.T) {
 	})
 
 	t.Run("ListConnectors returns nil when manager not set", func(t *testing.T) {
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1741,7 +1893,7 @@ func TestServiceConnectorOperations(t *testing.T) {
 	})
 
 	t.Run("GetEnabledConnector returns nil when manager not set", func(t *testing.T) {
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1754,13 +1906,12 @@ func TestServiceConnectorOperations(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
 		mockConn := setupMockConnector(ctrl, "test-conn", "Test Connector")
 
-		// Expect validate and send for the SendToConnector call
 		mockConn.EXPECT().Validate().Return(nil).Times(1)
 		mockConn.EXPECT().Send(gomock.Any(), "Test Plan", "# Test Plan\n\nContent to send").Return(
 			&connectors.SendResult{Success: true, MessageID: "sent-123"},
@@ -1773,33 +1924,27 @@ func TestServiceConnectorOperations(t *testing.T) {
 		manager := connectors.NewManager(registry, service.DB())
 		service.SetConnectorManager(manager)
 
-		// List connectors
 		infos, err := service.ListConnectors(ctx)
 		require.NoError(t, err)
 		require.Len(t, infos, 1)
 		require.Equal(t, "test-conn", infos[0].Name)
 
-		// Enable connector
 		err = service.EnableConnector(ctx, "test-conn")
 		require.NoError(t, err)
 
-		// Get enabled connector
 		info, err := service.GetEnabledConnector(ctx)
 		require.NoError(t, err)
 		require.NotNil(t, info)
 		require.Equal(t, "test-conn", info.Name)
 		require.True(t, info.Enabled)
 
-		// Configure connector
 		err = service.ConfigureConnector(ctx, "test-conn", "api_token", "my-secret-token", true)
 		require.NoError(t, err)
 
-		// Get connector settings (should mask sensitive values)
 		settings, err := service.GetConnectorSettings(ctx, "test-conn")
 		require.NoError(t, err)
 		require.Len(t, settings, 2)
 
-		// Find api_token setting
 		var tokenSetting ConnectorSettingInfo
 		for _, s := range settings {
 			if s.Key == "api_token" {
@@ -1808,10 +1953,9 @@ func TestServiceConnectorOperations(t *testing.T) {
 			}
 		}
 		require.Equal(t, "api_token", tokenSetting.Key)
-		require.Equal(t, "my-secret-token", tokenSetting.Value) // Should be masked
+		require.Equal(t, "my-secret-token", tokenSetting.Value)
 		require.True(t, tokenSetting.Sensitive)
 
-		// Create a plan and send to connector
 		createTestPlanFile(t, sourcePlansDir, "connector-test.md", "# Test Plan\n\nContent to send")
 		_, err = service.SyncPlans(ctx)
 		require.NoError(t, err)
@@ -1819,7 +1963,6 @@ func TestServiceConnectorOperations(t *testing.T) {
 		err = service.SendToConnector(ctx, "connector-test.md")
 		require.NoError(t, err)
 
-		// Disable connector
 		err = service.DisableConnector(ctx)
 		require.NoError(t, err)
 
@@ -1832,7 +1975,7 @@ func TestServiceConnectorOperations(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, sourcePlansDir, _, cleanup := setupTestService(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1844,12 +1987,10 @@ func TestServiceConnectorOperations(t *testing.T) {
 		manager := connectors.NewManager(registry, service.DB())
 		service.SetConnectorManager(manager)
 
-		// Create a plan
 		createTestPlanFile(t, sourcePlansDir, "send-test.md", "# Test Plan")
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Try to send - should fail (no connector enabled)
 		err = service.SendToConnector(ctx, "send-test.md")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "no connector enabled")
@@ -1859,7 +2000,7 @@ func TestServiceConnectorOperations(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -1881,13 +2022,12 @@ func TestServiceConnectorOperations(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
 		mockConn := setupMockConnector(ctrl, "test-conn", "Test Connector")
 
-		// Expect Validate to be called and return an error
 		mockConn.EXPECT().Validate().Return(fmt.Errorf("api_token is required")).Times(1)
 
 		registry := connectors.NewRegistry()
@@ -1905,13 +2045,12 @@ func TestServiceConnectorOperations(t *testing.T) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setupTestService(t)
+		service, _, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
 		mockConn := setupMockConnector(ctrl, "test-conn", "Test Connector")
 
-		// Expect Validate to succeed
 		mockConn.EXPECT().Validate().Return(nil).Times(1)
 
 		registry := connectors.NewRegistry()
@@ -1926,8 +2065,17 @@ func TestServiceConnectorOperations(t *testing.T) {
 }
 
 func TestConcurrentVersionSaves(t *testing.T) {
-	service, sourcePlansDir, _, cleanup := setupTestService(t)
-	defer cleanup()
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			service, sourcePlansDir, _, cleanup := b.setupFn(t)
+			defer cleanup()
+			testConcurrentVersionSaves(t, service, sourcePlansDir)
+		})
+	}
+}
+
+func testConcurrentVersionSaves(t *testing.T, service *Service, sourcePlansDir string) {
+	t.Helper()
 	ctx := context.Background()
 
 	t.Run("Concurrent version saves both trying to create same version number deletes orphaned file on conflict", func(t *testing.T) {
@@ -1938,18 +2086,14 @@ func TestConcurrentVersionSaves(t *testing.T) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Create first version explicitly
 		err = service.SavePlanVersion(ctx, "concurrent-test.md", "# Version 1")
 		require.NoError(t, err)
 
 		versionDir := filepath.Join(service.viewerDir, "versions", "concurrent-test.md")
 
-		// Simulate race condition: both requests fetch latest (1) and try to save as version 2
-		// This requires directly inserting with the same version number
 		plan, err := service.db.GetPlanByFileName(ctx, "concurrent-test.md")
 		require.NoError(t, err)
 
-		// Manually insert version 2 (simulating first concurrent request)
 		fixedTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
 		err = service.db.InsertPlanVersion(ctx, dto.InsertPlanVersionParams{
 			PlanID:        plan.ID,
@@ -1961,33 +2105,27 @@ func TestConcurrentVersionSaves(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		// Mock time provider to match the race condition
 		originalProvider := service.nowProvider
 		service.nowProvider = newMockNowProvider(fixedTime)
 
-		// Now try to save version 2 again (simulating second concurrent request)
-		// This should fail with UNIQUE constraint violation and clean up the orphaned file
 		versionFile := filepath.Join(versionDir, "2-"+strconv.FormatInt(fixedTime.Unix(), 10)+".md")
 		require.NoError(t, os.WriteFile(versionFile, []byte("# Version 2 from second request"), 0o600))
 
 		err2 := service.db.InsertPlanVersion(ctx, dto.InsertPlanVersionParams{
 			PlanID:        plan.ID,
-			VersionNumber: 2, // Same version number - will conflict
+			VersionNumber: 2,
 			FilePath:      versionFile,
 			Content:       "# Version 2 from second request",
 			WordCount:     5,
 			CreatedAt:     fixedTime,
 		})
-		require.Error(t, err2) // Should fail due to UNIQUE(plan_id, version_number)
+		require.Error(t, err2)
 
-		// Simulate the cleanup that SavePlanVersion would do
 		os.Remove(versionFile)
 
-		// Verify file was deleted
 		_, err = os.Stat(versionFile)
 		require.True(t, os.IsNotExist(err), "orphaned file should have been deleted")
 
-		// Verify only 2 versions in DB (not 3)
 		count, err := service.GetVersionCount(ctx, "concurrent-test.md")
 		require.NoError(t, err)
 		require.Equal(t, int64(2), count, "should have 2 versions (first request succeeded, second was cleaned up)")
@@ -1997,8 +2135,17 @@ func TestConcurrentVersionSaves(t *testing.T) {
 }
 
 func TestTagOperations(t *testing.T) {
-	service, _, _, cleanup := setupTestService(t)
-	defer cleanup()
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			service, _, _, cleanup := b.setupFn(t)
+			defer cleanup()
+			testTagOperations(t, service, b.setupFn)
+		})
+	}
+}
+
+func testTagOperations(t *testing.T, service *Service, setup serviceSetupFn) {
+	t.Helper()
 	ctx := context.Background()
 
 	t.Run("CreateTag with name only", func(t *testing.T) {
@@ -2034,26 +2181,26 @@ func TestTagOperations(t *testing.T) {
 	})
 
 	t.Run("GetAllTags returns empty list when no tags", func(t *testing.T) {
-		service, _, _, cleanup := setupTestService(t)
+		freshService, _, _, cleanup := setup(t)
 		defer cleanup()
 
-		tags, err := service.GetAllTags(ctx)
+		tags, err := freshService.GetAllTags(ctx)
 		require.NoError(t, err)
 		require.Empty(t, tags)
 	})
 
 	t.Run("GetAllTags returns all tags sorted by name", func(t *testing.T) {
-		service, _, _, cleanup := setupTestService(t)
+		freshService, _, _, cleanup := setup(t)
 		defer cleanup()
 
-		_, err := service.CreateTag(ctx, "zebra", nil, nil)
+		_, err := freshService.CreateTag(ctx, "zebra", nil, nil)
 		require.NoError(t, err)
-		_, err = service.CreateTag(ctx, "alpha", nil, nil)
+		_, err = freshService.CreateTag(ctx, "alpha", nil, nil)
 		require.NoError(t, err)
-		_, err = service.CreateTag(ctx, "charlie", nil, nil)
+		_, err = freshService.CreateTag(ctx, "charlie", nil, nil)
 		require.NoError(t, err)
 
-		tags, err := service.GetAllTags(ctx)
+		tags, err := freshService.GetAllTags(ctx)
 		require.NoError(t, err)
 		require.Len(t, tags, 3)
 		require.Equal(t, "alpha", tags[0].Name)
@@ -2062,24 +2209,33 @@ func TestTagOperations(t *testing.T) {
 	})
 
 	t.Run("DeleteTag removes tag by ID", func(t *testing.T) {
-		service, _, _, cleanup := setupTestService(t)
+		freshService, _, _, cleanup := setup(t)
 		defer cleanup()
 
-		tag, err := service.CreateTag(ctx, "temporary", nil, nil)
+		tag, err := freshService.CreateTag(ctx, "temporary", nil, nil)
 		require.NoError(t, err)
 
-		err = service.DeleteTag(ctx, tag.ID)
+		err = freshService.DeleteTag(ctx, tag.ID)
 		require.NoError(t, err)
 
-		tags, err := service.GetAllTags(ctx)
+		tags, err := freshService.GetAllTags(ctx)
 		require.NoError(t, err)
 		require.Empty(t, tags)
 	})
 }
 
 func TestPlanTagRelationship(t *testing.T) {
-	service, sourcePlansDir, _, cleanup := setupTestService(t)
-	defer cleanup()
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			service, sourcePlansDir, _, cleanup := b.setupFn(t)
+			defer cleanup()
+			testPlanTagRelationship(t, service, sourcePlansDir)
+		})
+	}
+}
+
+func testPlanTagRelationship(t *testing.T, service *Service, sourcePlansDir string) {
+	t.Helper()
 	ctx := context.Background()
 
 	createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)

@@ -14,7 +14,7 @@ import (
 )
 
 // StartWithOptions launches the TUI application with optional debug mode.
-func StartWithOptions(ctx context.Context, service UnifiedService, debug bool) error {
+func StartWithOptions(ctx context.Context, service claudeviewer.UnifiedService, debug bool) error {
 	app := New(ctx, service)
 
 	if debug {

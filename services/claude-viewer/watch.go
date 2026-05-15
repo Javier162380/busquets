@@ -51,17 +51,12 @@ func (wm *WatchManager) Start(ctx context.Context, interval time.Duration) error
 
 // Stop stops the watch manager.
 func (wm *WatchManager) Stop() {
-	wm.mu.Lock()
-	defer wm.mu.Unlock()
-
-	if !wm.running {
-		return
+	if wm.IsRunning() {
+		wm.running = false
+		if wm.cancel != nil {
+			wm.cancel()
+		}
 	}
-
-	if wm.cancel != nil {
-		wm.cancel()
-	}
-	wm.running = false
 }
 
 // IsRunning returns true if watch mode is currently active.

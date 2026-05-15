@@ -116,9 +116,6 @@ func (v *Viewer) updateViewportContent() {
 
 	var lines []string
 
-	// DO NOT ADD the title as the markdown already holds the title please.
-	/*lines = append(lines, styles.TitleStyle.Render(v.content.GetTitle()))*/
-
 	// Add metadata.
 	meta := v.content.GetMetadata()
 	metaLine := fmt.Sprintf("%s: %s | Reading Time: %d min | %s",
