@@ -122,7 +122,10 @@ internal/
 - Main file: `services/claude-viewer/service_test.go`
 - Pattern: Root test with subtests (`t.Run()`)
 - Uses gomock for connectors, mock time provider
-- Tests always use SQLite (even for Postgres features) TODO: We will change this.
+- Tests are parametrized via `registeredBackends` and run against both SQLite and Postgres
+- SQLite always runs; Postgres runs only when `INTEGRATION=1` (spins up a real container via testcontainers-go)
+- Each Postgres test case gets its own isolated database created/dropped inside the shared container
+- Run integration tests: `INTEGRATION=1 go test -v ./services/claude-viewer/...`
 
 ## Common Tasks
 
