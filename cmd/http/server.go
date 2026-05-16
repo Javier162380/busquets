@@ -18,13 +18,13 @@ var static embed.FS
 
 // Server handles HTTP requests for plan viewing.
 type Server struct {
-	service   *claudeviewer.Service
+	service   claudeviewer.UnifiedService
 	echo      *echo.Echo
 	templates *template.Template
 }
 
 // NewServer creates a new HTTP server.
-func NewServer(service *claudeviewer.Service, addr string) (*Server, error) {
+func NewServer(service claudeviewer.UnifiedService, addr string) (*Server, error) {
 	e := echo.New()
 	e.HidePort = true
 	e.HideBanner = true

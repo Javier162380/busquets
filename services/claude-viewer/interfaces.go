@@ -23,6 +23,9 @@ type PlanService interface {
 	CreateTag(ctx context.Context, name string, description, color *string) (dto.Tag, error)
 	SearchVersions(ctx context.Context, planName, query string) ([]PlanVersionDetail, error)
 	BuildTagPlanMap(ctx context.Context) (map[string][]PlanSummary, error)
+	SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*UpdatePlanResult, error)
+	SearchPlansWithPaginationAndReadingTime(ctx context.Context, query string, limit, offset int64) ([]PlanSummary, error)
+	GetPlanByFileName(ctx context.Context, fileName string) (*dto.Plan, error)
 }
 
 // VersionService defines version control operations.

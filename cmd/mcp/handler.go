@@ -23,7 +23,7 @@ type Handler struct {
 }
 
 // NewHandler creates a new handler instance.
-func NewHandler(service *claudeviewer.Service, server *mcp.Server) *Handler {
+func NewHandler(service claudeviewer.UnifiedService, server *mcp.Server) *Handler {
 	return &Handler{
 		service: service,
 		server:  server,
