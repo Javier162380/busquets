@@ -429,6 +429,12 @@ func ClearStatusCmd(delay time.Duration) tea.Cmd {
 	})
 }
 
+func ClearStatusCmdWithDefaultDuration() tea.Cmd {
+	return tea.Tick(500*time.Millisecond, func(time.Time) tea.Msg {
+		return messages.ClearStatusMsg{}
+	})
+}
+
 // LoadTagsForModalCmd loads all tags and current plan tags for the tag modal.
 func LoadTagsForModalCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName string) tea.Cmd {
 	return func() tea.Msg {
@@ -483,6 +489,24 @@ func SearchPlansWithTagsCmd(ctx context.Context, svc claudeviewer.UnifiedService
 			return messages.ErrorMsg{Error: err}
 		}
 		return messages.PlansLoadedMsg{Plans: plans, IsFiltered: true}
+	}
+}
+
+// ApplyWatchSettingCmd reads the watch mode settings from the service and returns
+// a WatchModeApplyMsg so the app can start or stop the watcher without blocking Update().
+func ApplyWatchSettingCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		enabledSetting, exists, err := svc.GetSetting(ctx, claudeviewer.SettingWatchModeEnabled)
+		if err != nil || !exists {
+			return messages.WatchModeApplyMsg{}
+		}
+		enabled := enabledSetting.IsBoolean() && enabledSetting.GetBooleanValue()
+
+		interval := claudeviewer.DefaultWatchIntervalSeconds
+		if s, exists, err := svc.GetSetting(ctx, claudeviewer.SettingWatchIntervalSeconds); err == nil && exists && s.IsNumber() {
+			interval = s.GetNumberValue()
+		}
+		return messages.WatchModeApplyMsg{Enabled: enabled, Interval: interval}
 	}
 }
 

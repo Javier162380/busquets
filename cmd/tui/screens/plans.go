@@ -205,6 +205,14 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				MatchAll: msg.MatchAll,
 			}
 		}
+
+	case messages.ThemeChangedMsg:
+		s.UpdateDarkMode(msg.DarkMode)
+		return s, nil
+
+	case messages.RenderMarkDownByDefaultMsg:
+		s.RenderedMarkdownByDefault(msg.Enabled)
+		return s, nil
 	}
 
 	// Update active component.
@@ -859,14 +867,11 @@ func (s *PlansScreen) renderFullscreenEditor() string {
 
 // renderDivider renders a vertical divider.
 func (s *PlansScreen) renderDivider(height int) string {
-	divider := ""
-	for i := 0; i < height; i++ {
-		divider += "│"
-		if i < height-1 {
-			divider += "\n"
-		}
+	var sb strings.Builder
+	for range height {
+		sb.WriteString("│\n")
 	}
-	return divider
+	return strings.TrimSuffix(sb.String(), "\n")
 }
 
 // SetSize updates screen dimensions.
@@ -1053,13 +1058,10 @@ func (s *PlansScreen) overlayContent(base, overlay string) string {
 	overlayLines := strings.Split(overlay, "\n")
 
 	// Ensure both have the same number of lines
-	maxLines := len(baseLines)
-	if len(overlayLines) > maxLines {
-		maxLines = len(overlayLines)
-	}
+	maxLines := max(len(baseLines), len(overlayLines))
 
 	result := make([]string, maxLines)
-	for i := 0; i < maxLines; i++ {
+	for i := range maxLines {
 		var baseLine, overlayLine string
 		if i < len(baseLines) {
 			baseLine = baseLines[i]

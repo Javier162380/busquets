@@ -2,6 +2,7 @@ package screens
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
@@ -104,6 +105,14 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			viewerWidth := s.getViewerWidth()
 			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
 		}
+		return s, nil
+
+	case messages.ThemeChangedMsg:
+		s.UpdateDarkMode(msg.DarkMode)
+		return s, nil
+
+	case messages.RenderMarkDownByDefaultMsg:
+		s.RenderedMarkdownByDefault(msg.Enabled)
 		return s, nil
 	}
 
@@ -326,14 +335,11 @@ func (s *VersionsScreen) renderFullscreenViewer() string {
 
 // renderDivider renders a vertical divider.
 func (s *VersionsScreen) renderDivider(height int) string {
-	divider := ""
-	for i := 0; i < height; i++ {
-		divider += "│"
-		if i < height-1 {
-			divider += "\n"
-		}
+	var sb strings.Builder
+	for range height {
+		sb.WriteString("│\n")
 	}
-	return divider
+	return strings.TrimSuffix(sb.String(), "\n")
 }
 
 // SetSize updates screen dimensions.

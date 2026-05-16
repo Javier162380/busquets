@@ -269,13 +269,19 @@ type SettingUpdateResultMsg struct {
 }
 
 // ThemeChangedMsg signals a theme change.
-type ThemeChangedMsg struct{}
+type ThemeChangedMsg struct{ DarkMode bool }
 
 // RenderMarkDownByDefaultMsg signals a render-markdown-by-default change.
-type RenderMarkDownByDefaultMsg struct{}
+type RenderMarkDownByDefaultMsg struct{ Enabled bool }
 
 // DisplayModeChangedMsg signals a display mode change.
-type DisplayModeChangedMsg struct{}
+type DisplayModeChangedMsg struct{ Mode string }
+
+// WatchModeApplyMsg signals that the watcher should be started or stopped.
+type WatchModeApplyMsg struct {
+	Enabled  bool
+	Interval float64
+}
 
 // --- Versions ---
 

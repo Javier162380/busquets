@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/commands"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
@@ -97,18 +96,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg := msg.(type) {
-	// Window resize - broadcast to all screens.
 	case tea.WindowSizeMsg:
 		a.width = msg.Width
 		a.height = msg.Height
 		a.statusBar.SetWidth(msg.Width)
-
-		// Update help screen size.
 		if a.help != nil {
 			a.help.SetSize(msg.Width, msg.Height)
 		}
-
-		// Broadcast to all screens in stack.
 		for _, screen := range a.stack {
 			screen.SetSize(msg.Width, msg.Height)
 		}
@@ -116,7 +110,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		a.statusBar.ClearMessages()
-
 		if msg.String() == "?" {
 			a.showHelp = !a.showHelp
 			if a.showHelp && a.help == nil {
@@ -124,361 +117,137 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return a, nil
 		}
-
 		if (msg.String() == "q" || msg.String() == "ctrl+c") && !a.showHelp && len(a.stack) > 0 && !a.stack[len(a.stack)-1].IsInputMode() {
 			return a, tea.Quit
 		}
-
 		if a.showHelp {
 			if msg.String() == "esc" || msg.String() == "?" {
 				a.showHelp = false
 			}
 			return a, nil
 		}
-
 	case messages.PopScreenMsg:
 		return a, a.popScreen()
-
-	case messages.RequestVersionsScreenMsg:
-		return a, commands.LoadVersionsForNavigationCmd(a.ctx, a.service, msg.PlanName)
-
-	case messages.VersionsNavigationResultMsg:
-		if len(msg.Versions) == 0 {
-			a.statusBar.SetError("No versions found")
-			return a, commands.ClearStatusCmd(500 * time.Millisecond)
-		}
-		return a, a.pushVersionsScreenWithData(msg.PlanName, msg.Versions)
-
-	case messages.CloseHelpMsg:
-		a.showHelp = false
-		return a, nil
-
-	case messages.PlansLoadedMsg:
-		return a.delegateToCurrentScreen(msg)
-
-	case messages.PlanDetailLoadedMsg:
-		return a.delegateToCurrentScreen(msg)
-
-	case messages.VersionsLoadedMsg:
-		return a.delegateToCurrentScreen(msg)
-
-	case messages.SaveResultMsg:
-		switch {
-		case msg.Error != nil:
-			a.statusBar.SetError("Unable to save result")
-		case msg.Result.Success:
-			a.statusBar.SetSuccess("Saved result")
-		case msg.Result.HasConflict:
-			a.statusBar.SetError(fmt.Sprintf("Unable to save result, conflict %s", msg.Result.ConflictInfo.Message))
-		}
-		return a, commands.ClearStatusCmd(500 * time.Millisecond)
-
-	case messages.SyncResultMsg:
-		if msg.Error != nil {
-			a.statusBar.SetError("Sync failed: " + msg.Error.Error())
-			return a, commands.ClearStatusCmd(500 * time.Millisecond)
-		}
-		a.statusBar.SetSuccess(fmt.Sprintf("Synced %d plans", msg.Count))
-		return a, tea.Batch(commands.LoadPlansCmd(a.ctx, a.service), commands.ClearStatusCmd(1*time.Second))
-
-	case messages.RSyncResultMsg:
-		if msg.Error != nil {
-			a.statusBar.SetError("RSync failed: " + msg.Error.Error())
-			return a, commands.ClearStatusCmd(500 * time.Millisecond)
-		}
-		a.statusBar.SetSuccess(fmt.Sprintf("Rsync succeeded: %d plans sync from remote into the local directory", msg.Count))
-		return a, tea.Batch(commands.LoadPlansCmd(a.ctx, a.service), commands.ClearStatusCmd(500*time.Second))
-
-	case messages.DumpResultMsg:
-		if msg.Error != nil {
-			a.statusBar.SetError("Dump failed: " + msg.Error.Error())
-			return a, commands.ClearStatusCmd(500 * time.Millisecond)
-		}
-		a.statusBar.SetSuccess(fmt.Sprintf("Dumped %d plans to source directory", msg.Count))
-		return a, commands.ClearStatusCmd(500 * time.Millisecond)
-
-	case messages.DumpPlansMsg:
-		a.statusBar.SetLoading("Dumping plans from database to source directory...")
-		return a, commands.DumpPlansCmd(a.ctx, a.service)
-
-	case messages.DisplayModeChangedMsg:
-		setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingDefaultDisplayMode)
-		mode := claudeviewer.DisplayModePlanContent
-		if exists && setting.IsString() {
-			mode = setting.GetStringValue()
-		}
-		a.displayMode = mode
-		for _, screen := range a.stack {
-			if s, ok := screen.(*screens.PlansScreen); ok {
-				s.SetDisplayMode(mode)
-			}
-		}
-		if mode == claudeviewer.DisplayModeTagPlanContent {
-			return a, commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
-		}
-		return a, nil
-
-	case messages.LoadAllTagsForPanelMsg:
-		return a, commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
-
-	case messages.AllTagsForPanelLoadedMsg:
-		return a.delegateToCurrentScreen(msg)
-
-	case messages.CreateTagMsg:
-		return a, commands.CreateTagCmd(a.ctx, a.service, msg.Name)
-
-	case messages.CreateTagResultMsg:
-		if msg.Error != nil {
-			a.statusBar.SetError("Failed to create tag: " + msg.Error.Error())
-			return a, commands.ClearStatusCmd(2 * time.Second)
-		}
-		a.statusBar.SetSuccess("Tag created")
-		return a, tea.Batch(
-			commands.LoadPlansCmd(a.ctx, a.service),
-			commands.LoadAllTagsForPanelCmd(a.ctx, a.service),
-			commands.ClearStatusCmd(1*time.Second),
-		)
-
-	case messages.ErrorMsg:
-		a.statusBar.SetError(msg.Error.Error())
-		return a, commands.ClearStatusCmd(500 * time.Millisecond)
-
-	case messages.LoadPlanDetailMsg:
-		return a, commands.LoadPlanDetailCmd(a.ctx, a.service, msg.FileName)
-
-	case messages.SavePlanMsg:
-		return a, commands.SavePlanCmd(a.ctx, a.service, msg.FileName, msg.Content, msg.Modified)
-
-	case messages.SyncPlansMsg:
-		a.statusBar.SetLoading("Syncing plans...")
-		return a, commands.SyncPlansCmd(a.ctx, a.service)
-
-	case messages.RSyncPlansMsg:
-		a.statusBar.SetLoading("Rsyncing plans from remote directory into the LLM directory...")
-		return a, commands.RsyncPlansCmd(a.ctx, a.service)
-
-	case messages.LoadVersionsMsg:
-		return a, commands.LoadVersionsCmd(a.ctx, a.service, msg.PlanName)
-
-	case messages.SearchPlansMsg:
-		return a, commands.SearchPlansCmd(a.ctx, a.service, msg.Query)
-
-	case messages.SearchVersionsMsg:
-		return a, commands.SearchVersionsCmd(a.ctx, a.service, msg.PlanName, msg.Query)
-
-	case messages.ClearSearchMsg:
-		return a, commands.LoadPlansCmd(a.ctx, a.service)
-
-	case messages.RestoreVersionMsg:
-		a.statusBar.SetLoading("Restoring version...")
-		return a, commands.RestoreVersionCmd(a.ctx, a.service, msg.PlanName, msg.VersionNumber)
-
-	case messages.RestoreResultMsg:
-		if msg.Error != nil {
-			a.statusBar.SetError("Restore failed: " + msg.Error.Error())
-			return a, nil
-		}
-		a.statusBar.SetSuccess("Version restored successfully")
-		a.popScreen()
-		return a, tea.Batch(
-			commands.SyncPlansCmd(a.ctx, a.service),
-			commands.LoadPlansCmd(a.ctx, a.service),
-		)
-
-	case messages.OpenSettingsMsg:
-		return a, a.pushSettingsScreen()
-
-	case messages.LoadSettingsMsg:
-		return a, commands.LoadSettingsCmd(a.ctx, a.service, msg.SettingNames)
-
-	case messages.SaveSettingMsg:
-		return a, commands.SetSettingCmd(a.ctx, a.service, msg.Name, msg.Values)
-
-	case messages.SettingsLoadedMsg:
-		return a.delegateToCurrentScreen(msg)
-
-	case messages.SettingUpdateResultMsg:
-		if msg.Error != nil {
-			a.statusBar.SetError("Failed to save setting: " + msg.Error.Error())
-		} else {
-			a.statusBar.SetSuccess("Setting saved")
-		}
-
-		if msg.Success && msg.SettingName == claudeviewer.SettingWatchModeEnabled {
-			setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingWatchModeEnabled)
-			if exists && setting.IsBoolean() {
-				enabled := setting.GetBooleanValue()
-				if enabled {
-					intervalSetting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingWatchIntervalSeconds)
-					intervalSeconds := 5.0
-					if exists && intervalSetting.IsNumber() {
-						intervalSeconds = intervalSetting.GetNumberValue()
-					}
-					_ = a.service.StartWatchMode(a.ctx, intervalSeconds)
-					a.statusBar.SetSuccess("Watch mode enabled")
-				} else {
-					_ = a.service.StopWatchMode(a.ctx)
-					a.statusBar.SetSuccess("Watch mode disabled")
-				}
-			}
-		}
-
-		if msg.Success && msg.SettingName == claudeviewer.SettingWatchIntervalSeconds {
-			if a.service.IsWatchModeRunning() {
-				setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingWatchIntervalSeconds)
-				if exists && setting.IsNumber() {
-					a.service.UpdateWatchInterval(setting.GetNumberValue())
-				}
-			}
-		}
-
-		model, cmd := a.delegateToCurrentScreen(msg)
-		return model, tea.Batch(cmd, commands.ClearStatusCmd(500*time.Millisecond))
-
-	case messages.WatchResultMsg:
-		if msg.Error != nil {
-			a.statusBar.SetError(fmt.Sprintf("Auto-sync failed: %v", msg.Error))
-		} else if msg.Count > 0 {
-			a.statusBar.SetSuccess(fmt.Sprintf("Auto-synced %d plans", msg.Count))
-			return a, tea.Batch(
-				commands.LoadPlansCmd(a.ctx, a.service),
-				commands.WatchChannelListenerCmd(a.ctx, a.service),
-				commands.ClearStatusCmd(1*time.Second),
-			)
-		}
-		return a, commands.WatchChannelListenerCmd(a.ctx, a.service)
-
 	case messages.ClearStatusMsg:
 		a.statusBar.Clear()
 		return a, nil
-
-	case messages.SendToConnectorMsg:
-		a.statusBar.SetLoading("Sending to connector...")
-		return a, commands.SendToConnectorCmd(a.ctx, a.service, msg.PlanFileName)
-
-	case messages.SendToConnectorResultMsg:
-		if msg.Error != nil {
-			a.statusBar.SetError("Send failed: " + msg.Error.Error())
-		} else {
-			a.statusBar.SetSuccess("Sent successfully!")
-		}
-		return a, commands.ClearStatusCmd(1 * time.Second)
-
-	case messages.OpenConnectorsMsg:
-		return a, a.pushConnectorsScreen()
-
-	case messages.LoadConnectorsMsg:
-		return a, commands.LoadConnectorsCmd(a.ctx, a.service)
-
+	case messages.CloseHelpMsg:
+		a.showHelp = false
+		return a, nil
+	case messages.ErrorMsg:
+		a.statusBar.SetError(msg.Error.Error())
+		return a, commands.ClearStatusCmdWithDefaultDuration()
+	case messages.VersionErrorMsg:
+		a.statusBar.SetError(msg.Error.Error())
+		return a, commands.ClearStatusCmdWithDefaultDuration()
+	case messages.PlansLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+	case messages.PlanDetailLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+	case messages.VersionsLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
+	case messages.SettingsLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
 	case messages.ConnectorsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
-
-	case messages.LoadConnectorSettingsMsg:
-		return a, commands.LoadConnectorSettingsCmd(a.ctx, a.service, msg.ConnectorName)
-
 	case messages.ConnectorSettingsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
-
-	case messages.EnableConnectorMsg:
-		a.statusBar.SetLoading("Enabling connector...")
-		return a, commands.EnableConnectorCmd(a.ctx, a.service, msg.Name)
-
-	case messages.DisableConnectorMsg:
-		a.statusBar.SetLoading("Disabling connector...")
-		return a, commands.DisableConnectorCmd(a.ctx, a.service)
-
-	case messages.SaveConnectorSettingMsg:
-		a.statusBar.SetLoading("Saving...")
-		return a, commands.SaveConnectorSettingCmd(a.ctx, a.service, msg.ConnectorName, msg.Key, msg.Value, msg.IsSecret)
-
-	case messages.ConnectorUpdateResultMsg:
-		if msg.Error != nil {
-			a.statusBar.SetError(msg.Error.Error())
-		} else {
-			a.statusBar.SetSuccess("Connector updated")
-		}
+	case messages.AllTagsForPanelLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
-
-	case messages.ValidateConnectorMsg:
-		a.statusBar.SetLoading("Validating...")
-		return a, commands.ValidateConnectorCmd(a.ctx, a.service, msg.Name)
-
-	case messages.ValidateConnectorResultMsg:
-		if msg.Error != nil {
-			a.statusBar.SetError("Validation failed: " + msg.Error.Error())
-		} else {
-			a.statusBar.SetSuccess("Connector validated successfully!")
-		}
-		return a, commands.ClearStatusCmd(1 * time.Second)
-
-	case messages.LoadTagsForModalMsg:
-		return a, commands.LoadTagsForModalCmd(a.ctx, a.service, msg.FileName)
-
 	case components.TagsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
-
-	case messages.SetPlanTagsMsg:
-		a.statusBar.SetLoading("Saving tags...")
-		return a, tea.Batch(
-			commands.SetPlanTagsCmd(a.ctx, a.service, msg.FileName, msg.Tags),
-			commands.ClearStatusCmd(1*time.Second),
-		)
-
+	case messages.LoadPlanDetailMsg:
+		return a, commands.LoadPlanDetailCmd(a.ctx, a.service, msg.FileName)
+	case messages.SavePlanMsg:
+		return a, commands.SavePlanCmd(a.ctx, a.service, msg.FileName, msg.Content, msg.Modified)
+	case messages.LoadVersionsMsg:
+		return a, commands.LoadVersionsCmd(a.ctx, a.service, msg.PlanName)
+	case messages.SearchVersionsMsg:
+		return a, commands.SearchVersionsCmd(a.ctx, a.service, msg.PlanName, msg.Query)
+	case messages.ClearSearchMsg:
+		return a, commands.LoadPlansCmd(a.ctx, a.service)
+	case messages.SearchPlansMsg:
+		return a, commands.SearchPlansCmd(a.ctx, a.service, msg.Query)
 	case messages.SearchPlansWithTagsMsg:
 		return a, commands.SearchPlansWithTagsCmd(a.ctx, a.service, msg.Query, msg.Tags, msg.MatchAll)
-
 	case messages.LoadUntaggedPlansMsg:
 		return a, commands.LoadUntaggedPlansCmd(a.ctx, a.service)
-
-	case components.DeleteTagMsg:
-		return a, commands.DeleteTagsCmd(a.ctx, a.service, msg.TagID, msg.CurrentPlan)
-
-	case components.DeleteTagCmdMsg:
-		if msg.Error != nil {
-			a.statusBar.SetError(fmt.Sprintf("Failed to delete tag %s", *msg.Error))
-		} else {
-			a.statusBar.SetSuccess("Deleted tag")
-		}
-		return a, tea.Batch(
-			commands.ClearStatusCmd(500*time.Millisecond), commands.LoadTagsForModalCmd(a.ctx, a.service, msg.FileName),
-		)
-
+	case messages.LoadTagsForModalMsg:
+		return a, commands.LoadTagsForModalCmd(a.ctx, a.service, msg.FileName)
+	case messages.LoadAllTagsForPanelMsg:
+		return a, commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
+	case messages.LoadSettingsMsg:
+		return a, commands.LoadSettingsCmd(a.ctx, a.service, msg.SettingNames)
+	case messages.SaveSettingMsg:
+		return a, commands.SetSettingCmd(a.ctx, a.service, msg.Name, msg.Values)
+	case messages.LoadConnectorsMsg:
+		return a, commands.LoadConnectorsCmd(a.ctx, a.service)
+	case messages.LoadConnectorSettingsMsg:
+		return a, commands.LoadConnectorSettingsCmd(a.ctx, a.service, msg.ConnectorName)
+	case messages.SaveResultMsg:
+		return a.handleSaveResult(msg)
+	case messages.SyncPlansMsg:
+		return a.handleSyncPlans(msg)
+	case messages.SyncResultMsg:
+		return a.handleSyncResult(msg)
+	case messages.RSyncPlansMsg:
+		return a.handleRSyncPlans(msg)
+	case messages.RSyncResultMsg:
+		return a.handleRSyncResult(msg)
+	case messages.DumpPlansMsg:
+		return a.handleDumpPlans(msg)
+	case messages.DumpResultMsg:
+		return a.handleDumpResult(msg)
+	case messages.WatchResultMsg:
+		return a.handleWatchResult(msg)
+	case messages.WatchModeApplyMsg:
+		return a.handleWatchModeApply(msg)
+	case messages.OpenSettingsMsg:
+		return a, a.pushSettingsScreen()
+	case messages.SettingUpdateResultMsg:
+		return a.handleSettingUpdateResult(msg)
 	case messages.ThemeChangedMsg:
-		setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingDarkModeEnabled)
-		darkMode := true
-		if exists && setting.IsBoolean() {
-			darkMode = setting.GetBooleanValue()
-		}
-		a.isDarkModeEnabled = darkMode
-		styles.SetDarkMode(darkMode)
-
-		for _, screen := range a.stack {
-			switch s := screen.(type) {
-			case *screens.PlansScreen:
-				s.UpdateDarkMode(darkMode)
-			case *screens.VersionsScreen:
-				s.UpdateDarkMode(darkMode)
-			}
-		}
-		return a, nil
-
+		return a.handleThemeChanged(msg)
 	case messages.RenderMarkDownByDefaultMsg:
-		setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingRenderMarkdownByDefault)
-		renderMarkDownByDefault := false
-		if exists && setting.IsBoolean() {
-			renderMarkDownByDefault = setting.GetBooleanValue()
-		}
-		a.renderMarkDownByDefault = renderMarkDownByDefault
-
-		for _, screen := range a.stack {
-			switch s := screen.(type) {
-			case *screens.PlansScreen:
-				s.RenderedMarkdownByDefault(renderMarkDownByDefault)
-			case *screens.VersionsScreen:
-				s.RenderedMarkdownByDefault(renderMarkDownByDefault)
-			}
-		}
-		return a, nil
+		return a.handleRenderMarkdownChanged(msg)
+	case messages.DisplayModeChangedMsg:
+		return a.handleDisplayModeChanged(msg)
+	case messages.OpenConnectorsMsg:
+		return a, a.pushConnectorsScreen()
+	case messages.EnableConnectorMsg:
+		return a.handleEnableConnector(msg)
+	case messages.DisableConnectorMsg:
+		return a.handleDisableConnector(msg)
+	case messages.SaveConnectorSettingMsg:
+		return a.handleSaveConnectorSetting(msg)
+	case messages.ConnectorUpdateResultMsg:
+		return a.handleConnectorUpdateResult(msg)
+	case messages.ValidateConnectorMsg:
+		return a.handleValidateConnector(msg)
+	case messages.ValidateConnectorResultMsg:
+		return a.handleValidateConnectorResult(msg)
+	case messages.SendToConnectorMsg:
+		return a.handleSendToConnector(msg)
+	case messages.SendToConnectorResultMsg:
+		return a.handleSendToConnectorResult(msg)
+	case messages.CreateTagMsg:
+		return a.handleCreateTag(msg)
+	case messages.CreateTagResultMsg:
+		return a.handleCreateTagResult(msg)
+	case messages.SetPlanTagsMsg:
+		return a.handleSetPlanTags(msg)
+	case components.DeleteTagMsg:
+		return a.handleDeleteTag(msg)
+	case components.DeleteTagCmdMsg:
+		return a.handleDeleteTagResult(msg)
+	case messages.RequestVersionsScreenMsg:
+		return a.handleRequestVersionsScreen(msg)
+	case messages.VersionsNavigationResultMsg:
+		return a.handleVersionsNavigation(msg)
+	case messages.RestoreVersionMsg:
+		return a.handleRestoreVersion(msg)
+	case messages.RestoreResultMsg:
+		return a.handleRestoreResult(msg)
 	}
 
 	return a.delegateToCurrentScreen(msg)

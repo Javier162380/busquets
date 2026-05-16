@@ -3,6 +3,7 @@ package screens
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
@@ -49,7 +50,7 @@ var KnownSettings = []SettingDefinition{
 		Name:        claudeviewer.SettingWatchIntervalSeconds,
 		Description: "Watch mode sync interval (seconds)",
 		Type:        claudeviewer.SettingTypeNumber,
-		Default:     claudeviewer.SettingValues{NumberValue: new(float64(5))},
+		Default:     claudeviewer.SettingValues{NumberValue: new(claudeviewer.DefaultWatchIntervalSeconds)},
 	},
 	{
 		Name:          claudeviewer.SettingDefaultDisplayMode,
@@ -129,17 +130,17 @@ func (s *SettingsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 
 		switch s.settings[s.cursor].Definition.Name {
 		case claudeviewer.SettingDarkModeEnabled:
-			return s, func() tea.Msg {
-				return messages.ThemeChangedMsg{}
-			}
+			newVal := s.settings[s.cursor].Value.BooleanValue != nil && *s.settings[s.cursor].Value.BooleanValue
+			return s, func() tea.Msg { return messages.ThemeChangedMsg{DarkMode: newVal} }
 		case claudeviewer.SettingRenderMarkdownByDefault:
-			return s, func() tea.Msg {
-				return messages.RenderMarkDownByDefaultMsg{}
-			}
+			newVal := s.settings[s.cursor].Value.BooleanValue != nil && *s.settings[s.cursor].Value.BooleanValue
+			return s, func() tea.Msg { return messages.RenderMarkDownByDefaultMsg{Enabled: newVal} }
 		case claudeviewer.SettingDefaultDisplayMode:
-			return s, func() tea.Msg {
-				return messages.DisplayModeChangedMsg{}
+			newVal := ""
+			if s.settings[s.cursor].Value.StringValue != nil {
+				newVal = *s.settings[s.cursor].Value.StringValue
 			}
+			return s, func() tea.Msg { return messages.DisplayModeChangedMsg{Mode: newVal} }
 		}
 
 		return s, nil
@@ -271,20 +272,20 @@ func (s *SettingsScreen) handleEditKey(key string) (Screen, tea.Cmd) {
 func (s *SettingsScreen) View() string {
 	contentHeight := s.height - 4
 
-	var content string
-	content += styles.TitleStyle.Render("Settings") + "\n\n"
+	var sb strings.Builder
+	sb.WriteString(styles.TitleStyle.Render("Settings") + "\n\n")
 
 	for i, setting := range s.settings {
-		content += s.renderSettingItem(i, &setting) + "\n\n"
+		sb.WriteString(s.renderSettingItem(i, &setting) + "\n\n")
 	}
 
-	content += "\n" + styles.MutedStyle.Render("Enter/Space: edit | Esc: back")
+	sb.WriteString("\n" + styles.MutedStyle.Render("Enter/Space: edit | Esc: back"))
 
 	return s.borderStyle.
 		Width(s.width).
 		Height(contentHeight).
 		Padding(2, 4).
-		Render(content)
+		Render(sb.String())
 }
 
 func (s *SettingsScreen) renderSettingItem(index int, setting *SettingItem) string {

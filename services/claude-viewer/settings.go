@@ -32,6 +32,9 @@ const (
 	DisplayModeTagPlanContent = "tag_plan_content" // three-panel: tags + list + content
 )
 
+// DefaultWatchIntervalSeconds is the default interval for the watch mode background sync.
+const DefaultWatchIntervalSeconds = 5.0
+
 type Setting struct {
 	SettingName string
 	StringValue *string
