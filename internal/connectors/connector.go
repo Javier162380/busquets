@@ -3,11 +3,12 @@ package connectors
 
 import "context"
 
-// SendResult contains the result of a send operation.
+// SendResult contains the result of a send/generate operation.
 type SendResult struct {
 	Success   bool
-	MessageID string
+	MessageID *string // non-nil for messaging connectors (e.g. Telegram)
 	Error     error
+	Response  *string // non-nil for generative connectors (e.g. Ollama, LM Studio)
 }
 
 // Connector defines the interface for external channel connectors.

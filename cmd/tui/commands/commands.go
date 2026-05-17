@@ -350,6 +350,36 @@ func ValidateConnectorCmd(ctx context.Context, svc claudeviewer.UnifiedService, 
 	}
 }
 
+// GenerateTLDRCmd generates a TLDR summary for the given plan using the configured summarizer.
+func GenerateTLDRCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+
+		plan, err := svc.GetPlanDetailByFileName(ctx, fileName)
+		if err != nil {
+			return messages.TLDRGeneratedMsg{Err: err}
+		}
+
+		summary, err := svc.GenerateSummary(ctx, fileName)
+		return messages.TLDRGeneratedMsg{Summary: summary, PlanTitle: plan.Title, Err: err}
+	}
+}
+
+// SetSummaryConnectorCmd sets a connector as the active summarizer.
+func SetSummaryConnectorCmd(ctx context.Context, svc claudeviewer.UnifiedService, name string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		err := svc.SetSummaryConnector(ctx, name)
+		if err != nil {
+			return messages.ConnectorUpdateResultMsg{Success: false, Error: err}
+		}
+		return messages.ConnectorUpdateResultMsg{Success: true}
+	}
+}
+
 // WatchChannelListenerCmd listens to the service's watch result channel
 // and converts results into WatchResultMsg for the TUI to handle.
 func WatchChannelListenerCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {

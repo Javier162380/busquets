@@ -1777,8 +1777,9 @@ func testConnectorManager(t *testing.T, setup serviceSetupFn) {
 		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
 
 		mockConn.EXPECT().Validate().Return(nil).Times(1)
+		msgID := "msg-123"
 		mockConn.EXPECT().Send(gomock.Any(), "Test Title", "Test Content").Return(
-			&connectors.SendResult{Success: true, MessageID: "msg-123"},
+			&connectors.SendResult{Success: true, MessageID: &msgID},
 			nil,
 		).Times(1)
 
@@ -1792,7 +1793,7 @@ func testConnectorManager(t *testing.T, setup serviceSetupFn) {
 		result, err := manager.Send(ctx, "Test Title", "Test Content")
 		require.NoError(t, err)
 		require.True(t, result.Success)
-		require.Equal(t, "msg-123", result.MessageID)
+		require.Equal(t, "msg-123", *result.MessageID)
 	})
 
 	t.Run("Send fails when connector validation fails", func(t *testing.T) {
@@ -1913,8 +1914,9 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 		mockConn := setupMockConnector(ctrl, "test-conn", "Test Connector")
 
 		mockConn.EXPECT().Validate().Return(nil).Times(1)
+		sentID := "sent-123"
 		mockConn.EXPECT().Send(gomock.Any(), "Test Plan", "# Test Plan\n\nContent to send").Return(
-			&connectors.SendResult{Success: true, MessageID: "sent-123"},
+			&connectors.SendResult{Success: true, MessageID: &sentID},
 			nil,
 		).Times(1)
 

@@ -13,6 +13,7 @@ import (
 	tuiapp "github.com/Javier162380/claude-plan-viewer/cmd/tui"
 	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
+	"github.com/Javier162380/claude-plan-viewer/internal/connectors/ollama"
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors/telegram"
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
@@ -239,6 +240,7 @@ func runTUI(cfg *config.Config) error {
 	// Initialize connectors
 	registry := connectors.NewRegistry()
 	_ = registry.Register(telegram.New())
+	_ = registry.Register(ollama.New())
 
 	connectorManager := connectors.NewManager(registry, repo)
 	service.SetConnectorManager(connectorManager)

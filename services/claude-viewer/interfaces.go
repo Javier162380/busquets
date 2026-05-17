@@ -59,6 +59,8 @@ type ConnectorService interface {
 	ConfigureConnector(ctx context.Context, connectorName, key, value string, isSecret bool) error
 	GetConnectorSettings(ctx context.Context, connectorName string) ([]ConnectorSettingInfo, error)
 	ValidateConnector(ctx context.Context, connectorName string) error
+	GenerateSummary(ctx context.Context, planFileName string) (string, error)
+	SetSummaryConnector(ctx context.Context, connectorName string) error
 }
 
 // WatchService defines watcher operations.

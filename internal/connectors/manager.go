@@ -169,6 +169,46 @@ func (m *Manager) EnsureConnectorExists(ctx context.Context, name string) error 
 	})
 }
 
+// GenerateSummary invokes the connector named by the "summary_connector_name" setting
+// and returns its generated text response.
+func (m *Manager) GenerateSummary(ctx context.Context, title, content string) (string, error) {
+	setting, err := m.db.GetSettingByName(ctx, "summary_connector_name")
+	if dto.IsNotFound(err) {
+		return "", dto.ErrNoSummarizerConfigured
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to read summarizer setting: %w", err)
+	}
+	if setting.StringValue == nil {
+		return "", dto.ErrNoSummarizerConfigured
+	}
+
+	name := *setting.StringValue
+	connector, ok := m.registry.Get(name)
+	if !ok {
+		return "", fmt.Errorf("summarizer connector %q not registered", name)
+	}
+
+	if cfg, ok := connector.(ConfigurableConnector); ok {
+		if err := cfg.LoadConfig(ctx, m); err != nil {
+			return "", fmt.Errorf("failed to load summarizer config: %w", err)
+		}
+	}
+
+	if err := connector.Validate(); err != nil {
+		return "", fmt.Errorf("summarizer not configured: %w", err)
+	}
+
+	result, err := connector.Send(ctx, title, content)
+	if err != nil {
+		return "", err
+	}
+	if result.Response == nil {
+		return "", dto.ErrConnectorResponseEmpty
+	}
+	return *result.Response, nil
+}
+
 // GetConnectorRequiredSettings returns the required settings for a connector.
 func (m *Manager) GetConnectorRequiredSettings(connectorName string) ([]SettingDefinition, error) {
 	connector, ok := m.registry.Get(connectorName)

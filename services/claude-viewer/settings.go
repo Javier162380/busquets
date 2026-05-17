@@ -24,6 +24,7 @@ const (
 	SettingWatchModeEnabled        = "watch_mode_enabled"
 	SettingWatchIntervalSeconds    = "watch_interval_seconds"
 	SettingDefaultDisplayMode      = "default_display_mode"
+	SettingSummaryConnector        = "summary_connector_name"
 )
 
 // Display mode values for SettingDefaultDisplayMode.

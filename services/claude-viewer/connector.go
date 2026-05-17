@@ -139,3 +139,20 @@ func (s *Service) ValidateConnector(ctx context.Context, connectorName string) e
 	}
 	return s.connectorManager.ValidateConnector(ctx, connectorName)
 }
+
+// GenerateSummary generates a TLDR summary of a plan using the configured summarizer connector.
+func (s *Service) GenerateSummary(ctx context.Context, planFileName string) (string, error) {
+	if s.connectorManager == nil {
+		return "", dto.ErrConnectorDisabled
+	}
+	plan, err := s.GetPlanDetailByFileName(ctx, planFileName)
+	if err != nil {
+		return "", err
+	}
+	return s.connectorManager.GenerateSummary(ctx, plan.Title, plan.Content)
+}
+
+// SetSummaryConnector stores the connector name to use for summarization.
+func (s *Service) SetSummaryConnector(ctx context.Context, connectorName string) error {
+	return s.SetSetting(ctx, SettingSummaryConnector, SettingValues{StringValue: &connectorName})
+}

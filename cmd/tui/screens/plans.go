@@ -525,6 +525,15 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		}
 		return s, nil
 
+	case "S":
+		// Generate TLDR summary via summarizer connector.
+		if s.current != nil {
+			return s, func() tea.Msg {
+				return messages.GenerateTLDRMsg{FileName: s.current.FileName}
+			}
+		}
+		return s, nil
+
 	case "g":
 		s.viewer.GotoTop()
 		return s, nil
@@ -1025,7 +1034,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.layout == types.LayoutSplit {
 			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | tab: list | esc: back", mode)
 		}
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | e: edit | v: versions | t: transmit | esc: back", mode)
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | e: edit | v: versions | t: transmit | S: summarize | esc: back", mode)
 	case types.FocusEditor:
 		modified := ""
 		if s.editor.IsModified() {

@@ -60,3 +60,22 @@ func (a *App) handleSendToConnectorResult(msg messages.SendToConnectorResultMsg)
 	}
 	return a, commands.ClearStatusCmd(1 * time.Second)
 }
+
+func (a *App) handleGenerateTLDR(msg messages.GenerateTLDRMsg) (tea.Model, tea.Cmd) {
+	a.statusBar.SetLoading("Generating summary...")
+	return a, commands.GenerateTLDRCmd(a.ctx, a.service, msg.FileName)
+}
+
+func (a *App) handleTLDRGenerated(msg messages.TLDRGeneratedMsg) (tea.Model, tea.Cmd) {
+	if msg.Err != nil {
+		a.statusBar.SetError("Summary failed: " + msg.Err.Error())
+		return a, commands.ClearStatusCmdWithDefaultDuration()
+	}
+	a.statusBar.Clear()
+	return a, a.pushTLDRScreen(msg.PlanTitle, msg.Summary)
+}
+
+func (a *App) handleSetSummaryConnector(msg messages.SetSummaryConnectorMsg) (tea.Model, tea.Cmd) {
+	a.statusBar.SetLoading("Setting summarizer...")
+	return a, commands.SetSummaryConnectorCmd(a.ctx, a.service, msg.ConnectorName)
+}

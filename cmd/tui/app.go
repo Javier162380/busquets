@@ -230,6 +230,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleSendToConnector(msg)
 	case messages.SendToConnectorResultMsg:
 		return a.handleSendToConnectorResult(msg)
+	case messages.GenerateTLDRMsg:
+		return a.handleGenerateTLDR(msg)
+	case messages.TLDRGeneratedMsg:
+		return a.handleTLDRGenerated(msg)
+	case messages.SetSummaryConnectorMsg:
+		return a.handleSetSummaryConnector(msg)
 	case messages.CreateTagMsg:
 		return a.handleCreateTag(msg)
 	case messages.CreateTagResultMsg:
@@ -311,4 +317,10 @@ func (a *App) pushConnectorsScreen() tea.Cmd {
 	connectorsScreen := screens.NewConnectorsScreen(a.width, a.height)
 	a.stack = append(a.stack, connectorsScreen)
 	return connectorsScreen.Init()
+}
+
+func (a *App) pushTLDRScreen(planTitle, summary string) tea.Cmd {
+	tldrScreen := screens.NewTLDRScreen(planTitle, summary, a.width, a.height)
+	a.stack = append(a.stack, tldrScreen)
+	return tldrScreen.Init()
 }

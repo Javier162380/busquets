@@ -74,8 +74,10 @@ var (
 	ErrInvalidDateFormat  = &Error{Category: CategoryValidation, Message: "invalid datetime format"}
 	ErrInvalidNumber      = &Error{Category: CategoryValidation, Message: "invalid number value"}
 	ErrNoValue            = &Error{Category: CategoryValidation, Message: "no value provided"}
-	ErrConnectorDisabled  = &Error{Category: CategoryUnavailable, Message: "connector not initialized"}
-	ErrNoConnectorEnabled = &Error{Category: CategoryUnavailable, Message: "no connector enabled"}
+	ErrConnectorDisabled        = &Error{Category: CategoryUnavailable, Message: "connector not initialized"}
+	ErrNoConnectorEnabled       = &Error{Category: CategoryUnavailable, Message: "no connector enabled"}
+	ErrNoSummarizerConfigured   = &Error{Category: CategoryUnavailable, Message: "no summarizer configured"}
+	ErrConnectorResponseEmpty   = &Error{Category: CategoryUnavailable, Message: "connector returned no response"}
 )
 
 // GetCategory extracts the error category, defaulting to Internal.

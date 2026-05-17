@@ -240,6 +240,23 @@ type SendToConnectorResultMsg struct {
 	Error   error
 }
 
+// GenerateTLDRMsg requests generating a TLDR summary for a plan.
+type GenerateTLDRMsg struct {
+	FileName string
+}
+
+// TLDRGeneratedMsg carries the generated TLDR summary.
+type TLDRGeneratedMsg struct {
+	Summary   string
+	PlanTitle string
+	Err       error
+}
+
+// SetSummaryConnectorMsg requests setting a connector as the summarizer.
+type SetSummaryConnectorMsg struct {
+	ConnectorName string
+}
+
 // --- Settings ---
 
 // OpenSettingsMsg requests opening the settings screen.

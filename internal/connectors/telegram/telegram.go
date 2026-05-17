@@ -145,9 +145,10 @@ func (c *Connector) Send(ctx context.Context, title, content string) (*connector
 		}, nil
 	}
 
+	msgID := fmt.Sprintf("%d", result.Result.MessageID)
 	return &connectors.SendResult{
 		Success:   true,
-		MessageID: fmt.Sprintf("%d", result.Result.MessageID),
+		MessageID: &msgID,
 	}, nil
 }
 

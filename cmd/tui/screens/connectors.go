@@ -218,6 +218,16 @@ func (s *ConnectorsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 			}
 		}
 		return s, nil
+
+	case "X":
+		// Set selected connector as the summarizer
+		if !s.focusRight && len(s.connectors) > 0 {
+			conn := s.connectors[s.selectedConn]
+			return s, func() tea.Msg {
+				return messages.SetSummaryConnectorMsg{ConnectorName: conn.Name}
+			}
+		}
+		return s, nil
 	}
 
 	return s, nil
@@ -417,7 +427,7 @@ func (s *ConnectorsScreen) ShortHelp() string {
 	if s.focusRight {
 		return "j/k: navigate | e: edit | V: validate | tab: switch | s: display secret values | esc: back"
 	}
-	return "j/k: navigate | enter: enable | d: disable | V: validate | tab: switch | esc: back"
+	return "j/k: navigate | enter: enable | d: disable | V: validate | X: set summarizer | tab: switch | esc: back"
 }
 
 // IsInputMode returns true when capturing text input.
