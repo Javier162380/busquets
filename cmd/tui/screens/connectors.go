@@ -189,9 +189,8 @@ func (s *ConnectorsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		}
 		return s, nil
 
-	case "enter":
+	case "t":
 		if !s.focusRight {
-			// Enable selected connector (left panel)
 			if len(s.connectors) > 0 {
 				conn := s.connectors[s.selectedConn]
 				return s, func() tea.Msg {
@@ -202,10 +201,13 @@ func (s *ConnectorsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		return s, nil
 
 	case "d":
-		// Disable connector (only from left panel)
 		if !s.focusRight && len(s.connectors) > 0 {
-			return s, func() tea.Msg {
-				return messages.DisableConnectorMsg{}
+			conn := s.connectors[s.selectedConn]
+			switch {
+			case conn.IsTransmit:
+				return s, func() tea.Msg { return messages.DisableConnectorMsg{} }
+			case conn.IsSummarizer:
+				return s, func() tea.Msg { return messages.ClearSummaryConnectorMsg{} }
 			}
 		}
 		return s, nil
@@ -293,11 +295,15 @@ func (s *ConnectorsScreen) renderLeftPanel(width, height int) string {
 			cursor = "❯ "
 		}
 
-		status := "○"
-		statusStyle := lipgloss.NewStyle().Foreground(styles.MutedColor)
-		if conn.Enabled {
-			status = "✓"
-			statusStyle = lipgloss.NewStyle().Foreground(styles.SuccessColor)
+		var badge string
+		badgeStyle := lipgloss.NewStyle().Foreground(styles.AccentColor)
+		switch {
+		case conn.IsTransmit:
+			badge = badgeStyle.Render("[T]")
+		case conn.IsSummarizer:
+			badge = badgeStyle.Render("[S]")
+		default:
+			badge = lipgloss.NewStyle().Foreground(styles.MutedColor).Render("[ ]")
 		}
 
 		name := conn.DisplayName
@@ -305,7 +311,7 @@ func (s *ConnectorsScreen) renderLeftPanel(width, height int) string {
 			name = styles.ActiveStyle.Render(name)
 		}
 
-		line := fmt.Sprintf("%s%s %s", cursor, name, statusStyle.Render(status))
+		line := fmt.Sprintf("%s%s %s", cursor, badge, name)
 		if conn.Configured {
 			line += lipgloss.NewStyle().Foreground(styles.MutedColor).Render(" (configured)")
 		}
@@ -427,7 +433,7 @@ func (s *ConnectorsScreen) ShortHelp() string {
 	if s.focusRight {
 		return "j/k: navigate | e: edit | V: validate | tab: switch | s: display secret values | esc: back"
 	}
-	return "j/k: navigate | enter: enable | d: disable | V: validate | X: set summarizer | tab: switch | esc: back"
+	return "j/k: navigate | t: set transmit [T] | X: set summarizer [S] | d: clear role | V: validate | tab: switch | esc: back"
 }
 
 // IsInputMode returns true when capturing text input.

@@ -61,6 +61,7 @@ type ConnectorService interface {
 	ValidateConnector(ctx context.Context, connectorName string) error
 	GenerateSummary(ctx context.Context, planFileName string) (string, error)
 	SetSummaryConnector(ctx context.Context, connectorName string) error
+	ClearSummaryConnector(ctx context.Context) error
 }
 
 // WatchService defines watcher operations.
@@ -76,8 +77,18 @@ type WatchService interface {
 type ConnectorInfo struct {
 	Name        string
 	DisplayName string
-	Enabled     bool
+	Role        *dto.ConnectorRole
 	Configured  bool
+}
+
+// IsTransmit reports whether this connector is assigned to the transmit slot.
+func (c ConnectorInfo) IsTransmit() bool {
+	return c.Role != nil && *c.Role == dto.ConnectorRoleTransmit
+}
+
+// IsSummarizer reports whether this connector is assigned to the summary slot.
+func (c ConnectorInfo) IsSummarizer() bool {
+	return c.Role != nil && *c.Role == dto.ConnectorRoleSummary
 }
 
 // ConnectorSettingInfo represents a connector setting with its current value.

@@ -1642,7 +1642,7 @@ func testConnectorManager(t *testing.T, setup serviceSetupFn) {
 		require.Len(t, statuses, 1)
 		require.Equal(t, "mock-connector", statuses[0].Name)
 		require.Equal(t, "Mock Connector", statuses[0].DisplayName)
-		require.False(t, statuses[0].Enabled)
+		require.Nil(t, statuses[0].Role)
 		require.False(t, statuses[0].Configured)
 	})
 
@@ -1938,7 +1938,7 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, err)
 		require.NotNil(t, info)
 		require.Equal(t, "test-conn", info.Name)
-		require.True(t, info.Enabled)
+		require.True(t, info.IsTransmit())
 
 		err = service.ConfigureConnector(ctx, "test-conn", "api_token", "my-secret-token", true)
 		require.NoError(t, err)
@@ -2113,8 +2113,35 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, err)
 
 		_, err = service.GenerateSummary(ctx, "no-summarizer.md")
-		require.Error(t, err)
-		require.Contains(t, err.Error(), "no summarizer configured")
+		require.ErrorIs(t, err, dto.ErrNoSummarizerConfigured)
+	})
+
+	t.Run("ClearSummaryConnector clears the summary slot", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "ollama", "Ollama (Local LLM)")
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+		service.SetConnectorManager(manager)
+
+		require.NoError(t, service.SetSummaryConnector(ctx, "ollama"))
+
+		createTestPlanFile(t, sourcePlansDir, "clear-summary.md", "# Clear Summary\n\nContent")
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, service.ClearSummaryConnector(ctx))
+
+		_, err = service.GenerateSummary(ctx, "clear-summary.md")
+		require.ErrorIs(t, err, dto.ErrNoSummarizerConfigured)
 	})
 }
 

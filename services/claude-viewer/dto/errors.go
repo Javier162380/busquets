@@ -70,14 +70,14 @@ func (e *Error) Is(target error) bool {
 
 // Sentinel errors - base errors without operation context.
 var (
-	ErrNotFound           = &Error{Category: CategoryNotFound, Message: "not found"}
-	ErrInvalidDateFormat  = &Error{Category: CategoryValidation, Message: "invalid datetime format"}
-	ErrInvalidNumber      = &Error{Category: CategoryValidation, Message: "invalid number value"}
-	ErrNoValue            = &Error{Category: CategoryValidation, Message: "no value provided"}
-	ErrConnectorDisabled        = &Error{Category: CategoryUnavailable, Message: "connector not initialized"}
-	ErrNoConnectorEnabled       = &Error{Category: CategoryUnavailable, Message: "no connector enabled"}
-	ErrNoSummarizerConfigured   = &Error{Category: CategoryUnavailable, Message: "no summarizer configured"}
-	ErrConnectorResponseEmpty   = &Error{Category: CategoryUnavailable, Message: "connector returned no response"}
+	ErrNotFound               = &Error{Category: CategoryNotFound, Message: "not found"} //nolint:gci // No need
+	ErrInvalidDateFormat      = &Error{Category: CategoryValidation, Message: "invalid datetime format"}
+	ErrInvalidNumber          = &Error{Category: CategoryValidation, Message: "invalid number value"}
+	ErrNoValue                = &Error{Category: CategoryValidation, Message: "no value provided"}
+	ErrConnectorDisabled      = &Error{Category: CategoryUnavailable, Message: "connector not initialized"}
+	ErrNoConnectorEnabled     = &Error{Category: CategoryUnavailable, Message: "no connector enabled"}
+	ErrNoSummarizerConfigured = &Error{Category: CategoryUnavailable, Message: "no summarizer configured"}
+	ErrConnectorResponseEmpty = &Error{Category: CategoryUnavailable, Message: "connector returned no response"}
 )
 
 // GetCategory extracts the error category, defaulting to Internal.

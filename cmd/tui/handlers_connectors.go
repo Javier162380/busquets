@@ -15,8 +15,13 @@ func (a *App) handleEnableConnector(msg messages.EnableConnectorMsg) (tea.Model,
 }
 
 func (a *App) handleDisableConnector(_ messages.DisableConnectorMsg) (tea.Model, tea.Cmd) {
-	a.statusBar.SetLoading("Disabling connector...")
+	a.statusBar.SetLoading("Clearing transmit connector...")
 	return a, commands.DisableConnectorCmd(a.ctx, a.service)
+}
+
+func (a *App) handleClearSummaryConnector(_ messages.ClearSummaryConnectorMsg) (tea.Model, tea.Cmd) {
+	a.statusBar.SetLoading("Clearing summary connector...")
+	return a, commands.ClearSummaryConnectorCmd(a.ctx, a.service)
 }
 
 func (a *App) handleSaveConnectorSetting(msg messages.SaveConnectorSettingMsg) (tea.Model, tea.Cmd) {

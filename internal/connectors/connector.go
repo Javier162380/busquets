@@ -1,7 +1,11 @@
 // Package connectors provides interfaces and types for external channel connectors.
 package connectors
 
-import "context"
+import (
+	"context"
+
+	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+)
 
 // SendResult contains the result of a send/generate operation.
 type SendResult struct {
@@ -55,6 +59,6 @@ type SettingDefinition struct {
 type ConnectorStatus struct {
 	Name        string
 	DisplayName string
-	Enabled     bool
+	Role        *dto.ConnectorRole // nil if not assigned to any slot
 	Configured  bool
 }

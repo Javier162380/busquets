@@ -144,9 +144,6 @@ SELECT * FROM connectors WHERE name = $1;
 -- name: ListConnectors :many
 SELECT * FROM connectors ORDER BY name;
 
--- name: GetEnabledConnector :one
-SELECT * FROM connectors WHERE enabled = TRUE LIMIT 1;
-
 -- name: UpsertConnector :exec
 INSERT INTO connectors (name, display_name, enabled)
 VALUES ($1, $2, $3)
@@ -154,14 +151,17 @@ ON CONFLICT(name) DO UPDATE SET
     display_name = excluded.display_name,
     updated_at = NOW();
 
--- name: SetConnectorEnabled :exec
-UPDATE connectors SET enabled = TRUE, updated_at = NOW() WHERE name = $1;
-
--- name: DisableAllConnectors :exec
-UPDATE connectors SET enabled = FALSE, updated_at = NOW();
-
 -- name: DeleteConnector :exec
 DELETE FROM connectors WHERE name = $1;
+
+-- name: GetConnectorByRole :one
+SELECT * FROM connectors WHERE role = $1 LIMIT 1;
+
+-- name: SetConnectorRole :exec
+UPDATE connectors SET role = $1, updated_at = NOW() WHERE name = $2;
+
+-- name: ClearConnectorRole :exec
+UPDATE connectors SET role = NULL, updated_at = NOW() WHERE role = $1;
 
 -- Connector settings queries
 

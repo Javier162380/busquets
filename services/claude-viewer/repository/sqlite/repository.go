@@ -791,15 +791,29 @@ func (r *Repository) ListConnectors(ctx context.Context) ([]dto.Connector, error
 	return result, nil
 }
 
-func (r *Repository) GetEnabledConnector(ctx context.Context) (dto.Connector, error) {
-	c, err := r.q.GetEnabledConnector(ctx)
+func (r *Repository) GetConnectorForRole(ctx context.Context, role dto.ConnectorRole) (string, error) {
+	c, err := r.q.GetConnectorByRole(ctx, string(role))
 	if errors.Is(err, sql.ErrNoRows) {
-		return dto.Connector{}, dto.ErrNoConnectorEnabled
+		return "", dto.ErrNotFound
 	}
 	if err != nil {
-		return dto.Connector{}, err
+		return "", err
 	}
-	return connectorToDomain(c), nil
+	return c.Name, nil
+}
+
+func (r *Repository) SetConnectorForRole(ctx context.Context, name string, role dto.ConnectorRole) error {
+	if err := r.q.ClearConnectorRole(ctx, string(role)); err != nil {
+		return err
+	}
+	return r.q.SetConnectorRole(ctx, SetConnectorRoleParams{
+		Role: string(role),
+		Name: name,
+	})
+}
+
+func (r *Repository) ClearConnectorForRole(ctx context.Context, role dto.ConnectorRole) error {
+	return r.q.ClearConnectorRole(ctx, string(role))
 }
 
 func (r *Repository) UpsertConnector(ctx context.Context, params dto.UpsertConnectorParams) error {
@@ -808,14 +822,6 @@ func (r *Repository) UpsertConnector(ctx context.Context, params dto.UpsertConne
 		DisplayName: params.DisplayName,
 		Enabled:     params.Enabled,
 	})
-}
-
-func (r *Repository) SetConnectorEnabled(ctx context.Context, name string) error {
-	return r.q.SetConnectorEnabled(ctx, name)
-}
-
-func (r *Repository) DisableAllConnectors(ctx context.Context) error {
-	return r.q.DisableAllConnectors(ctx)
 }
 
 func (r *Repository) DeleteConnector(ctx context.Context, name string) error {

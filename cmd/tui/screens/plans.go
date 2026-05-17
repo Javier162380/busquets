@@ -40,11 +40,11 @@ type PlansScreen struct {
 	untaggedCount int                                   // number of plans with no tags assigned
 	displayMode   string                                // one of DisplayModePlanContent, DisplayModeTagPlanContent
 	current       *claudeviewer.PlanDetail
-	searchQuery   string    // Current active search query (empty = show all).
-	tagFilters    []string  // Active tag filters.
-	showingModal  bool      // Whether tag modal is shown.
-	showingTLDR   bool      // Whether TLDR popup is shown.
-	tldrTitle     string    // Title of the plan being summarized.
+	searchQuery   string   // Current active search query (empty = show all).
+	tagFilters    []string // Active tag filters.
+	showingModal  bool     // Whether tag modal is shown.
+	showingTLDR   bool     // Whether TLDR popup is shown.
+	tldrTitle     string   // Title of the plan being summarized.
 	tldrViewport  viewport.Model
 	lastKey       string    // Last key pressed in editor (for double-key detection).
 	lastKeyTime   time.Time // Time of last key press in editor.

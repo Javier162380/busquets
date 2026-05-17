@@ -255,10 +255,11 @@ func LoadConnectorsCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea
 		statuses := make([]messages.ConnectorStatus, len(connectors))
 		for i, c := range connectors {
 			statuses[i] = messages.ConnectorStatus{
-				Name:        c.Name,
-				DisplayName: c.DisplayName,
-				Enabled:     c.Enabled,
-				Configured:  c.Configured,
+				Name:         c.Name,
+				DisplayName:  c.DisplayName,
+				IsTransmit:   c.IsTransmit(),
+				IsSummarizer: c.IsSummarizer(),
+				Configured:   c.Configured,
 			}
 		}
 		return messages.ConnectorsLoadedMsg{Connectors: statuses}
@@ -308,13 +309,27 @@ func EnableConnectorCmd(ctx context.Context, svc claudeviewer.UnifiedService, na
 	}
 }
 
-// DisableConnectorCmd disables all connectors.
+// DisableConnectorCmd clears the transmit connector slot.
 func DisableConnectorCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
 		err := svc.DisableConnector(ctx)
+		if err != nil {
+			return messages.ConnectorUpdateResultMsg{Success: false, Error: err}
+		}
+		return messages.ConnectorUpdateResultMsg{Success: true}
+	}
+}
+
+// ClearSummaryConnectorCmd clears the summary connector slot.
+func ClearSummaryConnectorCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		err := svc.ClearSummaryConnector(ctx)
 		if err != nil {
 			return messages.ConnectorUpdateResultMsg{Success: false, Error: err}
 		}

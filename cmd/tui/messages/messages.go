@@ -158,10 +158,11 @@ type SearchPlansWithTagsMsg struct {
 
 // ConnectorStatus represents a connector's current state.
 type ConnectorStatus struct {
-	Name        string
-	DisplayName string
-	Enabled     bool
-	Configured  bool
+	Name         string
+	DisplayName  string
+	IsTransmit   bool
+	IsSummarizer bool
+	Configured   bool
 }
 
 // ConnectorSettingValue holds a setting's definition and current value.
@@ -201,8 +202,11 @@ type EnableConnectorMsg struct {
 	Name string
 }
 
-// DisableConnectorMsg requests disabling all connectors.
+// DisableConnectorMsg requests clearing the transmit connector slot.
 type DisableConnectorMsg struct{}
+
+// ClearSummaryConnectorMsg requests clearing the summary connector slot.
+type ClearSummaryConnectorMsg struct{}
 
 // SaveConnectorSettingMsg requests saving a connector setting.
 type SaveConnectorSettingMsg struct {

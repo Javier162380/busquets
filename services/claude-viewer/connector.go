@@ -44,10 +44,11 @@ func (s *Service) GetEnabledConnector(ctx context.Context) (*ConnectorInfo, erro
 		return nil, nil
 	}
 
+	role := dto.ConnectorRoleTransmit
 	return &ConnectorInfo{
 		Name:        connector.Name(),
 		DisplayName: connector.DisplayName(),
-		Enabled:     true,
+		Role:        &role,
 		Configured:  true,
 	}, nil
 }
@@ -68,7 +69,7 @@ func (s *Service) ListConnectors(ctx context.Context) ([]ConnectorInfo, error) {
 		infos[i] = ConnectorInfo{
 			Name:        status.Name,
 			DisplayName: status.DisplayName,
-			Enabled:     status.Enabled,
+			Role:        status.Role,
 			Configured:  status.Configured,
 		}
 	}
@@ -152,7 +153,18 @@ func (s *Service) GenerateSummary(ctx context.Context, planFileName string) (str
 	return s.connectorManager.GenerateSummary(ctx, plan.Title, plan.Content)
 }
 
-// SetSummaryConnector stores the connector name to use for summarization.
+// SetSummaryConnector assigns a connector to the summary slot.
 func (s *Service) SetSummaryConnector(ctx context.Context, connectorName string) error {
-	return s.SetSetting(ctx, SettingSummaryConnector, SettingValues{StringValue: &connectorName})
+	if s.connectorManager == nil {
+		return dto.ErrConnectorDisabled
+	}
+	return s.connectorManager.SetSummaryConnector(ctx, connectorName)
+}
+
+// ClearSummaryConnector clears the summary connector slot.
+func (s *Service) ClearSummaryConnector(ctx context.Context) error {
+	if s.connectorManager == nil {
+		return dto.ErrConnectorDisabled
+	}
+	return s.db.ClearConnectorForRole(ctx, dto.ConnectorRoleSummary)
 }

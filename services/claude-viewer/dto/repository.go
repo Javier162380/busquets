@@ -40,10 +40,10 @@ type Repository interface {
 	// Connector operations
 	GetConnectorByName(ctx context.Context, name string) (Connector, error)
 	ListConnectors(ctx context.Context) ([]Connector, error)
-	GetEnabledConnector(ctx context.Context) (Connector, error)
+	GetConnectorForRole(ctx context.Context, role ConnectorRole) (string, error)
+	SetConnectorForRole(ctx context.Context, name string, role ConnectorRole) error
+	ClearConnectorForRole(ctx context.Context, role ConnectorRole) error
 	UpsertConnector(ctx context.Context, params UpsertConnectorParams) error
-	SetConnectorEnabled(ctx context.Context, name string) error
-	DisableAllConnectors(ctx context.Context) error
 	DeleteConnector(ctx context.Context, name string) error
 
 	// Connector setting operations

@@ -2,7 +2,6 @@ package connectors
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
@@ -22,64 +21,77 @@ func NewManager(registry *Registry, db dto.Repository) *Manager {
 	}
 }
 
-// GetEnabledConnector returns the currently enabled connector, if any.
+// GetEnabledConnector returns the transmit connector, if any.
 func (m *Manager) GetEnabledConnector(ctx context.Context) (Connector, error) {
-	row, err := m.db.GetEnabledConnector(ctx)
-	if errors.Is(err, dto.ErrNoConnectorEnabled) {
+	name, err := m.db.GetConnectorForRole(ctx, dto.ConnectorRoleTransmit)
+	if dto.IsNotFound(err) || name == "" {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("failed to get enabled connector: %w", err)
+		return nil, fmt.Errorf("failed to get transmit connector: %w", err)
 	}
 
-	connector, ok := m.registry.Get(row.Name)
+	connector, ok := m.registry.Get(name)
 	if !ok {
-		return nil, fmt.Errorf("enabled connector %q not found in registry", row.Name)
+		return nil, fmt.Errorf("transmit connector %q not found in registry", name)
 	}
 
-	// Load config if supported
 	if cfg, ok := connector.(ConfigurableConnector); ok {
 		if err := cfg.LoadConfig(ctx, m); err != nil {
-			return nil, fmt.Errorf("failed to load config for %q: %w", row.Name, err)
+			return nil, fmt.Errorf("failed to load config for %q: %w", name, err)
 		}
 	}
 
 	return connector, nil
 }
 
-// EnableConnector enables a specific connector by name (disables all others).
+// EnableConnector sets a connector as the transmit connector.
 func (m *Manager) EnableConnector(ctx context.Context, name string) error {
-	if _, ok := m.registry.Get(name); !ok {
+	connector, ok := m.registry.Get(name)
+	if !ok {
 		return dto.ErrNotFound
 	}
 
-	// First ensure the connector exists in DB
-	connector, _ := m.registry.Get(name)
-	err := m.db.UpsertConnector(ctx, dto.UpsertConnectorParams{
+	if err := m.db.UpsertConnector(ctx, dto.UpsertConnectorParams{
 		Name:        name,
 		DisplayName: connector.DisplayName(),
 		Enabled:     false,
-	})
-	if err != nil {
+	}); err != nil {
 		return fmt.Errorf("failed to upsert connector: %w", err)
 	}
 
-	// Disable all connectors
-	if err := m.db.DisableAllConnectors(ctx); err != nil {
-		return fmt.Errorf("failed to disable connectors: %w", err)
-	}
-
-	// Enable the specified one
-	if err := m.db.SetConnectorEnabled(ctx, name); err != nil {
-		return fmt.Errorf("failed to enable connector: %w", err)
+	if err := m.db.SetConnectorForRole(ctx, name, dto.ConnectorRoleTransmit); err != nil {
+		return fmt.Errorf("failed to set transmit connector: %w", err)
 	}
 
 	return nil
 }
 
-// DisableConnector disables all connectors.
+// DisableConnector clears the transmit connector slot.
 func (m *Manager) DisableConnector(ctx context.Context) error {
-	return m.db.DisableAllConnectors(ctx)
+	return m.db.ClearConnectorForRole(ctx, dto.ConnectorRoleTransmit)
+}
+
+// SetSummaryConnector assigns a connector to the summary slot.
+func (m *Manager) SetSummaryConnector(ctx context.Context, name string) error {
+	connector, ok := m.registry.Get(name)
+	if !ok {
+		return dto.ErrNotFound
+	}
+
+	if err := m.db.UpsertConnector(ctx, dto.UpsertConnectorParams{
+		Name:        name,
+		DisplayName: connector.DisplayName(),
+		Enabled:     false,
+	}); err != nil {
+		return fmt.Errorf("failed to upsert connector: %w", err)
+	}
+
+	if err := m.db.SetConnectorForRole(ctx, name, dto.ConnectorRoleSummary); err != nil {
+		return fmt.Errorf("failed to set summary connector: %w", err)
+	}
+
+	return nil
 }
 
 // SetConnectorSetting saves a setting for a specific connector.
@@ -126,16 +138,23 @@ func (m *Manager) ListAvailable(ctx context.Context) ([]ConnectorStatus, error) 
 	connectors := m.registry.All()
 	statuses := make([]ConnectorStatus, len(connectors))
 
-	enabledName := ""
-	if row, err := m.db.GetEnabledConnector(ctx); err == nil {
-		enabledName = row.Name
-	}
+	transmitName, _ := m.db.GetConnectorForRole(ctx, dto.ConnectorRoleTransmit)
+	summaryName, _ := m.db.GetConnectorForRole(ctx, dto.ConnectorRoleSummary)
 
 	for i, c := range connectors {
+		var role *dto.ConnectorRole
+		switch c.Name() {
+		case transmitName:
+			r := dto.ConnectorRoleTransmit
+			role = &r
+		case summaryName:
+			r := dto.ConnectorRoleSummary
+			role = &r
+		}
 		statuses[i] = ConnectorStatus{
 			Name:        c.Name(),
 			DisplayName: c.DisplayName(),
-			Enabled:     c.Name() == enabledName,
+			Role:        role,
 			Configured:  m.isConfigured(ctx, c),
 		}
 	}
@@ -169,21 +188,15 @@ func (m *Manager) EnsureConnectorExists(ctx context.Context, name string) error 
 	})
 }
 
-// GenerateSummary invokes the connector named by the "summary_connector_name" setting
-// and returns its generated text response.
+// GenerateSummary invokes the summary connector and returns its generated text response.
 func (m *Manager) GenerateSummary(ctx context.Context, title, content string) (string, error) {
-	setting, err := m.db.GetSettingByName(ctx, "summary_connector_name")
-	if dto.IsNotFound(err) {
+	name, err := m.db.GetConnectorForRole(ctx, dto.ConnectorRoleSummary)
+	if dto.IsNotFound(err) || name == "" {
 		return "", dto.ErrNoSummarizerConfigured
 	}
 	if err != nil {
 		return "", fmt.Errorf("failed to read summarizer setting: %w", err)
 	}
-	if setting.StringValue == nil {
-		return "", dto.ErrNoSummarizerConfigured
-	}
-
-	name := *setting.StringValue
 	connector, ok := m.registry.Get(name)
 	if !ok {
 		return "", fmt.Errorf("summarizer connector %q not registered", name)

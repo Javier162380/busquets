@@ -218,6 +218,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleEnableConnector(msg)
 	case messages.DisableConnectorMsg:
 		return a.handleDisableConnector(msg)
+	case messages.ClearSummaryConnectorMsg:
+		return a.handleClearSummaryConnector(msg)
 	case messages.SaveConnectorSettingMsg:
 		return a.handleSaveConnectorSetting(msg)
 	case messages.ConnectorUpdateResultMsg:
@@ -318,4 +320,3 @@ func (a *App) pushConnectorsScreen() tea.Cmd {
 	a.stack = append(a.stack, connectorsScreen)
 	return connectorsScreen.Init()
 }
-

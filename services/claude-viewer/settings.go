@@ -18,13 +18,12 @@ const (
 
 // Known setting name constants.
 const (
-	SettingReadingSpeedWPM         = "reading_speed_wpm"
+	SettingReadingSpeedWPM         = "reading_speed_wpm" //nolint:gci//No need
 	SettingDarkModeEnabled         = "dark_mode_enabled"
 	SettingRenderMarkdownByDefault = "render_markdown_by_default"
 	SettingWatchModeEnabled        = "watch_mode_enabled"
 	SettingWatchIntervalSeconds    = "watch_interval_seconds"
 	SettingDefaultDisplayMode      = "default_display_mode"
-	SettingSummaryConnector        = "summary_connector_name"
 )
 
 // Display mode values for SettingDefaultDisplayMode.
