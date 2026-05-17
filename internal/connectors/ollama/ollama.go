@@ -19,7 +19,13 @@ const (
 	maxContentChars = 8000
 	httpTimeout     = 60 * time.Second
 
-	systemPrompt = "You are a concise technical plan summarizer. Output 3-5 clear, actionable bullet points covering goals, approach, and key outcomes."
+	systemPrompt = `You are a concise technical plan summarizer. Output 3-5 clear, actionable bullet points covering goals, approach, and key outcomes.
+					The response need to contain these three bullet points. Goals, Approach and Outcome. You must match always the following template.
+					
+					**Goal**: Here the plan goal.
+					**Approach**: Here the plan approach.
+					**Outcome**: Here the plan outcome.
+					`
 )
 
 // Connector implements the Ollama local LLM connector.

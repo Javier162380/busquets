@@ -319,8 +319,3 @@ func (a *App) pushConnectorsScreen() tea.Cmd {
 	return connectorsScreen.Init()
 }
 
-func (a *App) pushTLDRScreen(planTitle, summary string) tea.Cmd {
-	tldrScreen := screens.NewTLDRScreen(planTitle, summary, a.width, a.height)
-	a.stack = append(a.stack, tldrScreen)
-	return tldrScreen.Init()
-}

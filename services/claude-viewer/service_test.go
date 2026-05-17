@@ -2064,6 +2064,58 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 		err := service.ValidateConnector(ctx, "test-conn")
 		require.NoError(t, err)
 	})
+
+	t.Run("GenerateSummary returns summary when summarizer is configured", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mockConn := setupMockConnector(ctrl, "ollama", "Ollama (Local LLM)")
+
+		summary := "**Goal**: ship the feature\n**Approach**: TDD\n**Outcome**: done"
+		mockConn.EXPECT().Validate().Return(nil).Times(1)
+		mockConn.EXPECT().Send(gomock.Any(), "Summary Plan", "# Summary Plan\n\nSome content").Return(
+			&connectors.SendResult{Success: true, Response: &summary},
+			nil,
+		).Times(1)
+
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(mockConn))
+
+		manager := connectors.NewManager(registry, service.DB())
+		service.SetConnectorManager(manager)
+
+		require.NoError(t, service.SetSummaryConnector(ctx, "ollama"))
+
+		createTestPlanFile(t, sourcePlansDir, "summary-plan.md", "# Summary Plan\n\nSome content")
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		result, err := service.GenerateSummary(ctx, "summary-plan.md")
+		require.NoError(t, err)
+		require.Equal(t, summary, result)
+	})
+
+	t.Run("GenerateSummary fails when no summarizer is configured", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		registry := connectors.NewRegistry()
+		manager := connectors.NewManager(registry, service.DB())
+		service.SetConnectorManager(manager)
+
+		createTestPlanFile(t, sourcePlansDir, "no-summarizer.md", "# No Summarizer\n\nContent")
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		_, err = service.GenerateSummary(ctx, "no-summarizer.md")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no summarizer configured")
+	})
 }
 
 func TestConcurrentVersionSaves(t *testing.T) {

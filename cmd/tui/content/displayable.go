@@ -127,6 +127,11 @@ func (v *VersionContent) GetIdentifier() string {
 	return fmt.Sprintf("%s@v%d", v.FilePath, v.VersionNumber)
 }
 
+// RenderMarkdown renders markdown text using glamour with the current theme.
+func RenderMarkdown(content string, darkModeEnabled bool, width int) string {
+	return renderMarkdown(content, darkModeEnabled, width)
+}
+
 func renderMarkdown(content string, darkModeEnabled bool, width int) string {
 	style := GlamourDarkMode
 	if darkModeEnabled {

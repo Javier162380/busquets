@@ -72,7 +72,7 @@ func (a *App) handleTLDRGenerated(msg messages.TLDRGeneratedMsg) (tea.Model, tea
 		return a, commands.ClearStatusCmdWithDefaultDuration()
 	}
 	a.statusBar.Clear()
-	return a, a.pushTLDRScreen(msg.PlanTitle, msg.Summary)
+	return a.delegateToCurrentScreen(msg)
 }
 
 func (a *App) handleSetSummaryConnector(msg messages.SetSummaryConnectorMsg) (tea.Model, tea.Cmd) {

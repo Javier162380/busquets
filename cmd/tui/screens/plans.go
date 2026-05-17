@@ -13,6 +13,7 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -42,6 +43,9 @@ type PlansScreen struct {
 	searchQuery   string    // Current active search query (empty = show all).
 	tagFilters    []string  // Active tag filters.
 	showingModal  bool      // Whether tag modal is shown.
+	showingTLDR   bool      // Whether TLDR popup is shown.
+	tldrTitle     string    // Title of the plan being summarized.
+	tldrViewport  viewport.Model
 	lastKey       string    // Last key pressed in editor (for double-key detection).
 	lastKeyTime   time.Time // Time of last key press in editor.
 
@@ -100,6 +104,26 @@ func (s *PlansScreen) Init() tea.Cmd {
 
 // Update handles messages.
 func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
+	// Handle TLDR popup if showing.
+	if s.showingTLDR {
+		if key, ok := msg.(tea.KeyMsg); ok {
+			switch key.String() {
+			case "esc", "q":
+				s.showingTLDR = false
+				return s, nil
+			case "g":
+				s.tldrViewport.GotoTop()
+				return s, nil
+			case "G":
+				s.tldrViewport.GotoBottom()
+				return s, nil
+			}
+		}
+		var cmd tea.Cmd
+		s.tldrViewport, cmd = s.tldrViewport.Update(msg)
+		return s, cmd
+	}
+
 	// Handle tag modal if showing.
 	if s.showingModal {
 		switch msg := msg.(type) {
@@ -173,6 +197,16 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				return s, s.loadPlanDetail(s.current.FileName)
 			}
 		}
+		return s, nil
+
+	case messages.TLDRGeneratedMsg:
+		popupWidth := s.width * 2 / 3
+		popupHeight := s.height / 2
+		s.tldrTitle = msg.PlanTitle
+		s.tldrViewport = viewport.New(popupWidth-4, popupHeight-4)
+		rendered := content.RenderMarkdown(msg.Summary, s.isDarkModeEnabled, popupWidth-4)
+		s.tldrViewport.SetContent(rendered)
+		s.showingTLDR = true
 		return s, nil
 
 	case messages.OpenTagModalMsg:
@@ -403,6 +437,14 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 			return messages.OpenConnectorsMsg{}
 		}
 
+	case "X":
+		if s.current != nil {
+			return s, func() tea.Msg {
+				return messages.GenerateTLDRMsg{FileName: s.current.FileName}
+			}
+		}
+		return s, nil
+
 	case "tab":
 		s.focus = types.FocusContent
 		s.list.Blur()
@@ -521,15 +563,6 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		if s.current != nil {
 			return s, func() tea.Msg {
 				return messages.SendToConnectorMsg{PlanFileName: s.current.FileName}
-			}
-		}
-		return s, nil
-
-	case "S":
-		// Generate TLDR summary via summarizer connector.
-		if s.current != nil {
-			return s, func() tea.Msg {
-				return messages.GenerateTLDRMsg{FileName: s.current.FileName}
 			}
 		}
 		return s, nil
@@ -712,6 +745,31 @@ func (s *PlansScreen) View() string {
 		} else {
 			mainContent = s.renderSplitView()
 		}
+	}
+
+	// Overlay TLDR popup if showing.
+	if s.showingTLDR {
+		popupWidth := s.width * 2 / 3
+		popupHeight := s.height / 2
+
+		title := styles.TitleStyle.Render(fmt.Sprintf("TLDR: %s", s.tldrTitle))
+
+		panel := s.borderStyle.
+			Width(popupWidth).
+			Height(popupHeight - 2).
+			Render(s.tldrViewport.View())
+
+		popup := lipgloss.JoinVertical(lipgloss.Left, title, panel)
+
+		overlay := lipgloss.Place(
+			s.width,
+			s.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			popup,
+		)
+
+		return s.overlayContent(mainContent, overlay)
 	}
 
 	// Overlay tag modal if showing.
@@ -1025,7 +1083,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.displayMode == claudeviewer.DisplayModeTagPlanContent {
 			tagNav = "shift+tab: tags | "
 		}
-		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | r: rsync | d: dump | C: connectors | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
+		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | r: rsync | d: dump | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
 	case types.FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeGlamour {
@@ -1034,7 +1092,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.layout == types.LayoutSplit {
 			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | tab: list | esc: back", mode)
 		}
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | e: edit | v: versions | t: transmit | S: summarize | esc: back", mode)
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | e: edit | v: versions | t: transmit | esc: back", mode)
 	case types.FocusEditor:
 		modified := ""
 		if s.editor.IsModified() {
