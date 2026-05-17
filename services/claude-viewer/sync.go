@@ -64,73 +64,64 @@ func (s *Service) SyncPlans(ctx context.Context) (int, error) {
 	return syncDeRef, nil
 }
 
+// RSyncPlans is the reverse of SyncPlans: it copies indexed plans from viewerDir
+// back to sourcePlansDir. Only plans already in the DB are candidates, and only
+// those missing from sourcePlansDir are written.
 func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
-	if _, err := os.Stat(s.viewerDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(s.viewerDir, 0o750); err != nil {
-			return 0, fmt.Errorf("failed to create viewer directory: %w", err)
+	if err := os.MkdirAll(s.sourcePlansDir, 0o750); err != nil {
+		return 0, fmt.Errorf("failed to create source plans directory: %w", err)
+	}
+
+	// Build a set of files already present in sourcePlansDir to avoid overwriting them.
+	sourceEntries, err := os.ReadDir(s.sourcePlansDir)
+	if err != nil {
+		return 0, fmt.Errorf("failed to read source plans directory: %w", err)
+	}
+	sourcePlanFiles := make(map[string]struct{}, len(sourceEntries))
+	for _, entry := range sourceEntries {
+		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".md") {
+			sourcePlanFiles[entry.Name()] = struct{}{}
 		}
 	}
 
-	syncPlans := atomic.Int64{}
-	errGroup, groupCtx := errgroup.WithContext(ctx)
+	// The DB is the authoritative list of indexed plans — iterate it, not the filesystem.
+	// This ensures plans deleted from sourcePlansDir but still in viewerDir are found.
+	summaries, err := s.db.ListAllPlans(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list plans: %w", err)
+	}
+
+	rsyncPlans := atomic.Int64{}
+	errGroup := errgroup.Group{}
 	errGroup.SetLimit(5)
 
-	entries, err := os.ReadDir(s.sourcePlansDir)
-	if err != nil {
-		return 0, fmt.Errorf("failed to read plans directory: %w", err)
-	}
-
-	viewerEntries, err := os.ReadDir(s.viewerDir)
-	if err != nil {
-		return 0, fmt.Errorf("failed to read viewer directory: %w", err)
-	}
-
-	viewerEntriesFiles := map[string]struct{}{}
-	for _, dest := range viewerEntries {
-		viewerEntriesFiles[dest.Name()] = struct{}{}
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".md") {
-			continue
+	for _, summary := range summaries {
+		fileName := summary.FileName
+		if _, ok := sourcePlanFiles[fileName]; ok {
+			continue // already in sourcePlansDir, nothing to do
 		}
-		planName := entry.Name()
 		errGroup.Go(func() error {
-			plan, planErr := s.GetPlanByFileName(groupCtx, planName)
-			switch {
-			case dto.IsNotFound(planErr):
-				return nil
-			case planErr != nil:
-				return planErr
+			viewerPath := filepath.Join(s.viewerDir, fileName)
+			if _, statErr := os.Stat(viewerPath); os.IsNotExist(statErr) {
+				return nil // file gone from viewerDir too; nothing to restore
+			} else if statErr != nil {
+				return statErr
 			}
 
-			if plan.Content == "" {
-				return nil
+			destPath := filepath.Join(s.sourcePlansDir, fileName)
+			if err := copyFile(viewerPath, destPath); err != nil {
+				return fmt.Errorf("failed to copy %s: %w", fileName, err)
 			}
-
-			info, err := entry.Info()
-			if err != nil {
-				return err
-			}
-
-			if _, ok := viewerEntriesFiles[info.Name()]; !ok {
-				sourcePath := filepath.Join(s.sourcePlansDir, planName)
-				destPath := filepath.Join(s.viewerDir, planName)
-				err := copyFile(sourcePath, destPath)
-				if err != nil {
-					return err
-				}
-				syncPlans.Add(int64(1))
-			}
+			rsyncPlans.Add(1)
 			return nil
 		})
 	}
 
 	if err := errGroup.Wait(); err != nil {
-		return 0, fmt.Errorf("failed to sync plans: %w", err)
+		return 0, fmt.Errorf("failed to rsync plans: %w", err)
 	}
 
-	return int(syncPlans.Load()), nil
+	return int(rsyncPlans.Load()), nil
 }
 
 // syncSinglePlan copies and indexes a single plan file.

@@ -523,7 +523,7 @@ func TestRSyncOperations(t *testing.T) {
 func testRSyncOperations(t *testing.T, setup serviceSetupFn) {
 	t.Helper()
 
-	t.Run("RSyncPlans with empty source directory", func(t *testing.T) {
+	t.Run("RSyncPlans with empty database returns zero", func(t *testing.T) {
 		service, _, _, cleanup := setup(t)
 		defer cleanup()
 
@@ -533,28 +533,32 @@ func testRSyncOperations(t *testing.T, setup serviceSetupFn) {
 		require.Equal(t, 0, count)
 	})
 
-	t.Run("RSyncPlans copies missing file from source to viewer", func(t *testing.T) {
+	t.Run("RSyncPlans copies indexed plan from viewerDir back to sourcePlansDir", func(t *testing.T) {
 		service, sourcePlansDir, viewerDir, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
+		// Sync indexes the plan and copies it to viewerDir.
 		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = os.Remove(filepath.Join(viewerDir, "test-plan.md"))
-		require.NoError(t, err)
+		// Simulate the plan being deleted from sourcePlansDir.
+		require.NoError(t, os.Remove(filepath.Join(sourcePlansDir, "test-plan.md")))
 
 		count, err := service.RSyncPlans(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 1, count)
 
-		content, err := os.ReadFile(filepath.Join(viewerDir, "test-plan.md"))
+		content, err := os.ReadFile(filepath.Join(sourcePlansDir, "test-plan.md"))
+		require.NoError(t, err)
+		require.Equal(t, sampleMarkdown, string(content))
+		content, err = os.ReadFile(filepath.Join(viewerDir, "test-plan.md"))
 		require.NoError(t, err)
 		require.Equal(t, sampleMarkdown, string(content))
 	})
 
-	t.Run("RSyncPlans skips files that already exist in viewer", func(t *testing.T) {
+	t.Run("RSyncPlans skips plans already present in sourcePlansDir", func(t *testing.T) {
 		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
@@ -563,28 +567,36 @@ func testRSyncOperations(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
+		// File still exists in sourcePlansDir — nothing to restore.
 		count, err := service.RSyncPlans(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 0, count)
 	})
 
-	t.Run("RSyncPlans ignores non-markdown files", func(t *testing.T) {
-		service, sourcePlansDir, _, cleanup := setup(t)
+	t.Run("RSyncPlans skips plan when viewerDir copy is also missing", func(t *testing.T) {
+		service, sourcePlansDir, viewerDir, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		createTestPlanFile(t, sourcePlansDir, "test.txt", "not markdown")
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		// Remove from both locations — nothing can be restored.
+		require.NoError(t, os.Remove(filepath.Join(sourcePlansDir, "test-plan.md")))
+		require.NoError(t, os.Remove(filepath.Join(viewerDir, "test-plan.md")))
 
 		count, err := service.RSyncPlans(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 0, count)
 	})
 
-	t.Run("RSyncPlans skips files not in database", func(t *testing.T) {
+	t.Run("RSyncPlans skips files on disk that are not in database", func(t *testing.T) {
 		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
+		// File exists in sourcePlansDir but was never synced — DB has no record.
 		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
 
 		count, err := service.RSyncPlans(ctx)
@@ -592,22 +604,19 @@ func testRSyncOperations(t *testing.T, setup serviceSetupFn) {
 		require.Equal(t, 0, count)
 	})
 
-	t.Run("RSyncPlans handles multiple missing files", func(t *testing.T) {
-		service, sourcePlansDir, viewerDir, cleanup := setup(t)
+	t.Run("RSyncPlans restores multiple plans deleted from sourcePlansDir", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
 		for i := 1; i <= 5; i++ {
-			filename := "plan-" + strconv.Itoa(i) + ".md"
-			createTestPlanFile(t, sourcePlansDir, filename, sampleMarkdown)
+			createTestPlanFile(t, sourcePlansDir, "plan-"+strconv.Itoa(i)+".md", sampleMarkdown)
 		}
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
 		for i := 1; i <= 5; i++ {
-			filename := "plan-" + strconv.Itoa(i) + ".md"
-			err = os.Remove(filepath.Join(viewerDir, filename))
-			require.NoError(t, err)
+			require.NoError(t, os.Remove(filepath.Join(sourcePlansDir, "plan-"+strconv.Itoa(i)+".md")))
 		}
 
 		count, err := service.RSyncPlans(ctx)
@@ -615,28 +624,24 @@ func testRSyncOperations(t *testing.T, setup serviceSetupFn) {
 		require.Equal(t, 5, count)
 
 		for i := 1; i <= 5; i++ {
-			filename := "plan-" + strconv.Itoa(i) + ".md"
-			_, err := os.Stat(filepath.Join(viewerDir, filename))
+			_, err := os.Stat(filepath.Join(sourcePlansDir, "plan-"+strconv.Itoa(i)+".md"))
 			require.NoError(t, err)
 		}
 	})
 
-	t.Run("RSyncPlans only copies missing files not all files", func(t *testing.T) {
-		service, sourcePlansDir, viewerDir, cleanup := setup(t)
+	t.Run("RSyncPlans only restores missing plans not all plans", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
 		for i := 1; i <= 5; i++ {
-			filename := "plan-" + strconv.Itoa(i) + ".md"
-			createTestPlanFile(t, sourcePlansDir, filename, sampleMarkdown)
+			createTestPlanFile(t, sourcePlansDir, "plan-"+strconv.Itoa(i)+".md", sampleMarkdown)
 		}
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = os.Remove(filepath.Join(viewerDir, "plan-2.md"))
-		require.NoError(t, err)
-		err = os.Remove(filepath.Join(viewerDir, "plan-4.md"))
-		require.NoError(t, err)
+		require.NoError(t, os.Remove(filepath.Join(sourcePlansDir, "plan-2.md")))
+		require.NoError(t, os.Remove(filepath.Join(sourcePlansDir, "plan-4.md")))
 
 		count, err := service.RSyncPlans(ctx)
 		require.NoError(t, err)
