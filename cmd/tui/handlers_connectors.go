@@ -11,22 +11,34 @@ import (
 
 func (a *App) handleEnableConnector(msg messages.EnableConnectorMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Enabling connector...")
-	return a, commands.EnableConnectorCmd(a.ctx, a.service, msg.Name)
+	return a, tea.Batch(
+		commands.EnableConnectorCmd(a.ctx, a.service, msg.Name),
+		commands.ClearStatusCmdWithDefaultDuration(),
+	)
 }
 
 func (a *App) handleDisableConnector(_ messages.DisableConnectorMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Clearing transmit connector...")
-	return a, commands.DisableConnectorCmd(a.ctx, a.service)
+	return a, tea.Batch(
+		commands.DisableConnectorCmd(a.ctx, a.service),
+		commands.ClearStatusCmdWithDefaultDuration(),
+	)
 }
 
 func (a *App) handleClearSummaryConnector(_ messages.ClearSummaryConnectorMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Clearing summary connector...")
-	return a, commands.ClearSummaryConnectorCmd(a.ctx, a.service)
+	return a, tea.Batch(
+		commands.ClearSummaryConnectorCmd(a.ctx, a.service),
+		commands.ClearStatusCmdWithDefaultDuration(),
+	)
 }
 
 func (a *App) handleSaveConnectorSetting(msg messages.SaveConnectorSettingMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Saving...")
-	return a, commands.SaveConnectorSettingCmd(a.ctx, a.service, msg.ConnectorName, msg.Key, msg.Value, msg.IsSecret)
+	return a, tea.Batch(
+		commands.SaveConnectorSettingCmd(a.ctx, a.service, msg.ConnectorName, msg.Key, msg.Value, msg.IsSecret),
+		commands.ClearStatusCmdWithDefaultDuration(),
+	)
 }
 
 func (a *App) handleConnectorUpdateResult(msg messages.ConnectorUpdateResultMsg) (tea.Model, tea.Cmd) {
@@ -35,12 +47,16 @@ func (a *App) handleConnectorUpdateResult(msg messages.ConnectorUpdateResultMsg)
 	} else {
 		a.statusBar.SetSuccess("Connector updated")
 	}
-	return a.delegateToCurrentScreen(msg)
+	model, cmd := a.delegateToCurrentScreen(msg) //nolint:gci//no need.
+	return model, tea.Batch(cmd, commands.ClearStatusCmdWithDefaultDuration())
 }
 
 func (a *App) handleValidateConnector(msg messages.ValidateConnectorMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Validating...")
-	return a, commands.ValidateConnectorCmd(a.ctx, a.service, msg.Name)
+	return a, tea.Batch(
+		commands.ValidateConnectorCmd(a.ctx, a.service, msg.Name),
+		commands.ClearStatusCmdWithDefaultDuration(),
+	)
 }
 
 func (a *App) handleValidateConnectorResult(msg messages.ValidateConnectorResultMsg) (tea.Model, tea.Cmd) {
@@ -54,7 +70,10 @@ func (a *App) handleValidateConnectorResult(msg messages.ValidateConnectorResult
 
 func (a *App) handleSendToConnector(msg messages.SendToConnectorMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Sending to connector...")
-	return a, commands.SendToConnectorCmd(a.ctx, a.service, msg.PlanFileName)
+	return a, tea.Batch(
+		commands.SendToConnectorCmd(a.ctx, a.service, msg.PlanFileName),
+		commands.ClearStatusCmdWithDefaultDuration(),
+	)
 }
 
 func (a *App) handleSendToConnectorResult(msg messages.SendToConnectorResultMsg) (tea.Model, tea.Cmd) {
@@ -68,7 +87,10 @@ func (a *App) handleSendToConnectorResult(msg messages.SendToConnectorResultMsg)
 
 func (a *App) handleGenerateTLDR(msg messages.GenerateTLDRMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Generating summary...")
-	return a, commands.GenerateTLDRCmd(a.ctx, a.service, msg.FileName)
+	return a, tea.Batch(
+		commands.GenerateTLDRCmd(a.ctx, a.service, msg.FileName),
+		commands.ClearStatusCmdWithDefaultDuration(),
+	)
 }
 
 func (a *App) handleTLDRGenerated(msg messages.TLDRGeneratedMsg) (tea.Model, tea.Cmd) {
@@ -76,11 +98,13 @@ func (a *App) handleTLDRGenerated(msg messages.TLDRGeneratedMsg) (tea.Model, tea
 		a.statusBar.SetError("Summary failed: " + msg.Err.Error())
 		return a, commands.ClearStatusCmdWithDefaultDuration()
 	}
-	a.statusBar.Clear()
 	return a.delegateToCurrentScreen(msg)
 }
 
 func (a *App) handleSetSummaryConnector(msg messages.SetSummaryConnectorMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Setting summarizer...")
-	return a, commands.SetSummaryConnectorCmd(a.ctx, a.service, msg.ConnectorName)
+	return a, tea.Batch(
+		commands.SetSummaryConnectorCmd(a.ctx, a.service, msg.ConnectorName),
+		commands.ClearStatusCmdWithDefaultDuration(),
+	)
 }

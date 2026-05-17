@@ -96,20 +96,42 @@ func (c *Connector) Validate() error {
 	return nil
 }
 
+// OllamaGenerateRequest is the request body for POST /api/generate.
+type OllamaGenerateRequest struct {
+	Model  string `json:"model"`
+	Prompt string `json:"prompt"`
+	System string `json:"system,omitempty"`
+	Stream bool   `json:"stream"`
+}
+
+// OllamaGenerateResponse is the response body from POST /api/generate (stream=false).
+type OllamaGenerateResponse struct {
+	Model              string `json:"model"`
+	CreatedAt          string `json:"created_at"` //nolint:tagliatelle//Match OllamaAPI.
+	Response           string `json:"response"`
+	Done               bool   `json:"done"`
+	TotalDuration      int64  `json:"total_duration"`       //nolint:gci,tagliatelle//Match OllamaAPI.
+	LoadDuration       int64  `json:"load_duration"`        //nolint:tagliatelle//Match OllamaAPI.
+	PromptEvalCount    int    `json:"prompt_eval_count"`    //nolint:tagliatelle//Match OllamaAPI.
+	PromptEvalDuration int64  `json:"prompt_eval_duration"` //nolint:tagliatelle//Match OllamaAPI.
+	EvalCount          int    `json:"eval_count"`           //nolint:tagliatelle//Match OllamaAPI.
+	EvalDuration       int64  `json:"eval_duration"`        //nolint:tagliatelle//Match OllamaAPI.
+}
+
 // Send generates a summary of the plan content using the Ollama API.
 func (c *Connector) Send(ctx context.Context, title, content string) (*connectors.SendResult, error) {
 	if len(content) > maxContentChars {
 		content = content[:maxContentChars]
 	}
 
-	requestBody := map[string]any{
-		"model":  c.model,
-		"system": systemPrompt,
-		"prompt": fmt.Sprintf("Summarize this plan:\n\nTitle: %s\n\n%s", title, content),
-		"stream": false,
+	reqBody := OllamaGenerateRequest{
+		Model:  c.model,
+		Prompt: fmt.Sprintf("Summarize this plan:\n\nTitle: %s\n\n%s", title, content),
+		System: systemPrompt,
+		Stream: false,
 	}
 
-	body, err := json.Marshal(requestBody)
+	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
@@ -131,9 +153,7 @@ func (c *Connector) Send(ctx context.Context, title, content string) (*connector
 		return nil, fmt.Errorf("ollama returned status %d", resp.StatusCode)
 	}
 
-	var result struct {
-		Response string `json:"response"`
-	}
+	var result OllamaGenerateResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to decode ollama response: %w", err)
 	}
