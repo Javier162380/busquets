@@ -69,6 +69,16 @@ func New(db dto.Repository, viewerDir, sourcePlansDir string, indexFullContent b
 	return svc, nil
 }
 
+// Close stops background goroutines started by New (cache GC and watch manager).
+func (s *Service) Close() {
+	if s.watchManager != nil {
+		s.watchManager.Stop()
+	}
+	if s.summaryCache != nil {
+		s.summaryCache.Stop()
+	}
+}
+
 // StartWatchMode enables background syncing at the specified interval.
 func (s *Service) StartWatchMode(ctx context.Context, intervalSeconds float64) error {
 	if intervalSeconds <= 0 {

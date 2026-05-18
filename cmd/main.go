@@ -133,6 +133,7 @@ func runSync(cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
+	defer service.Close()
 
 	count, err := service.SyncPlans(ctx)
 	if err != nil {
@@ -157,6 +158,7 @@ func runRSync(cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
+	defer service.Close()
 
 	count, err := service.RSyncPlans(ctx)
 	if err != nil {
@@ -181,6 +183,7 @@ func runDump(cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
+	defer service.Close()
 
 	count, err := service.DumpPlans(ctx)
 	if err != nil {
@@ -211,6 +214,7 @@ func runServe(cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
+	defer service.Close()
 
 	server, err := httpserver.NewServer(service, *addr)
 	if err != nil {
@@ -236,6 +240,7 @@ func runTUI(cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
+	defer service.Close()
 
 	// Initialize connectors
 	registry := connectors.NewRegistry()
@@ -299,6 +304,7 @@ func runMCP(cfg *config.Config) error {
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
+	defer service.Close()
 
 	// Create MCP server with config
 	mcpServer := mcp.NewServer(
