@@ -16,7 +16,7 @@ linters:
     - gocritic
     - godot
     - goheader
-    - gomodguard_v2
+    - gomodguard
     - goprintffuncname
     - gosec
     - govet

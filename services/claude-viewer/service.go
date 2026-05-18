@@ -4,6 +4,8 @@ package claudeviewer
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/cache"
@@ -33,6 +35,14 @@ type Service struct {
 	connectorManager     *connectors.Manager
 	watchManager         *WatchManager
 	summaryCache         *cache.MuxCache[string]
+	logger               *slog.Logger
+}
+
+// SetLogger replaces the logger used for non-fatal internal warnings.
+// The default logger discards all output; call this to route warnings
+// to an appropriate destination (file for TUI, stderr for CLI/MCP).
+func (s *Service) SetLogger(l *slog.Logger) {
+	s.logger = l
 }
 
 // SetConnectorManager sets the connector manager for the service.
@@ -61,6 +71,7 @@ func New(db dto.Repository, viewerDir, sourcePlansDir string, indexFullContent b
 		markdownHTMLRendered: md,
 		nowProvider:          nowprovider.SystemTimeProvider{},
 		summaryCache:         cache.New[string](summaryCacheTTL, summaryCacheGCPeriod),
+		logger:               slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 
 	// Initialize watch manager

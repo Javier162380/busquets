@@ -4,6 +4,7 @@ package tui
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"time"
@@ -14,7 +15,7 @@ import (
 )
 
 // StartWithOptions launches the TUI application with optional debug mode.
-func StartWithOptions(ctx context.Context, service claudeviewer.UnifiedService, debug bool) error {
+func StartWithOptions(ctx context.Context, service claudeviewer.UnifiedService, debug bool, logger *slog.Logger) error {
 	app := New(ctx, service)
 
 	if debug {
@@ -53,8 +54,7 @@ func StartWithOptions(ctx context.Context, service claudeviewer.UnifiedService, 
 
 		// Start watch mode
 		if err := service.StartWatchMode(ctx, intervalSeconds); err != nil {
-			// Log warning but don't fail
-			fmt.Fprintf(os.Stderr, "Warning: failed to start watch mode: %v\n", err)
+			logger.Warn("failed to start watch mode", "error", err)
 		}
 	}
 

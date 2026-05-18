@@ -4,7 +4,8 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -24,6 +25,35 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// newLogger creates a logger appropriate for the given command.
+// MCP uses stderr to avoid corrupting the stdio transport (stdout is the MCP protocol).
+// TUI uses a file to avoid corrupting alt-screen rendering.
+// All other commands use stderr.
+func newLogger(command string) *slog.Logger {
+	switch command {
+	case "tui":
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return slog.New(slog.NewTextHandler(io.Discard, nil))
+		}
+		logDir := filepath.Join(homeDir, ".claude-viewer")
+		if err := os.MkdirAll(logDir, 0o750); err != nil {
+			return slog.New(slog.NewTextHandler(io.Discard, nil))
+		}
+		//nolint:gosec // G304: log path is constructed from home directory, not user input
+		f, err := os.OpenFile(
+			filepath.Join(logDir, "app.log"),
+			os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600,
+		)
+		if err != nil {
+			return slog.New(slog.NewTextHandler(io.Discard, nil))
+		}
+		return slog.New(slog.NewTextHandler(f, nil))
+	default:
+		return slog.New(slog.NewTextHandler(os.Stderr, nil))
+	}
+}
+
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
@@ -31,41 +61,49 @@ func main() {
 	}
 
 	command := os.Args[1]
+	logger := newLogger(command)
 
-	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		logger.Error("failed to load config", "error", err)
+		os.Exit(1)
 	}
 
 	switch command {
 	case "sync":
-		if err := runSync(cfg); err != nil {
-			log.Fatalf("Sync failed: %v", err)
+		if err := runSync(cfg, logger); err != nil {
+			logger.Error("sync failed", "error", err)
+			os.Exit(1)
 		}
 	case "rsync":
-		if err := runRSync(cfg); err != nil {
-			log.Fatalf("RSync failed: %v", err)
+		if err := runRSync(cfg, logger); err != nil {
+			logger.Error("rsync failed", "error", err)
+			os.Exit(1)
 		}
 	case "dump":
-		if err := runDump(cfg); err != nil {
-			log.Fatalf("Dump failed: %v", err)
+		if err := runDump(cfg, logger); err != nil {
+			logger.Error("dump failed", "error", err)
+			os.Exit(1)
 		}
 	case "serve":
-		if err := runServe(cfg); err != nil {
-			log.Fatalf("Server failed: %v", err)
+		if err := runServe(cfg, logger); err != nil {
+			logger.Error("server failed", "error", err)
+			os.Exit(1)
 		}
 	case "tui":
-		if err := runTUI(cfg); err != nil {
-			log.Fatalf("TUI failed: %v", err)
+		if err := runTUI(cfg, logger); err != nil {
+			logger.Error("TUI failed", "error", err)
+			os.Exit(1)
 		}
 	case "migrate":
-		if err := runMigrate(cfg); err != nil {
-			log.Fatalf("Migration failed: %v", err)
+		if err := runMigrate(cfg, logger); err != nil {
+			logger.Error("migration failed", "error", err)
+			os.Exit(1)
 		}
 	case "mcp":
-		if err := runMCP(cfg); err != nil {
-			log.Fatalf("MCP server failed: %v", err)
+		if err := runMCP(cfg, logger); err != nil {
+			logger.Error("MCP server failed", "error", err)
+			os.Exit(1)
 		}
 	default:
 		fmt.Printf("Unknown command: %s\n", command)
@@ -120,7 +158,7 @@ func initRepository(ctx context.Context, cfg *config.Config) (dto.Repository, fu
 	}
 }
 
-func runSync(cfg *config.Config) error {
+func runSync(cfg *config.Config, logger *slog.Logger) error {
 	ctx := context.Background()
 
 	repo, cleanup, err := initRepository(ctx, cfg)
@@ -134,6 +172,7 @@ func runSync(cfg *config.Config) error {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
 	defer service.Close()
+	service.SetLogger(logger)
 
 	count, err := service.SyncPlans(ctx)
 	if err != nil {
@@ -145,7 +184,7 @@ func runSync(cfg *config.Config) error {
 	return nil
 }
 
-func runRSync(cfg *config.Config) error {
+func runRSync(cfg *config.Config, logger *slog.Logger) error {
 	ctx := context.Background()
 
 	repo, cleanup, err := initRepository(ctx, cfg)
@@ -159,6 +198,7 @@ func runRSync(cfg *config.Config) error {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
 	defer service.Close()
+	service.SetLogger(logger)
 
 	count, err := service.RSyncPlans(ctx)
 	if err != nil {
@@ -170,7 +210,7 @@ func runRSync(cfg *config.Config) error {
 	return nil
 }
 
-func runDump(cfg *config.Config) error {
+func runDump(cfg *config.Config, logger *slog.Logger) error {
 	ctx := context.Background()
 
 	repo, cleanup, err := initRepository(ctx, cfg)
@@ -184,6 +224,7 @@ func runDump(cfg *config.Config) error {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
 	defer service.Close()
+	service.SetLogger(logger)
 
 	count, err := service.DumpPlans(ctx)
 	if err != nil {
@@ -195,7 +236,7 @@ func runDump(cfg *config.Config) error {
 	return nil
 }
 
-func runServe(cfg *config.Config) error {
+func runServe(cfg *config.Config, logger *slog.Logger) error {
 	ctx := context.Background()
 
 	// Parse flags
@@ -215,6 +256,7 @@ func runServe(cfg *config.Config) error {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
 	defer service.Close()
+	service.SetLogger(logger)
 
 	server, err := httpserver.NewServer(service, *addr)
 	if err != nil {
@@ -225,7 +267,7 @@ func runServe(cfg *config.Config) error {
 	return server.Server().Start(*addr)
 }
 
-func runTUI(cfg *config.Config) error {
+func runTUI(cfg *config.Config, logger *slog.Logger) error {
 	ctx := context.Background()
 
 	debug := os.Getenv("DEBUG") == "1"
@@ -241,6 +283,7 @@ func runTUI(cfg *config.Config) error {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
 	defer service.Close()
+	service.SetLogger(logger)
 
 	// Initialize connectors
 	registry := connectors.NewRegistry()
@@ -250,10 +293,10 @@ func runTUI(cfg *config.Config) error {
 	connectorManager := connectors.NewManager(registry, repo)
 	service.SetConnectorManager(connectorManager)
 
-	return tuiapp.StartWithOptions(ctx, service, debug)
+	return tuiapp.StartWithOptions(ctx, service, debug, logger)
 }
 
-func runMigrate(cfg *config.Config) error {
+func runMigrate(cfg *config.Config, _ *slog.Logger) error {
 	ctx := context.Background()
 
 	fmt.Printf("Running migrations for %s backend...\n", cfg.Database.Backend)
@@ -291,7 +334,7 @@ func runMigrate(cfg *config.Config) error {
 	return nil
 }
 
-func runMCP(cfg *config.Config) error {
+func runMCP(cfg *config.Config, logger *slog.Logger) error {
 	ctx := context.Background()
 
 	repo, cleanup, err := initRepository(ctx, cfg)
@@ -305,6 +348,7 @@ func runMCP(cfg *config.Config) error {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
 	defer service.Close()
+	service.SetLogger(logger)
 
 	// Create MCP server with config
 	mcpServer := mcp.NewServer(
@@ -319,7 +363,12 @@ func runMCP(cfg *config.Config) error {
 		return fmt.Errorf("failed to register MCP tools: %w", err)
 	}
 
-	log.Printf("Starting MCP server: %s v%s (backend: %s)", cfg.MCP.ServerName, cfg.MCP.Version, cfg.Database.Backend)
+	// Log to stderr — stdout is the MCP stdio transport.
+	logger.Info("starting MCP server",
+		"name", cfg.MCP.ServerName,
+		"version", cfg.MCP.Version,
+		"backend", cfg.Database.Backend,
+	)
 
 	// Run with stdio transport
 	transport := &mcp.StdioTransport{}

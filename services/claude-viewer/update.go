@@ -93,8 +93,8 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 
 	// Save a version of this update
 	if err := s.SavePlanVersion(ctx, req.FileName, req.NewContent); err != nil {
-		// Log the error but don't fail the update - versioning is best-effort
-		fmt.Printf("warning: failed to save plan version: %v\n", err)
+		// Versioning is best-effort — log the warning but don't fail the update.
+		s.logger.Warn("failed to save plan version", "file", req.FileName, "error", err)
 	}
 
 	return &UpdatePlanResult{
@@ -160,8 +160,8 @@ func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*Up
 
 	// Save a version of this update
 	if err := s.SavePlanVersion(ctx, req.FileName, req.NewContent); err != nil {
-		// Log the error but don't fail the save - versioning is best-effort
-		fmt.Printf("warning: failed to save plan version: %v\n", err)
+		// Versioning is best-effort — log the warning but don't fail the save.
+		s.logger.Warn("failed to save plan version", "file", req.FileName, "error", err)
 	}
 
 	return &UpdatePlanResult{

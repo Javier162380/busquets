@@ -324,8 +324,7 @@ func (s *Service) CleanupOldVersions(ctx context.Context, planName string, maxVe
 		// Delete files
 		for _, version := range versionsToDelete {
 			if err := os.Remove(version.FilePath); err != nil && !os.IsNotExist(err) {
-				// Log error but continue cleanup
-				fmt.Printf("warning: failed to delete old version file: %v\n", err)
+				s.logger.Warn("failed to delete old version file", "path", version.FilePath, "error", err)
 			}
 		}
 
