@@ -29,7 +29,7 @@ func setupTestService(t *testing.T) (*claudeviewer.Service, string, func()) {
 	require.NoError(t, os.MkdirAll(sourcePlansDir, 0o755))
 
 	ctx := context.Background()
-	db, err := storage.NewSQLiteClientWithMigrations(ctx, dbPath)
+	db, err := storage.NewSQLiteClientWithMigrations(ctx, dbPath, nil)
 	require.NoError(t, err)
 
 	repo := sqlite.NewRepository(db.DB())

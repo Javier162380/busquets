@@ -18,7 +18,7 @@ import (
 
 // newTestRepository creates a new SQLite repository with migrations for testing.
 func newTestRepository(ctx context.Context, dbPath string) (*sqlite.Repository, error) {
-	db, err := storage.NewSQLiteClientWithMigrations(ctx, dbPath)
+	db, err := storage.NewSQLiteClientWithMigrations(ctx, dbPath, nil)
 	if err != nil {
 		return nil, err
 	}
