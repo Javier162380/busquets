@@ -158,7 +158,7 @@ func (s *Service) GenerateSummary(ctx context.Context, planFileName string) (str
 	if err != nil {
 		return "", err
 	}
-	s.summaryCache.Set(planFileName, summary, summaryCacheTTL)
+	s.summaryCache.Set(planFileName, summary)
 	return summary, nil
 }
 
@@ -175,7 +175,7 @@ func (s *Service) RegenerateSummary(ctx context.Context, planFileName string) (s
 	if err != nil {
 		return "", err
 	}
-	s.summaryCache.Set(planFileName, summary, summaryCacheTTL)
+	s.summaryCache.Set(planFileName, summary)
 	return summary, nil
 }
 

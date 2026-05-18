@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	ErrorKeyNotFoundError = errors.New("key not found")
-	ErrorKeyExpiredError  = errors.New("key is expired")
+	ErrorKeyNotFound = errors.New("key not found")
+	ErrorKeyExpired  = errors.New("key is expired")
 )
 
 type cacheItem[T any] struct {
@@ -24,7 +24,7 @@ type MuxCache[T any] struct {
 	ttl         time.Duration
 	gcInternal  time.Duration
 	stop        chan struct{}
-	mux         sync.Mutex
+	mux         sync.RWMutex
 	muxCache    map[string]cacheItem[T]
 	nowProvider nowprovider.NowProvider
 }
@@ -48,7 +48,7 @@ func New[T any](ttl, gcInterval time.Duration) *MuxCache[T] {
 		ttl:         ttl,
 		gcInternal:  gcInterval,
 		stop:        make(chan struct{}),
-		mux:         sync.Mutex{},
+		mux:         sync.RWMutex{},
 		muxCache:    make(map[string]cacheItem[T]),
 		nowProvider: nowprovider.SystemTimeProvider{},
 	}
@@ -66,13 +66,22 @@ func (mc *MuxCache[T]) gcCleaner() {
 	for {
 		select {
 		case <-ticker.C:
-			mc.mux.Lock()
+			var toDelete []string
+			mc.mux.RLock()
 			for k, v := range mc.muxCache {
 				if v.ExpiresAt.Before(mc.nowProvider.Now()) {
-					delete(mc.muxCache, k)
+					toDelete = append(toDelete, k)
 				}
 			}
-			mc.mux.Unlock()
+			mc.mux.RUnlock()
+
+			if len(toDelete) > 0 {
+				mc.mux.Lock()
+				for _, k := range toDelete {
+					delete(mc.muxCache, k)
+				}
+				mc.mux.Unlock()
+			}
 		case <-mc.stop:
 			return
 		}
@@ -80,27 +89,29 @@ func (mc *MuxCache[T]) gcCleaner() {
 }
 
 func (mc *MuxCache[T]) Get(key string) (T, error) {
-	mc.mux.Lock()
-	defer mc.mux.Unlock()
+	mc.mux.RLock()
+	item, ok := mc.muxCache[key]
+	mc.mux.RUnlock()
 
 	var zero T
-	item, ok := mc.muxCache[key]
 	if !ok {
-		return zero, ErrorKeyNotFoundError
+		return zero, ErrorKeyNotFound
 	}
 	if item.ExpiresAt.Before(mc.nowProvider.Now()) {
+		mc.mux.Lock()
 		delete(mc.muxCache, key)
-		return zero, ErrorKeyExpiredError
+		mc.mux.Unlock()
+		return zero, ErrorKeyExpired
 	}
 	return item.Value, nil
 }
 
-func (mc *MuxCache[T]) Set(key string, value T, ttl time.Duration) {
+func (mc *MuxCache[T]) Set(key string, value T) {
 	mc.mux.Lock()
 	defer mc.mux.Unlock()
 
 	now := mc.nowProvider.Now()
-	mc.muxCache[key] = cacheItem[T]{Value: value, CreatedAt: now, ExpiresAt: now.Add(ttl)}
+	mc.muxCache[key] = cacheItem[T]{Value: value, CreatedAt: now, ExpiresAt: now.Add(mc.ttl)}
 }
 
 func (mc *MuxCache[T]) Delete(key string) {

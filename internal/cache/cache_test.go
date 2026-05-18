@@ -30,12 +30,12 @@ func TestGet(t *testing.T) {
 			name:    "returns error when key does not exist",
 			setup:   func(_ *cache.MuxCache[string], _ *fixedClock) {},
 			key:     "missing",
-			wantErr: cache.ErrorKeyNotFoundError,
+			wantErr: cache.ErrorKeyNotFound,
 		},
 		{
 			name: "returns value when key exists and is not expired",
 			setup: func(c *cache.MuxCache[string], _ *fixedClock) {
-				c.Set("hello", "world", time.Minute)
+				c.Set("hello", "world")
 			},
 			key:       "hello",
 			wantValue: "world",
@@ -43,20 +43,20 @@ func TestGet(t *testing.T) {
 		{
 			name: "returns error when key is expired",
 			setup: func(c *cache.MuxCache[string], _ *fixedClock) {
-				c.Set("hello", "world", time.Minute)
+				c.Set("hello", "world")
 			},
 			key:       "hello",
 			advanceBy: 2 * time.Minute,
-			wantErr:   cache.ErrorKeyExpiredError,
+			wantErr:   cache.ErrorKeyExpired,
 		},
 		{
 			name: "removes expired key on get",
 			setup: func(c *cache.MuxCache[string], _ *fixedClock) {
-				c.Set("hello", "world", time.Minute)
+				c.Set("hello", "world")
 			},
 			key:       "hello",
 			advanceBy: 2 * time.Minute,
-			wantErr:   cache.ErrorKeyExpiredError,
+			wantErr:   cache.ErrorKeyExpired,
 		},
 	}
 
@@ -87,7 +87,7 @@ func TestSet(t *testing.T) {
 		{
 			name: "stores new key",
 			setup: func(c *cache.MuxCache[string]) {
-				c.Set("key", "value", time.Minute)
+				c.Set("key", "value")
 			},
 			key:       "key",
 			wantValue: "value",
@@ -95,8 +95,8 @@ func TestSet(t *testing.T) {
 		{
 			name: "overwrites existing key with new value",
 			setup: func(c *cache.MuxCache[string]) {
-				c.Set("key", "first", time.Minute)
-				c.Set("key", "second", time.Minute)
+				c.Set("key", "first")
+				c.Set("key", "second")
 			},
 			key:       "key",
 			wantValue: "second",
@@ -118,44 +118,28 @@ func TestSet(t *testing.T) {
 }
 
 func TestGcCleaner(t *testing.T) {
-	tests := []struct {
-		name      string
-		setup     func(*cache.MuxCache[string])
-		key       string
-		wantErr   error
-		wantValue string
-	}{
-		{
-			name: "removes expired keys after gc interval",
-			setup: func(c *cache.MuxCache[string]) {
-				c.Set("expired", "value", 10*time.Millisecond)
-			},
-			key:     "expired",
-			wantErr: cache.ErrorKeyNotFoundError,
-		},
-		{
-			name: "keeps valid keys after gc interval",
-			setup: func(c *cache.MuxCache[string]) {
-				c.Set("valid", "value", time.Hour)
-			},
-			key:       "valid",
-			wantValue: "value",
-		},
-	}
+	t.Run("removes expired keys after gc interval", func(t *testing.T) {
+		c := cache.New[string](10*time.Millisecond, 20*time.Millisecond)
+		defer c.Stop()
+		c.Set("expired", "value")
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			c := cache.NewWithProvider[string](50*time.Millisecond, 20*time.Millisecond, &fixedClock{now: time.Now()})
-			defer c.Stop()
-			tt.setup(c)
+		time.Sleep(60 * time.Millisecond)
 
-			time.Sleep(60 * time.Millisecond)
+		_, err := c.Get("expired")
+		require.ErrorIs(t, err, cache.ErrorKeyNotFound)
+	})
 
-			got, err := c.Get(tt.key)
-			require.ErrorIs(t, err, tt.wantErr)
-			require.Equal(t, tt.wantValue, got)
-		})
-	}
+	t.Run("keeps valid keys after gc interval", func(t *testing.T) {
+		c := cache.New[string](time.Hour, 20*time.Millisecond)
+		defer c.Stop()
+		c.Set("valid", "value")
+
+		time.Sleep(60 * time.Millisecond)
+
+		got, err := c.Get("valid")
+		require.NoError(t, err)
+		require.Equal(t, "value", got)
+	})
 }
 
 func TestStop(t *testing.T) {
