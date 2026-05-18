@@ -1,3 +1,4 @@
+// Package cache creats a simple cache to store in memory records.
 package cache
 
 import (
@@ -5,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/internal/nowProvider"
+	"github.com/Javier162380/claude-plan-viewer/internal/nowprovider"
 )
 
 var (
@@ -25,10 +26,10 @@ type MuxCache[T any] struct {
 	stop        chan struct{}
 	mux         sync.Mutex
 	muxCache    map[string]cacheItem[T]
-	nowProvider nowProvider.NowProvider
+	nowProvider nowprovider.NowProvider
 }
 
-func NewWithProvider[T any](ttl, gcInterval time.Duration, np nowProvider.NowProvider) *MuxCache[T] {
+func NewWithProvider[T any](ttl, gcInterval time.Duration, np nowprovider.NowProvider) *MuxCache[T] {
 	mc := &MuxCache[T]{
 		ttl:         ttl,
 		gcInternal:  gcInterval,
@@ -49,7 +50,7 @@ func New[T any](ttl, gcInterval time.Duration) *MuxCache[T] {
 		stop:        make(chan struct{}),
 		mux:         sync.Mutex{},
 		muxCache:    make(map[string]cacheItem[T]),
-		nowProvider: nowProvider.SystemTimeProvider{},
+		nowProvider: nowprovider.SystemTimeProvider{},
 	}
 
 	if ttl > 0 {

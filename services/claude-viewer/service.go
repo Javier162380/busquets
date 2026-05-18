@@ -8,9 +8,8 @@ import (
 
 	"github.com/Javier162380/claude-plan-viewer/internal/cache"
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
-	"github.com/Javier162380/claude-plan-viewer/internal/nowProvider"
+	"github.com/Javier162380/claude-plan-viewer/internal/nowprovider"
 	"github.com/Javier162380/claude-plan-viewer/internal/retrier"
-
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
 	"github.com/yuin/goldmark"
@@ -30,7 +29,7 @@ type Service struct {
 	sourcePlansDir       string
 	indexFullContent     bool
 	markdownHTMLRendered goldmark.Markdown
-	nowProvider          nowProvider.NowProvider
+	nowProvider          nowprovider.NowProvider
 	connectorManager     *connectors.Manager
 	watchManager         *WatchManager
 	summaryCache         *cache.MuxCache[string]
@@ -60,7 +59,7 @@ func New(db dto.Repository, viewerDir, sourcePlansDir string, indexFullContent b
 		sourcePlansDir:       sourcePlansDir,
 		indexFullContent:     indexFullContent,
 		markdownHTMLRendered: md,
-		nowProvider:          nowProvider.SystemTimeProvider{},
+		nowProvider:          nowprovider.SystemTimeProvider{},
 		summaryCache:         cache.New[string](summaryCacheTTL, summaryCacheGCPeriod),
 	}
 

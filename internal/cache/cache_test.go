@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/cache"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,12 +19,12 @@ func TestGet(t *testing.T) {
 	base := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 
 	tests := []struct {
-		name        string
-		setup       func(*cache.MuxCache[string], *fixedClock)
-		key         string
-		advanceBy   time.Duration
-		wantValue   string
-		wantErr     error
+		name      string
+		setup     func(*cache.MuxCache[string], *fixedClock)
+		key       string
+		advanceBy time.Duration
+		wantValue string
+		wantErr   error
 	}{
 		{
 			name:    "returns error when key does not exist",
@@ -118,11 +119,11 @@ func TestSet(t *testing.T) {
 
 func TestGcCleaner(t *testing.T) {
 	tests := []struct {
-		name          string
-		setup         func(*cache.MuxCache[string])
-		key           string
-		wantErr       error
-		wantValue     string
+		name      string
+		setup     func(*cache.MuxCache[string])
+		key       string
+		wantErr   error
+		wantValue string
 	}{
 		{
 			name: "removes expired keys after gc interval",

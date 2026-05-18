@@ -1,7 +1,7 @@
-package nowProvider
+// Package nowprovider provides a simple nowProvider to provide testability to different moduels.
+package nowprovider
 
 import "time"
-
 
 type NowProvider interface {
 	Now() time.Time
