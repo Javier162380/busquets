@@ -142,7 +142,28 @@ func (s *Service) ValidateConnector(ctx context.Context, connectorName string) e
 }
 
 // GenerateSummary generates a TLDR summary of a plan using the configured summarizer connector.
+// On a cache hit the result is returned immediately without calling the connector.
 func (s *Service) GenerateSummary(ctx context.Context, planFileName string) (string, error) {
+	if s.connectorManager == nil {
+		return "", dto.ErrConnectorDisabled
+	}
+	if cached, err := s.summaryCache.Get(planFileName); err == nil {
+		return cached, nil
+	}
+	plan, err := s.GetPlanDetailByFileName(ctx, planFileName)
+	if err != nil {
+		return "", err
+	}
+	summary, err := s.connectorManager.GenerateSummary(ctx, plan.Title, plan.Content)
+	if err != nil {
+		return "", err
+	}
+	s.summaryCache.Set(planFileName, summary, summaryCacheTTL)
+	return summary, nil
+}
+
+// RegenerateSummary bypasses the cache, calls the connector, and updates the cache entry.
+func (s *Service) RegenerateSummary(ctx context.Context, planFileName string) (string, error) {
 	if s.connectorManager == nil {
 		return "", dto.ErrConnectorDisabled
 	}
@@ -150,7 +171,12 @@ func (s *Service) GenerateSummary(ctx context.Context, planFileName string) (str
 	if err != nil {
 		return "", err
 	}
-	return s.connectorManager.GenerateSummary(ctx, plan.Title, plan.Content)
+	summary, err := s.connectorManager.GenerateSummary(ctx, plan.Title, plan.Content)
+	if err != nil {
+		return "", err
+	}
+	s.summaryCache.Set(planFileName, summary, summaryCacheTTL)
+	return summary, nil
 }
 
 // SetSummaryConnector assigns a connector to the summary slot.

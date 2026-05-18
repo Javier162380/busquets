@@ -16,16 +16,15 @@ const (
 	settingHost  = "host"
 	settingModel = "model"
 
-	maxContentChars = 8000
+	maxContentRunes = 12000
 	httpTimeout     = 60 * time.Second
 
-	systemPrompt = `You are a concise technical plan summarizer. Output 3-5 clear, actionable bullet points covering goals, approach, and key outcomes.
-					The response need to contain these three bullet points. Goals, Approach and Outcome. You must match always the following template.
-					
-					**Goal**: Here the plan goal.
-					**Approach**: Here the plan approach.
-					**Outcome**: Here the plan outcome.
-					`
+	systemPrompt = "You are a concise technical plan summarizer. " +
+		"Output exactly three bullet points covering goals, approach, and key outcomes. " +
+		"You must always match the following template:\n\n" +
+		"**Goal**: Here the plan goal.\n" +
+		"**Approach**: Here the plan approach.\n" +
+		"**Outcome**: Here the plan outcome."
 )
 
 // Connector implements the Ollama local LLM connector.
@@ -118,11 +117,29 @@ type OllamaGenerateResponse struct {
 	EvalDuration       int64  `json:"eval_duration"`        //nolint:tagliatelle//Match OllamaAPI.
 }
 
+// truncateAtSentence trims content to at most maxRunes runes, preferring to cut
+// at the last sentence boundary ('. ', '! ', '? ', or newline) within the final
+// 200 runes so the prompt ends at a clean point.
+func truncateAtSentence(content string, maxRunes int) string {
+	runes := []rune(content)
+	if len(runes) <= maxRunes {
+		return content
+	}
+	for i := maxRunes - 1; i >= maxRunes-200 && i >= 0; i-- {
+		r := runes[i]
+		if (r == '.' || r == '!' || r == '?') && i+1 < len(runes) {
+			next := runes[i+1]
+			if next == ' ' || next == '\n' {
+				return string(runes[:i+1])
+			}
+		}
+	}
+	return string(runes[:maxRunes])
+}
+
 // Send generates a summary of the plan content using the Ollama API.
 func (c *Connector) Send(ctx context.Context, title, content string) (*connectors.SendResult, error) {
-	if len(content) > maxContentChars {
-		content = content[:maxContentChars]
-	}
+	content = truncateAtSentence(content, maxContentRunes)
 
 	reqBody := OllamaGenerateRequest{
 		Model:  c.model,

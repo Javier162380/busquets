@@ -87,10 +87,12 @@ func (a *App) handleSendToConnectorResult(msg messages.SendToConnectorResultMsg)
 
 func (a *App) handleGenerateTLDR(msg messages.GenerateTLDRMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Generating summary...")
-	return a, tea.Batch(
-		commands.GenerateTLDRCmd(a.ctx, a.service, msg.FileName),
-		commands.ClearStatusCmdWithDefaultDuration(),
-	)
+	return a, commands.GenerateTLDRCmd(a.ctx, a.service, msg.FileName)
+}
+
+func (a *App) handleRegenerateTLDR(msg messages.RegenerateTLDRMsg) (tea.Model, tea.Cmd) {
+	a.statusBar.SetLoading("Regenerating summary...")
+	return a, commands.RegenerateTLDRCmd(a.ctx, a.service, msg.FileName)
 }
 
 func (a *App) handleTLDRGenerated(msg messages.TLDRGeneratedMsg) (tea.Model, tea.Cmd) {
@@ -98,7 +100,11 @@ func (a *App) handleTLDRGenerated(msg messages.TLDRGeneratedMsg) (tea.Model, tea
 		a.statusBar.SetError("Summary failed: " + msg.Err.Error())
 		return a, commands.ClearStatusCmdWithDefaultDuration()
 	}
-	return a.delegateToCurrentScreen(msg)
+	model, cmd := a.delegateToCurrentScreen(msg)
+	return model, tea.Batch(
+		cmd,
+		commands.ClearStatusCmdWithDefaultDuration(),
+	)
 }
 
 func (a *App) handleSetSummaryConnector(msg messages.SetSummaryConnectorMsg) (tea.Model, tea.Cmd) {

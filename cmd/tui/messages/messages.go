@@ -249,6 +249,11 @@ type GenerateTLDRMsg struct {
 	FileName string
 }
 
+// RegenerateTLDRMsg requests a fresh TLDR summary, bypassing the in-memory cache.
+type RegenerateTLDRMsg struct {
+	FileName string
+}
+
 // TLDRGeneratedMsg carries the generated TLDR summary.
 type TLDRGeneratedMsg struct {
 	Summary   string

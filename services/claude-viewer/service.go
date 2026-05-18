@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Javier162380/claude-plan-viewer/internal/cache"
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
+	"github.com/Javier162380/claude-plan-viewer/internal/nowProvider"
 	"github.com/Javier162380/claude-plan-viewer/internal/retrier"
+
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
 	"github.com/yuin/goldmark"
@@ -15,15 +18,10 @@ import (
 	"github.com/yuin/goldmark/renderer/html"
 )
 
-type NowProvider interface {
-	Now() time.Time
-}
-
-type systemTimeProvider struct{}
-
-func (s systemTimeProvider) Now() time.Time {
-	return time.Now()
-}
+const (
+	summaryCacheTTL      = time.Hour
+	summaryCacheGCPeriod = 10 * time.Minute
+)
 
 // Service represents the Claude Plan Viewer service.
 type Service struct {
@@ -32,9 +30,10 @@ type Service struct {
 	sourcePlansDir       string
 	indexFullContent     bool
 	markdownHTMLRendered goldmark.Markdown
-	nowProvider          NowProvider
+	nowProvider          nowProvider.NowProvider
 	connectorManager     *connectors.Manager
 	watchManager         *WatchManager
+	summaryCache         *cache.MuxCache[string]
 }
 
 // SetConnectorManager sets the connector manager for the service.
@@ -61,7 +60,8 @@ func New(db dto.Repository, viewerDir, sourcePlansDir string, indexFullContent b
 		sourcePlansDir:       sourcePlansDir,
 		indexFullContent:     indexFullContent,
 		markdownHTMLRendered: md,
-		nowProvider:          systemTimeProvider{},
+		nowProvider:          nowProvider.SystemTimeProvider{},
+		summaryCache:         cache.New[string](summaryCacheTTL, summaryCacheGCPeriod),
 	}
 
 	// Initialize watch manager

@@ -439,6 +439,11 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 
 	case "X":
 		if s.current != nil {
+			if s.showingTLDR {
+				return s, func() tea.Msg {
+					return messages.RegenerateTLDRMsg{FileName: s.current.FileName}
+				}
+			}
 			return s, func() tea.Msg {
 				return messages.GenerateTLDRMsg{FileName: s.current.FileName}
 			}

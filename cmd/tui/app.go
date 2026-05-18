@@ -234,6 +234,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleSendToConnectorResult(msg)
 	case messages.GenerateTLDRMsg:
 		return a.handleGenerateTLDR(msg)
+	case messages.RegenerateTLDRMsg:
+		return a.handleRegenerateTLDR(msg)
 	case messages.TLDRGeneratedMsg:
 		return a.handleTLDRGenerated(msg)
 	case messages.SetSummaryConnectorMsg:

@@ -60,6 +60,7 @@ type ConnectorService interface {
 	GetConnectorSettings(ctx context.Context, connectorName string) ([]ConnectorSettingInfo, error)
 	ValidateConnector(ctx context.Context, connectorName string) error
 	GenerateSummary(ctx context.Context, planFileName string) (string, error)
+	RegenerateSummary(ctx context.Context, planFileName string) (string, error)
 	SetSummaryConnector(ctx context.Context, connectorName string) error
 	ClearSummaryConnector(ctx context.Context) error
 }
