@@ -4,6 +4,10 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"strings"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/config"
 
@@ -16,10 +20,30 @@ var sqliteMigrations embed.FS
 //go:embed migrations/postgres/*.sql
 var postgresMigrations embed.FS
 
+// gooseLogger adapts *slog.Logger to the goose.Logger interface.
+type gooseLogger struct {
+	l *slog.Logger
+}
+
+func (g gooseLogger) Fatalf(format string, v ...interface{}) {
+	g.l.Error(strings.TrimRight(fmt.Sprintf(format, v...), "\n"))
+	os.Exit(1)
+}
+
+func (g gooseLogger) Printf(format string, v ...interface{}) {
+	g.l.Info(strings.TrimRight(fmt.Sprintf(format, v...), "\n"))
+}
+
 // RunMigrations runs database migrations for the specified dialect.
 // Goose automatically creates and manages a goose_db_version table
 // to track which migrations have been applied.
-func RunMigrations(db *sql.DB, backend config.DatabaseBackend) error {
+// A nil logger defaults to discarding all goose output.
+func RunMigrations(db *sql.DB, backend config.DatabaseBackend, logger *slog.Logger) error {
+	if logger == nil {
+		logger = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	goose.SetLogger(gooseLogger{logger})
+
 	var migrations embed.FS
 	var migrationsDir string
 	var gooseDialect string

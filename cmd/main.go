@@ -114,7 +114,7 @@ func main() {
 
 // initRepository creates a repository based on the configuration.
 // Returns the repository and a cleanup function.
-func initRepository(ctx context.Context, cfg *config.Config) (dto.Repository, func(), error) {
+func initRepository(ctx context.Context, cfg *config.Config, logger *slog.Logger) (dto.Repository, func(), error) {
 	// Ensure viewer directory exists
 	//nolint:gosec // G301: Standard directory permissions for user application directory
 	if err := os.MkdirAll(cfg.Paths.ViewerDir, 0o755); err != nil {
@@ -123,7 +123,7 @@ func initRepository(ctx context.Context, cfg *config.Config) (dto.Repository, fu
 
 	switch cfg.Database.Backend {
 	case config.BackendSQLite:
-		db, err := storage.NewSQLiteClientWithMigrations(ctx, cfg.Database.SQLite.Path)
+		db, err := storage.NewSQLiteClientWithMigrations(ctx, cfg.Database.SQLite.Path, logger)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to initialize SQLite: %w", err)
 		}
@@ -135,7 +135,7 @@ func initRepository(ctx context.Context, cfg *config.Config) (dto.Repository, fu
 		// Run migrations first
 		if err := storage.RunPostgresMigrations(ctx, storage.PostgresConfig{
 			ConnectionString: cfg.Database.Postgres.ConnectionString,
-		}); err != nil {
+		}, logger); err != nil {
 			return nil, nil, fmt.Errorf("failed to run postgres migrations: %w", err)
 		}
 
@@ -161,7 +161,7 @@ func initRepository(ctx context.Context, cfg *config.Config) (dto.Repository, fu
 func runSync(cfg *config.Config, logger *slog.Logger) error {
 	ctx := context.Background()
 
-	repo, cleanup, err := initRepository(ctx, cfg)
+	repo, cleanup, err := initRepository(ctx, cfg, logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize repository: %w", err)
 	}
@@ -187,7 +187,7 @@ func runSync(cfg *config.Config, logger *slog.Logger) error {
 func runRSync(cfg *config.Config, logger *slog.Logger) error {
 	ctx := context.Background()
 
-	repo, cleanup, err := initRepository(ctx, cfg)
+	repo, cleanup, err := initRepository(ctx, cfg, logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize repository: %w", err)
 	}
@@ -213,7 +213,7 @@ func runRSync(cfg *config.Config, logger *slog.Logger) error {
 func runDump(cfg *config.Config, logger *slog.Logger) error {
 	ctx := context.Background()
 
-	repo, cleanup, err := initRepository(ctx, cfg)
+	repo, cleanup, err := initRepository(ctx, cfg, logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize repository: %w", err)
 	}
@@ -245,7 +245,7 @@ func runServe(cfg *config.Config, logger *slog.Logger) error {
 		return fmt.Errorf("failed to parse flags: %w", err)
 	}
 
-	repo, cleanup, err := initRepository(ctx, cfg)
+	repo, cleanup, err := initRepository(ctx, cfg, logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize repository: %w", err)
 	}
@@ -272,7 +272,7 @@ func runTUI(cfg *config.Config, logger *slog.Logger) error {
 
 	debug := os.Getenv("DEBUG") == "1"
 
-	repo, cleanup, err := initRepository(ctx, cfg)
+	repo, cleanup, err := initRepository(ctx, cfg, logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize repository: %w", err)
 	}
@@ -296,7 +296,7 @@ func runTUI(cfg *config.Config, logger *slog.Logger) error {
 	return tuiapp.StartWithOptions(ctx, service, debug, logger)
 }
 
-func runMigrate(cfg *config.Config, _ *slog.Logger) error {
+func runMigrate(cfg *config.Config, logger *slog.Logger) error {
 	ctx := context.Background()
 
 	fmt.Printf("Running migrations for %s backend...\n", cfg.Database.Backend)
@@ -310,7 +310,7 @@ func runMigrate(cfg *config.Config, _ *slog.Logger) error {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
 
-		db, err := storage.NewSQLiteClientWithMigrations(ctx, cfg.Database.SQLite.Path)
+		db, err := storage.NewSQLiteClientWithMigrations(ctx, cfg.Database.SQLite.Path, logger)
 		if err != nil {
 			return fmt.Errorf("failed to run SQLite migrations: %w", err)
 		}
@@ -322,7 +322,7 @@ func runMigrate(cfg *config.Config, _ *slog.Logger) error {
 	case config.BackendPostgres:
 		if err := storage.RunPostgresMigrations(ctx, storage.PostgresConfig{
 			ConnectionString: cfg.Database.Postgres.ConnectionString,
-		}); err != nil {
+		}, logger); err != nil {
 			return fmt.Errorf("failed to run Postgres migrations: %w", err)
 		}
 		fmt.Println("✓ PostgreSQL migrations completed")
@@ -337,7 +337,7 @@ func runMigrate(cfg *config.Config, _ *slog.Logger) error {
 func runMCP(cfg *config.Config, logger *slog.Logger) error {
 	ctx := context.Background()
 
-	repo, cleanup, err := initRepository(ctx, cfg)
+	repo, cleanup, err := initRepository(ctx, cfg, logger)
 	if err != nil {
 		return fmt.Errorf("failed to initialize repository: %w", err)
 	}

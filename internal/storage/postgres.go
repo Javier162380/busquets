@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/config"
@@ -80,7 +81,8 @@ func (p *PostgresPool) StdlibDB() (*sql.DB, error) {
 }
 
 // RunPostgresMigrations runs migrations on a Postgres database.
-func RunPostgresMigrations(_ context.Context, cfg PostgresConfig) error {
+// A nil logger discards all goose migration output.
+func RunPostgresMigrations(_ context.Context, cfg PostgresConfig, logger *slog.Logger) error {
 	// Use stdlib for migrations (goose requires database/sql)
 	db, err := sql.Open("pgx", cfg.ConnectionString)
 	if err != nil {
@@ -90,5 +92,5 @@ func RunPostgresMigrations(_ context.Context, cfg PostgresConfig) error {
 		_ = db.Close()
 	}()
 
-	return RunMigrations(db, config.BackendPostgres)
+	return RunMigrations(db, config.BackendPostgres, logger)
 }

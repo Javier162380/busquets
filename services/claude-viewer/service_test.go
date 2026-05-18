@@ -30,7 +30,7 @@ import (
 
 // newTestRepository creates a new SQLite repository with migrations for testing.
 func newTestRepository(ctx context.Context, dbPath string) (*sqlite.Repository, error) {
-	db, err := storage.NewSQLiteClientWithMigrations(ctx, dbPath)
+	db, err := storage.NewSQLiteClientWithMigrations(ctx, dbPath, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +151,7 @@ func setupTestServiceBackendPostgres(t *testing.T) (*Service, string, string, fu
 
 	testConnStr := pgDBConnStr(pgBaseConnStr, dbName)
 
-	err = storage.RunPostgresMigrations(ctx, storage.PostgresConfig{ConnectionString: testConnStr})
+	err = storage.RunPostgresMigrations(ctx, storage.PostgresConfig{ConnectionString: testConnStr}, nil)
 	require.NoError(t, err)
 
 	pool, err := storage.NewPostgresClient(ctx, storage.PostgresConfig{
