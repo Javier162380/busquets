@@ -464,16 +464,12 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
 	return err
 }
 
-func (r *Repository) ListAllPlans(ctx context.Context) ([]dto.PlanSummary, error) {
-	rows, err := r.q.ListAllPlansWithTags(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]dto.PlanSummary, len(rows))
-	for i, row := range rows {
-		result[i] = planSummaryFromListRow(row)
-	}
-	return result, nil
+func (r *Repository) ListAllPlans(ctx context.Context, sortCol, sortDir string) ([]dto.PlanSummary, error) {
+	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count").From("plans")
+	applyOrder(sb, sortCol, sortDir)
+	q, args := sb.Build()
+	return r.queryPlanSummaries(ctx, q, args...)
 }
 
 func (r *Repository) ListAllPlansWithPagination(ctx context.Context, params dto.PaginationParams) ([]dto.PlanSummary, error) {
@@ -540,7 +536,7 @@ func (r *Repository) SearchPlansWithTags(ctx context.Context, params dto.SearchP
 
 	if params.Query == "" {
 		// No text search, get all plans
-		allPlans, err = r.ListAllPlans(ctx)
+		allPlans, err = r.ListAllPlans(ctx, "modified_at", "desc")
 	} else {
 		// Text search
 		allPlans, err = r.SearchPlans(ctx, params)
@@ -939,24 +935,14 @@ func (r *Repository) GetUntaggedPlanCount(ctx context.Context) (int64, error) {
 	return r.q.GetUntaggedPlanCount(ctx)
 }
 
-func (r *Repository) ListUntaggedPlans(ctx context.Context) ([]dto.PlanSummary, error) {
-	rows, err := r.q.ListUntaggedPlans(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]dto.PlanSummary, len(rows))
-	for i, row := range rows {
-		result[i] = dto.PlanSummary{
-			ID:         int64(row.ID),
-			FileName:   row.FileName,
-			Title:      row.Title,
-			CreatedAt:  timestamptzToTime(row.CreatedAt),
-			ModifiedAt: timestamptzToTime(row.ModifiedAt),
-			FileSize:   row.FileSize,
-			WordCount:  row.WordCount,
-		}
-	}
-	return result, nil
+func (r *Repository) ListUntaggedPlans(ctx context.Context, sortCol, sortDir string) ([]dto.PlanSummary, error) {
+	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count").
+		From("plans").
+		Where("id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)")
+	applyOrder(sb, sortCol, sortDir)
+	q, args := sb.Build()
+	return r.queryPlanSummaries(ctx, q, args...)
 }
 
 func (r *Repository) ListPlansWithTags(ctx context.Context) ([]dto.PlanSummary, error) {
@@ -1108,26 +1094,6 @@ func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int
 	}
 
 	return err
-}
-
-func (r *Repository) ListAllPlansSorted(ctx context.Context, sortCol, sortDir string) ([]dto.PlanSummary, error) {
-	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
-	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count").From("plans")
-	applyOrder(sb, sortCol, sortDir)
-
-	q, args := sb.Build()
-	return r.queryPlanSummaries(ctx, q, args...)
-}
-
-func (r *Repository) ListUntaggedPlansSorted(ctx context.Context, sortCol, sortDir string) ([]dto.PlanSummary, error) {
-	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
-	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count").
-		From("plans").
-		Where("id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)")
-	applyOrder(sb, sortCol, sortDir)
-
-	q, args := sb.Build()
-	return r.queryPlanSummaries(ctx, q, args...)
 }
 
 func applyOrder(sb *sqlbuilder.SelectBuilder, col, dir string) {

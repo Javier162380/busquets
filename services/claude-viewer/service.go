@@ -208,7 +208,7 @@ func (s *Service) BuildTagPlanMap(ctx context.Context, sortKey, sortDir string) 
 
 // ListUntaggedPlansWithReadingTime returns plans with no tags, including reading time.
 func (s *Service) ListUntaggedPlansWithReadingTime(ctx context.Context, sortKey, sortDir string) ([]PlanSummary, error) {
-	plans, err := s.db.ListUntaggedPlansSorted(ctx, sortKeyToColumn(sortKey), sortDir)
+	plans, err := s.db.ListUntaggedPlans(ctx, sortKeyToColumn(sortKey), sortDir)
 	if err != nil {
 		return nil, err
 	}

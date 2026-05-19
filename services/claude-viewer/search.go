@@ -24,12 +24,8 @@ func (s *Service) toSummaries(ctx context.Context, plans []dto.PlanSummary) []Pl
 	return summaries
 }
 
-func (s *Service) ListAllPlans(ctx context.Context) ([]dto.PlanSummary, error) {
-	return s.db.ListAllPlans(ctx)
-}
-
 func (s *Service) ListAllPlansWithReadingTime(ctx context.Context, sortKey, sortDir string) ([]PlanSummary, error) {
-	plans, err := s.db.ListAllPlansSorted(ctx, sortKeyToColumn(sortKey), sortDir)
+	plans, err := s.db.ListAllPlans(ctx, sortKeyToColumn(sortKey), sortDir)
 	if err != nil {
 		return nil, err
 	}
