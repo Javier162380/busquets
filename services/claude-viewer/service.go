@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/cache"
@@ -183,7 +184,7 @@ func (s *Service) ListPlansWithTags(ctx context.Context) ([]PlanSummary, error) 
 
 // BuildTagPlanMap returns a map of tag name → plans carrying that tag.
 // Plans with no tags are stored under the empty string key "".
-func (s *Service) BuildTagPlanMap(ctx context.Context) (map[string][]PlanSummary, error) {
+func (s *Service) BuildTagPlanMap(ctx context.Context, sortKey, sortDir string) (map[string][]PlanSummary, error) {
 	plans, err := s.ListPlansWithTags(ctx)
 	if err != nil {
 		return nil, err
@@ -199,16 +200,48 @@ func (s *Service) BuildTagPlanMap(ctx context.Context) (map[string][]PlanSummary
 			}
 		}
 	}
+	for tag := range m {
+		sortPlanSummaries(m[tag], sortKey, sortDir)
+	}
 	return m, nil
 }
 
 // ListUntaggedPlansWithReadingTime returns plans with no tags, including reading time.
-func (s *Service) ListUntaggedPlansWithReadingTime(ctx context.Context) ([]PlanSummary, error) {
-	plans, err := s.db.ListUntaggedPlans(ctx)
+func (s *Service) ListUntaggedPlansWithReadingTime(ctx context.Context, sortKey, sortDir string) ([]PlanSummary, error) {
+	plans, err := s.db.ListUntaggedPlansSorted(ctx, sortKeyToColumn(sortKey), sortDir)
 	if err != nil {
 		return nil, err
 	}
 	return s.toSummaries(ctx, plans), nil
+}
+
+// sortPlanSummaries sorts a slice of PlanSummary in place by the given sort key and direction.
+func sortPlanSummaries(plans []PlanSummary, key, dir string) {
+	desc := dir != SortDirAsc
+	sort.Slice(plans, func(i, j int) bool {
+		switch key {
+		case SortKeyCreatedAt:
+			if desc {
+				return plans[i].CreatedAt.After(plans[j].CreatedAt)
+			}
+			return plans[i].CreatedAt.Before(plans[j].CreatedAt)
+		case SortKeyReadingTime:
+			if desc {
+				return plans[i].ReadingTime > plans[j].ReadingTime
+			}
+			return plans[i].ReadingTime < plans[j].ReadingTime
+		case SortKeySize:
+			if desc {
+				return plans[i].FileSize > plans[j].FileSize
+			}
+			return plans[i].FileSize < plans[j].FileSize
+		default: // updated_at
+			if desc {
+				return plans[i].ModifiedAt.After(plans[j].ModifiedAt)
+			}
+			return plans[i].ModifiedAt.Before(plans[j].ModifiedAt)
+		}
+	})
 }
 
 // DeleteTag deletes a tag by ID. This will also remove all plan-tag associations

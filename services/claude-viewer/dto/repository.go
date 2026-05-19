@@ -17,6 +17,7 @@ type Repository interface {
 	UpdatePlanWithTags(ctx context.Context, params UpdatePlanWithTagsParams) error
 	DeletePlan(ctx context.Context, fileName string) error
 	ListAllPlans(ctx context.Context) ([]PlanSummary, error)
+	ListAllPlansSorted(ctx context.Context, sortCol, sortDir string) ([]PlanSummary, error)
 	ListAllPlansWithPagination(ctx context.Context, params PaginationParams) ([]PlanSummary, error)
 	SearchPlans(ctx context.Context, params SearchParams) ([]PlanSummary, error)
 	SearchPlansWithPagination(ctx context.Context, params SearchPaginationParams) ([]PlanSummary, error)
@@ -70,5 +71,6 @@ type Repository interface {
 	GetTagPlanCounts(ctx context.Context) (map[string]int, error)
 	GetUntaggedPlanCount(ctx context.Context) (int64, error)
 	ListUntaggedPlans(ctx context.Context) ([]PlanSummary, error)
+	ListUntaggedPlansSorted(ctx context.Context, sortCol, sortDir string) ([]PlanSummary, error)
 	ListPlansWithTags(ctx context.Context) ([]PlanSummary, error)
 }

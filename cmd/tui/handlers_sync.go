@@ -33,7 +33,7 @@ func (a *App) handleSyncResult(msg messages.SyncResultMsg) (tea.Model, tea.Cmd) 
 		return a, commands.ClearStatusCmdWithDefaultDuration()
 	}
 	a.statusBar.SetSuccess(fmt.Sprintf("Synced %d plans", msg.Count))
-	return a, tea.Batch(commands.LoadPlansCmd(a.ctx, a.service), commands.ClearStatusCmd(1*time.Second))
+	return a, tea.Batch(commands.LoadPlansCmd(a.ctx, a.service, a.plansSortKey, a.plansSortDir), commands.ClearStatusCmd(1*time.Second))
 }
 
 func (a *App) handleRSyncPlans(_ messages.RSyncPlansMsg) (tea.Model, tea.Cmd) {
@@ -47,7 +47,7 @@ func (a *App) handleRSyncResult(msg messages.RSyncResultMsg) (tea.Model, tea.Cmd
 		return a, commands.ClearStatusCmdWithDefaultDuration()
 	}
 	a.statusBar.SetSuccess(fmt.Sprintf("Rsync succeeded: %d plans sync from remote into the local directory", msg.Count))
-	return a, tea.Batch(commands.LoadPlansCmd(a.ctx, a.service), commands.ClearStatusCmdWithDefaultDuration())
+	return a, tea.Batch(commands.LoadPlansCmd(a.ctx, a.service, a.plansSortKey, a.plansSortDir), commands.ClearStatusCmdWithDefaultDuration())
 }
 
 func (a *App) handleDumpPlans(_ messages.DumpPlansMsg) (tea.Model, tea.Cmd) {

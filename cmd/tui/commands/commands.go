@@ -15,13 +15,13 @@ import (
 
 // Command builders.
 
-// LoadPlansCmd loads all plans from the service.
-func LoadPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
+// LoadPlansCmd loads all plans from the service with the given sort key and direction.
+func LoadPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService, sortKey, sortDir string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		plans, err := svc.ListAllPlansWithReadingTime(ctx)
+		plans, err := svc.ListAllPlansWithReadingTime(ctx, sortKey, sortDir)
 		if err != nil {
 			return messages.ErrorMsg{Error: err}
 		}
@@ -428,7 +428,7 @@ func WatchChannelListenerCmd(ctx context.Context, svc claudeviewer.UnifiedServic
 }
 
 // LoadAllTagsForPanelCmd loads all tags, their plan counts, and the untagged count for the tag panel.
-func LoadAllTagsForPanelCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
+func LoadAllTagsForPanelCmd(ctx context.Context, svc claudeviewer.UnifiedService, sortKey, sortDir string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
@@ -458,7 +458,7 @@ func LoadAllTagsForPanelCmd(ctx context.Context, svc claudeviewer.UnifiedService
 		var tagPlanMap map[string][]claudeviewer.PlanSummary
 		errGroup.Go(func() error {
 			var err error
-			tagPlanMap, err = svc.BuildTagPlanMap(eggCtx)
+			tagPlanMap, err = svc.BuildTagPlanMap(eggCtx, sortKey, sortDir)
 			return err
 		})
 
@@ -469,13 +469,13 @@ func LoadAllTagsForPanelCmd(ctx context.Context, svc claudeviewer.UnifiedService
 	}
 }
 
-// LoadUntaggedPlansCmd loads plans with no tags assigned.
-func LoadUntaggedPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
+// LoadUntaggedPlansCmd loads plans with no tags assigned, sorted by the given key and direction.
+func LoadUntaggedPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService, sortKey, sortDir string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		plans, err := svc.ListUntaggedPlansWithReadingTime(ctx)
+		plans, err := svc.ListUntaggedPlansWithReadingTime(ctx, sortKey, sortDir)
 		if err != nil {
 			return messages.ErrorMsg{Error: err}
 		}
@@ -531,7 +531,7 @@ func SetPlanTagsCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileNa
 			return messages.ErrorMsg{Error: err}
 		}
 
-		plans, err := svc.ListAllPlansWithReadingTime(ctx)
+		plans, err := svc.ListAllPlansWithReadingTime(ctx, claudeviewer.DefaultPlansSortKey, claudeviewer.DefaultSortDir)
 		if err != nil {
 			return messages.ErrorMsg{Error: err}
 		}

@@ -665,7 +665,7 @@ func testSearchAndListing(t *testing.T, setup serviceSetupFn) {
 		defer cleanup()
 
 		ctx := context.Background()
-		plans, err := service.ListAllPlansWithReadingTime(ctx)
+		plans, err := service.ListAllPlansWithReadingTime(ctx, DefaultPlansSortKey, DefaultSortDir)
 		require.NoError(t, err)
 		require.Empty(t, plans)
 	})
@@ -681,7 +681,7 @@ func testSearchAndListing(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plans, err := service.ListAllPlansWithReadingTime(ctx)
+		plans, err := service.ListAllPlansWithReadingTime(ctx, DefaultPlansSortKey, DefaultSortDir)
 		require.NoError(t, err)
 		require.Len(t, plans, 2)
 		require.Greater(t, plans[0].ReadingTime, 0)
@@ -702,11 +702,66 @@ func testSearchAndListing(t *testing.T, setup serviceSetupFn) {
 		_, err = service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plans, err := service.ListAllPlansWithReadingTime(ctx)
+		plans, err := service.ListAllPlansWithReadingTime(ctx, DefaultPlansSortKey, DefaultSortDir)
 		require.NoError(t, err)
 		require.Len(t, plans, 2)
 		require.Equal(t, "new-plan.md", plans[0].FileName)
 		require.Equal(t, "old-plan.md", plans[1].FileName)
+	})
+
+	t.Run("ListAllPlansWithReadingTime sorts by modified_at ASC", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "old-plan.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		time.Sleep(10 * time.Millisecond)
+		createTestPlanFile(t, sourcePlansDir, "new-plan.md", sampleMarkdownUpdated)
+		_, err = service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plans, err := service.ListAllPlansWithReadingTime(ctx, SortKeyUpdatedAt, SortDirAsc)
+		require.NoError(t, err)
+		require.Len(t, plans, 2)
+		require.Equal(t, "old-plan.md", plans[0].FileName)
+		require.Equal(t, "new-plan.md", plans[1].FileName)
+	})
+
+	t.Run("ListAllPlansWithReadingTime sorts by size DESC", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "large-plan.md", sampleMarkdown)
+		createTestPlanFile(t, sourcePlansDir, "small-plan.md", sampleMarkdownUpdated)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plans, err := service.ListAllPlansWithReadingTime(ctx, SortKeySize, SortDirDesc)
+		require.NoError(t, err)
+		require.Len(t, plans, 2)
+		require.Greater(t, plans[0].FileSize, plans[1].FileSize)
+		require.Equal(t, "large-plan.md", plans[0].FileName)
+	})
+
+	t.Run("ListAllPlansWithReadingTime sorts by reading_time DESC", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "verbose-plan.md", sampleMarkdown)
+		createTestPlanFile(t, sourcePlansDir, "terse-plan.md", sampleMarkdownUpdated)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plans, err := service.ListAllPlansWithReadingTime(ctx, SortKeyReadingTime, SortDirDesc)
+		require.NoError(t, err)
+		require.Len(t, plans, 2)
+		require.Equal(t, "verbose-plan.md", plans[0].FileName)
+		require.Equal(t, "terse-plan.md", plans[1].FileName)
 	})
 
 	t.Run("SearchPlansWithReadingTime with empty query returns all plans", func(t *testing.T) {

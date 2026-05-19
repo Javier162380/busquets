@@ -22,8 +22,8 @@ func (a *App) handleCreateTagResult(msg messages.CreateTagResultMsg) (tea.Model,
 	}
 	a.statusBar.SetSuccess("Tag created")
 	return a, tea.Batch(
-		commands.LoadPlansCmd(a.ctx, a.service),
-		commands.LoadAllTagsForPanelCmd(a.ctx, a.service),
+		commands.LoadPlansCmd(a.ctx, a.service, a.plansSortKey, a.plansSortDir),
+		commands.LoadAllTagsForPanelCmd(a.ctx, a.service, a.plansSortKey, a.plansSortDir),
 		commands.ClearStatusCmd(1*time.Second),
 	)
 }

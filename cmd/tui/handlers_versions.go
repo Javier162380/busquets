@@ -33,6 +33,6 @@ func (a *App) handleRestoreResult(msg messages.RestoreResultMsg) (tea.Model, tea
 	a.popScreen()
 	return a, tea.Batch(
 		commands.SyncPlansCmd(a.ctx, a.service),
-		commands.LoadPlansCmd(a.ctx, a.service),
+		commands.LoadPlansCmd(a.ctx, a.service, a.plansSortKey, a.plansSortDir),
 	)
 }

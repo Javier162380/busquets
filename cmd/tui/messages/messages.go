@@ -303,6 +303,12 @@ type RenderMarkDownByDefaultMsg struct{ Enabled bool }
 // DisplayModeChangedMsg signals a display mode change.
 type DisplayModeChangedMsg struct{ Mode string }
 
+// PlansSortKeyChangedMsg signals a plans sort key change.
+type PlansSortKeyChangedMsg struct{ SortKey string }
+
+// PlansSortDirChangedMsg signals a plans sort direction change.
+type PlansSortDirChangedMsg struct{ SortDir string }
+
 // WatchModeApplyMsg signals that the watcher should be started or stopped.
 type WatchModeApplyMsg struct {
 	Enabled  bool

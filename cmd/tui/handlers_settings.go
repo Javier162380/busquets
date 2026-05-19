@@ -46,6 +46,23 @@ func (a *App) handleRenderMarkdownChanged(msg messages.RenderMarkDownByDefaultMs
 	return a, nil
 }
 
+func (a *App) handlePlansSortKeyChanged(msg messages.PlansSortKeyChangedMsg) (tea.Model, tea.Cmd) {
+	a.plansSortKey = msg.SortKey
+	return a, a.reloadPlansWithSort()
+}
+
+func (a *App) handlePlansSortDirChanged(msg messages.PlansSortDirChangedMsg) (tea.Model, tea.Cmd) {
+	a.plansSortDir = msg.SortDir
+	return a, a.reloadPlansWithSort()
+}
+
+func (a *App) reloadPlansWithSort() tea.Cmd {
+	return tea.Batch(
+		commands.LoadPlansCmd(a.ctx, a.service, a.plansSortKey, a.plansSortDir),
+		commands.LoadAllTagsForPanelCmd(a.ctx, a.service, a.plansSortKey, a.plansSortDir),
+	)
+}
+
 func (a *App) handleDisplayModeChanged(msg messages.DisplayModeChangedMsg) (tea.Model, tea.Cmd) {
 	a.displayMode = msg.Mode
 	for _, screen := range a.stack {
@@ -54,7 +71,7 @@ func (a *App) handleDisplayModeChanged(msg messages.DisplayModeChangedMsg) (tea.
 		}
 	}
 	if msg.Mode == claudeviewer.DisplayModeTagPlanContent {
-		return a, commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
+		return a, commands.LoadAllTagsForPanelCmd(a.ctx, a.service, a.plansSortKey, a.plansSortDir)
 	}
 	return a, nil
 }

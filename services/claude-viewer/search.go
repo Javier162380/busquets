@@ -28,8 +28,8 @@ func (s *Service) ListAllPlans(ctx context.Context) ([]dto.PlanSummary, error) {
 	return s.db.ListAllPlans(ctx)
 }
 
-func (s *Service) ListAllPlansWithReadingTime(ctx context.Context) ([]PlanSummary, error) {
-	plans, err := s.db.ListAllPlans(ctx)
+func (s *Service) ListAllPlansWithReadingTime(ctx context.Context, sortKey, sortDir string) ([]PlanSummary, error) {
+	plans, err := s.db.ListAllPlansSorted(ctx, sortKeyToColumn(sortKey), sortDir)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +38,7 @@ func (s *Service) ListAllPlansWithReadingTime(ctx context.Context) ([]PlanSummar
 
 func (s *Service) SearchPlansWithReadingTime(ctx context.Context, query string) ([]PlanSummary, error) {
 	if query == "" {
-		return s.ListAllPlansWithReadingTime(ctx)
+		return s.ListAllPlansWithReadingTime(ctx, DefaultPlansSortKey, DefaultSortDir)
 	}
 
 	plans, err := s.db.SearchPlans(ctx, dto.SearchParams{Query: query})
@@ -80,7 +80,7 @@ func (s *Service) SearchPlansWithPaginationAndReadingTime(ctx context.Context, q
 // SearchPlansWithTags searches plans with text query and tag filters.
 func (s *Service) SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]PlanSummary, error) {
 	if query == "" && len(tags) == 0 {
-		return s.ListAllPlansWithReadingTime(ctx)
+		return s.ListAllPlansWithReadingTime(ctx, DefaultPlansSortKey, DefaultSortDir)
 	}
 
 	plans, err := s.db.SearchPlansWithTags(ctx, dto.SearchParams{

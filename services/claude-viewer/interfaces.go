@@ -8,7 +8,7 @@ import (
 
 // PlanService defines plan CRUD operations.
 type PlanService interface {
-	ListAllPlansWithReadingTime(ctx context.Context) ([]PlanSummary, error)
+	ListAllPlansWithReadingTime(ctx context.Context, sortKey, sortDir string) ([]PlanSummary, error)
 	GetPlanDetailByFileName(ctx context.Context, fileName string) (*PlanDetail, error)
 	UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*UpdatePlanResult, error)
 	SearchPlansWithReadingTime(ctx context.Context, query string) ([]PlanSummary, error)
@@ -17,12 +17,12 @@ type PlanService interface {
 	SetPlanTags(ctx context.Context, fileName string, tagNames []string) error
 	GetAllTags(ctx context.Context) ([]dto.Tag, error)
 	GetPlanTags(ctx context.Context, fileName string) ([]dto.Tag, error)
-	ListUntaggedPlansWithReadingTime(ctx context.Context) ([]PlanSummary, error)
+	ListUntaggedPlansWithReadingTime(ctx context.Context, sortKey, sortDir string) ([]PlanSummary, error)
 	GetTagPlanCounts(ctx context.Context) (map[string]int, error)
 	GetUntaggedPlanCount(ctx context.Context) (int64, error)
 	CreateTag(ctx context.Context, name string, description, color *string) (dto.Tag, error)
 	SearchVersions(ctx context.Context, planName, query string) ([]PlanVersionDetail, error)
-	BuildTagPlanMap(ctx context.Context) (map[string][]PlanSummary, error)
+	BuildTagPlanMap(ctx context.Context, sortKey, sortDir string) (map[string][]PlanSummary, error)
 	SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*UpdatePlanResult, error)
 	SearchPlansWithPaginationAndReadingTime(ctx context.Context, query string, limit, offset int64) ([]PlanSummary, error)
 	GetPlanByFileName(ctx context.Context, fileName string) (*dto.Plan, error)

@@ -97,6 +97,11 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 		s.logger.Warn("failed to save plan version", "file", req.FileName, "error", err)
 	}
 
+	if s.summaryCache != nil {
+		// Delete Plan from the cache.
+		s.summaryCache.Delete(req.FileName)
+	}
+
 	return &UpdatePlanResult{
 		Success:     true,
 		HasConflict: false,
@@ -162,6 +167,11 @@ func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*Up
 	if err := s.SavePlanVersion(ctx, req.FileName, req.NewContent); err != nil {
 		// Versioning is best-effort — log the warning but don't fail the save.
 		s.logger.Warn("failed to save plan version", "file", req.FileName, "error", err)
+	}
+
+	// Delete plan from the cache if present.
+	if s.summaryCache != nil {
+		s.summaryCache.Delete(req.FileName)
 	}
 
 	return &UpdatePlanResult{

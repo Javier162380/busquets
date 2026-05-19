@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+
+	"github.com/huandu/go-sqlbuilder"
 )
 
 // Repository implements dto.Repository for SQLite.
@@ -1111,4 +1113,66 @@ func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int
 		}
 	}
 	return err
+}
+
+func (r *Repository) ListAllPlansSorted(ctx context.Context, sortCol, sortDir string) ([]dto.PlanSummary, error) {
+	sb := sqlbuilder.SQLite.NewSelectBuilder()
+	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count").From("plans")
+	applyOrder(sb, sortCol, sortDir)
+
+	q, args := sb.Build()
+	return r.queryPlanSummaries(ctx, q, args...)
+}
+
+func (r *Repository) ListUntaggedPlansSorted(ctx context.Context, sortCol, sortDir string) ([]dto.PlanSummary, error) {
+	sb := sqlbuilder.SQLite.NewSelectBuilder()
+	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count").
+		From("plans").
+		Where("id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)")
+	applyOrder(sb, sortCol, sortDir)
+
+	q, args := sb.Build()
+	return r.queryPlanSummaries(ctx, q, args...)
+}
+
+func applyOrder(sb *sqlbuilder.SelectBuilder, col, dir string) {
+	if dir == "asc" {
+		sb.OrderByAsc(col)
+	} else {
+		sb.OrderByDesc(col)
+	}
+}
+
+func (r *Repository) queryPlanSummaries(ctx context.Context, q string, args ...interface{}) ([]dto.PlanSummary, error) {
+	rows, err := r.q.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []dto.PlanSummary
+	for rows.Next() {
+		var (
+			id         int64
+			fileName   string
+			title      string
+			createdAt  time.Time
+			modifiedAt time.Time
+			fileSize   int64
+			wordCount  int64
+		)
+		if err := rows.Scan(&id, &fileName, &title, &createdAt, &modifiedAt, &fileSize, &wordCount); err != nil {
+			return nil, err
+		}
+		result = append(result, dto.PlanSummary{
+			ID:         id,
+			FileName:   fileName,
+			Title:      title,
+			CreatedAt:  createdAt,
+			ModifiedAt: modifiedAt,
+			FileSize:   fileSize,
+			WordCount:  wordCount,
+		})
+	}
+	return result, rows.Err()
 }
