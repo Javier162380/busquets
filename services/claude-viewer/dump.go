@@ -14,7 +14,7 @@ import (
 // Useful when plans exist in the database but not on disk (e.g. after a database migration
 // or when the source directory has been lost).
 func (s *Service) DumpPlans(ctx context.Context) (int, error) {
-	summaries, err := s.db.ListAllPlans(ctx, sortKeyToColumn(DefaultPlansSortKey), DefaultSortDir)
+	summaries, err := s.db.ListAllPlans(ctx, sortKeyToColumn(DefaultPlansSortKey), DefaultSortDir, DefaultReadingSpeedWPM)
 	if err != nil {
 		return 0, fmt.Errorf("failed to list plans: %w", err)
 	}

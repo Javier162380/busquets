@@ -37,8 +37,6 @@ type App struct {
 	isDarkModeEnabled       bool
 	renderMarkDownByDefault bool
 	displayMode             string
-	plansSortKey            string
-	plansSortDir            string
 }
 
 // New creates a new TUI application.
@@ -80,27 +78,13 @@ func (a *App) Init() tea.Cmd {
 	}
 	a.displayMode = displayMode
 
-	setting, exists, _ = a.service.GetSetting(a.ctx, claudeviewer.SettingPlansSortKey)
-	plansSortKey := claudeviewer.DefaultPlansSortKey
-	if exists && setting.IsString() {
-		plansSortKey = setting.GetStringValue()
-	}
-	a.plansSortKey = plansSortKey
-
-	setting, exists, _ = a.service.GetSetting(a.ctx, claudeviewer.SettingPlansSortDir)
-	plansSortDir := claudeviewer.DefaultSortDir
-	if exists && setting.IsString() {
-		plansSortDir = setting.GetStringValue()
-	}
-	a.plansSortDir = plansSortDir
-
 	// Create initial plans screen.
 	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault, displayMode == claudeviewer.DisplayModePlanContent, displayMode)
 	a.stack = append(a.stack, plansScreen)
 
 	// Start watching for watch results and load initial plans.
 	return tea.Batch(
-		commands.LoadPlansCmd(a.ctx, a.service, a.plansSortKey, a.plansSortDir),
+		commands.LoadPlansCmd(a.ctx, a.service),
 		commands.WatchChannelListenerCmd(a.ctx, a.service),
 	)
 }
@@ -181,17 +165,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.SearchVersionsMsg:
 		return a, commands.SearchVersionsCmd(a.ctx, a.service, msg.PlanName, msg.Query)
 	case messages.ClearSearchMsg:
-		return a, commands.LoadPlansCmd(a.ctx, a.service, a.plansSortKey, a.plansSortDir)
+		return a, commands.LoadPlansCmd(a.ctx, a.service)
 	case messages.SearchPlansMsg:
 		return a, commands.SearchPlansCmd(a.ctx, a.service, msg.Query)
 	case messages.SearchPlansWithTagsMsg:
 		return a, commands.SearchPlansWithTagsCmd(a.ctx, a.service, msg.Query, msg.Tags, msg.MatchAll)
 	case messages.LoadUntaggedPlansMsg:
-		return a, commands.LoadUntaggedPlansCmd(a.ctx, a.service, a.plansSortKey, a.plansSortDir)
+		return a, commands.LoadUntaggedPlansCmd(a.ctx, a.service)
 	case messages.LoadTagsForModalMsg:
 		return a, commands.LoadTagsForModalCmd(a.ctx, a.service, msg.FileName)
 	case messages.LoadAllTagsForPanelMsg:
-		return a, commands.LoadAllTagsForPanelCmd(a.ctx, a.service, a.plansSortKey, a.plansSortDir)
+		return a, commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
 	case messages.LoadSettingsMsg:
 		return a, commands.LoadSettingsCmd(a.ctx, a.service, msg.SettingNames)
 	case messages.SaveSettingMsg:

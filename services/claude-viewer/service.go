@@ -184,7 +184,8 @@ func (s *Service) ListPlansWithTags(ctx context.Context) ([]PlanSummary, error) 
 
 // BuildTagPlanMap returns a map of tag name → plans carrying that tag.
 // Plans with no tags are stored under the empty string key "".
-func (s *Service) BuildTagPlanMap(ctx context.Context, sortKey, sortDir string) (map[string][]PlanSummary, error) {
+func (s *Service) BuildTagPlanMap(ctx context.Context) (map[string][]PlanSummary, error) {
+	sortKey, sortDir := s.getSortSettings(ctx)
 	plans, err := s.ListPlansWithTags(ctx)
 	if err != nil {
 		return nil, err
@@ -207,8 +208,10 @@ func (s *Service) BuildTagPlanMap(ctx context.Context, sortKey, sortDir string) 
 }
 
 // ListUntaggedPlansWithReadingTime returns plans with no tags, including reading time.
-func (s *Service) ListUntaggedPlansWithReadingTime(ctx context.Context, sortKey, sortDir string) ([]PlanSummary, error) {
-	plans, err := s.db.ListUntaggedPlans(ctx, sortKeyToColumn(sortKey), sortDir)
+func (s *Service) ListUntaggedPlansWithReadingTime(ctx context.Context) ([]PlanSummary, error) {
+	sortKey, sortDir := s.getSortSettings(ctx)
+	wpm := s.GetReadingSpeedForDisplay(ctx)
+	plans, err := s.db.ListUntaggedPlans(ctx, sortKeyToColumn(sortKey), sortDir, wpm)
 	if err != nil {
 		return nil, err
 	}

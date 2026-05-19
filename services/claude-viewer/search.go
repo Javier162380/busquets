@@ -10,6 +10,10 @@ func (s *Service) toSummaries(ctx context.Context, plans []dto.PlanSummary) []Pl
 	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
 	summaries := make([]PlanSummary, len(plans))
 	for i, plan := range plans {
+		rt := int(plan.ReadingTime)
+		if rt == 0 {
+			rt = s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
+		}
 		summaries[i] = PlanSummary{
 			ID:          plan.ID,
 			FileName:    plan.FileName,
@@ -17,15 +21,17 @@ func (s *Service) toSummaries(ctx context.Context, plans []dto.PlanSummary) []Pl
 			CreatedAt:   plan.CreatedAt,
 			ModifiedAt:  plan.ModifiedAt,
 			FileSize:    plan.FileSize,
-			ReadingTime: s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM),
+			ReadingTime: rt,
 			Tags:        plan.Tags,
 		}
 	}
 	return summaries
 }
 
-func (s *Service) ListAllPlansWithReadingTime(ctx context.Context, sortKey, sortDir string) ([]PlanSummary, error) {
-	plans, err := s.db.ListAllPlans(ctx, sortKeyToColumn(sortKey), sortDir)
+func (s *Service) ListAllPlansWithReadingTime(ctx context.Context) ([]PlanSummary, error) {
+	sortKey, sortDir := s.getSortSettings(ctx)
+	wpm := s.GetReadingSpeedForDisplay(ctx)
+	plans, err := s.db.ListAllPlans(ctx, sortKeyToColumn(sortKey), sortDir, wpm)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +40,7 @@ func (s *Service) ListAllPlansWithReadingTime(ctx context.Context, sortKey, sort
 
 func (s *Service) SearchPlansWithReadingTime(ctx context.Context, query string) ([]PlanSummary, error) {
 	if query == "" {
-		return s.ListAllPlansWithReadingTime(ctx, DefaultPlansSortKey, DefaultSortDir)
+		return s.ListAllPlansWithReadingTime(ctx)
 	}
 
 	plans, err := s.db.SearchPlans(ctx, dto.SearchParams{Query: query})
@@ -76,7 +82,7 @@ func (s *Service) SearchPlansWithPaginationAndReadingTime(ctx context.Context, q
 // SearchPlansWithTags searches plans with text query and tag filters.
 func (s *Service) SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]PlanSummary, error) {
 	if query == "" && len(tags) == 0 {
-		return s.ListAllPlansWithReadingTime(ctx, DefaultPlansSortKey, DefaultSortDir)
+		return s.ListAllPlansWithReadingTime(ctx)
 	}
 
 	plans, err := s.db.SearchPlansWithTags(ctx, dto.SearchParams{

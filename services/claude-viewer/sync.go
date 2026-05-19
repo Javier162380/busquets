@@ -86,7 +86,7 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 
 	// The DB is the authoritative list of indexed plans — iterate it, not the filesystem.
 	// This ensures plans deleted from sourcePlansDir but still in viewerDir are found.
-	summaries, err := s.db.ListAllPlans(ctx, sortKeyToColumn(DefaultPlansSortKey), DefaultSortDir)
+	summaries, err := s.db.ListAllPlans(ctx, sortKeyToColumn(DefaultPlansSortKey), DefaultSortDir, DefaultReadingSpeedWPM)
 	if err != nil {
 		return 0, fmt.Errorf("failed to list plans: %w", err)
 	}

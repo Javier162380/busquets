@@ -16,7 +16,7 @@ func (a *App) handleWatchResult(msg messages.WatchResultMsg) (tea.Model, tea.Cmd
 	} else if msg.Count > 0 {
 		a.statusBar.SetSuccess(fmt.Sprintf("Auto-synced %d plans", msg.Count))
 		return a, tea.Batch(
-			commands.LoadPlansCmd(a.ctx, a.service, a.plansSortKey, a.plansSortDir),
+			commands.LoadPlansCmd(a.ctx, a.service),
 			commands.WatchChannelListenerCmd(a.ctx, a.service),
 			commands.ClearStatusCmd(1*time.Second),
 		)

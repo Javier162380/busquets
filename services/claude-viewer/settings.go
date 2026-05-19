@@ -56,7 +56,7 @@ func sortKeyToColumn(key string) string {
 	case SortKeyCreatedAt:
 		return "created_at"
 	case SortKeyReadingTime:
-		return "word_count"
+		return "reading_time"
 	case SortKeySize:
 		return "file_size"
 	default:
@@ -173,6 +173,19 @@ func (s *Service) SetSetting(ctx context.Context, varName string, values Setting
 	}
 
 	return nil
+}
+
+// getSortSettings returns the sort key and direction from DB settings, with defaults.
+func (s *Service) getSortSettings(ctx context.Context) (sortKey, sortDir string) {
+	sortKey = DefaultPlansSortKey
+	if setting, exists, _ := s.GetSetting(ctx, SettingPlansSortKey); exists && setting.IsString() {
+		sortKey = setting.GetStringValue()
+	}
+	sortDir = DefaultSortDir
+	if setting, exists, _ := s.GetSetting(ctx, SettingPlansSortDir); exists && setting.IsString() {
+		sortDir = setting.GetStringValue()
+	}
+	return sortKey, sortDir
 }
 
 // GetReadingSpeedForDisplay returns the current reading speed WPM setting

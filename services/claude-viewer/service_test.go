@@ -665,7 +665,7 @@ func testSearchAndListing(t *testing.T, setup serviceSetupFn) {
 		defer cleanup()
 
 		ctx := context.Background()
-		plans, err := service.ListAllPlansWithReadingTime(ctx, DefaultPlansSortKey, DefaultSortDir)
+		plans, err := service.ListAllPlansWithReadingTime(ctx)
 		require.NoError(t, err)
 		require.Empty(t, plans)
 	})
@@ -681,7 +681,7 @@ func testSearchAndListing(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plans, err := service.ListAllPlansWithReadingTime(ctx, DefaultPlansSortKey, DefaultSortDir)
+		plans, err := service.ListAllPlansWithReadingTime(ctx)
 		require.NoError(t, err)
 		require.Len(t, plans, 2)
 		require.Greater(t, plans[0].ReadingTime, 0)
@@ -702,7 +702,7 @@ func testSearchAndListing(t *testing.T, setup serviceSetupFn) {
 		_, err = service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plans, err := service.ListAllPlansWithReadingTime(ctx, DefaultPlansSortKey, DefaultSortDir)
+		plans, err := service.ListAllPlansWithReadingTime(ctx)
 		require.NoError(t, err)
 		require.Len(t, plans, 2)
 		require.Equal(t, "new-plan.md", plans[0].FileName)
@@ -723,7 +723,11 @@ func testSearchAndListing(t *testing.T, setup serviceSetupFn) {
 		_, err = service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plans, err := service.ListAllPlansWithReadingTime(ctx, SortKeyUpdatedAt, SortDirAsc)
+		sortKey, sortDir := SortKeyUpdatedAt, SortDirAsc
+		require.NoError(t, service.SetSetting(ctx, SettingPlansSortKey, SettingValues{StringValue: &sortKey}))
+		require.NoError(t, service.SetSetting(ctx, SettingPlansSortDir, SettingValues{StringValue: &sortDir}))
+
+		plans, err := service.ListAllPlansWithReadingTime(ctx)
 		require.NoError(t, err)
 		require.Len(t, plans, 2)
 		require.Equal(t, "old-plan.md", plans[0].FileName)
@@ -740,7 +744,11 @@ func testSearchAndListing(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plans, err := service.ListAllPlansWithReadingTime(ctx, SortKeySize, SortDirDesc)
+		sortKey, sortDir := SortKeySize, SortDirDesc
+		require.NoError(t, service.SetSetting(ctx, SettingPlansSortKey, SettingValues{StringValue: &sortKey}))
+		require.NoError(t, service.SetSetting(ctx, SettingPlansSortDir, SettingValues{StringValue: &sortDir}))
+
+		plans, err := service.ListAllPlansWithReadingTime(ctx)
 		require.NoError(t, err)
 		require.Len(t, plans, 2)
 		require.Greater(t, plans[0].FileSize, plans[1].FileSize)
@@ -757,7 +765,11 @@ func testSearchAndListing(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plans, err := service.ListAllPlansWithReadingTime(ctx, SortKeyReadingTime, SortDirDesc)
+		sortKey, sortDir := SortKeyReadingTime, SortDirDesc
+		require.NoError(t, service.SetSetting(ctx, SettingPlansSortKey, SettingValues{StringValue: &sortKey}))
+		require.NoError(t, service.SetSetting(ctx, SettingPlansSortDir, SettingValues{StringValue: &sortDir}))
+
+		plans, err := service.ListAllPlansWithReadingTime(ctx)
 		require.NoError(t, err)
 		require.Len(t, plans, 2)
 		require.Equal(t, "verbose-plan.md", plans[0].FileName)

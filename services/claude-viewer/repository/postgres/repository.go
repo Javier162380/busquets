@@ -464,10 +464,19 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
 	return err
 }
 
-func (r *Repository) ListAllPlans(ctx context.Context, sortCol, sortDir string) ([]dto.PlanSummary, error) {
+func (r *Repository) ListAllPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]dto.PlanSummary, error) {
 	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
-	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count").From("plans")
-	applyOrder(sb, sortCol, sortDir)
+	rtExpr := fmt.Sprintf("GREATEST(1, CEIL(word_count::numeric / %d)::integer) AS reading_time", wpm)
+	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count", rtExpr).From("plans")
+	if sortCol == "reading_time" {
+		if sortDir == "asc" {
+			sb.OrderByAsc("reading_time")
+		} else {
+			sb.OrderByDesc("reading_time")
+		}
+	} else {
+		applyOrder(sb, sortCol, sortDir)
+	}
 	q, args := sb.Build()
 	return r.queryPlanSummaries(ctx, q, args...)
 }
@@ -536,7 +545,7 @@ func (r *Repository) SearchPlansWithTags(ctx context.Context, params dto.SearchP
 
 	if params.Query == "" {
 		// No text search, get all plans
-		allPlans, err = r.ListAllPlans(ctx, "modified_at", "desc")
+		allPlans, err = r.ListAllPlans(ctx, "modified_at", "desc", 200)
 	} else {
 		// Text search
 		allPlans, err = r.SearchPlans(ctx, params)
@@ -935,12 +944,21 @@ func (r *Repository) GetUntaggedPlanCount(ctx context.Context) (int64, error) {
 	return r.q.GetUntaggedPlanCount(ctx)
 }
 
-func (r *Repository) ListUntaggedPlans(ctx context.Context, sortCol, sortDir string) ([]dto.PlanSummary, error) {
+func (r *Repository) ListUntaggedPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]dto.PlanSummary, error) {
 	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
-	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count").
+	rtExpr := fmt.Sprintf("GREATEST(1, CEIL(word_count::numeric / %d)::integer) AS reading_time", wpm)
+	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count", rtExpr).
 		From("plans").
 		Where("id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)")
-	applyOrder(sb, sortCol, sortDir)
+	if sortCol == "reading_time" {
+		if sortDir == "asc" {
+			sb.OrderByAsc("reading_time")
+		} else {
+			sb.OrderByDesc("reading_time")
+		}
+	} else {
+		applyOrder(sb, sortCol, sortDir)
+	}
 	q, args := sb.Build()
 	return r.queryPlanSummaries(ctx, q, args...)
 }
@@ -1114,7 +1132,7 @@ func (r *Repository) queryPlanSummaries(ctx context.Context, q string, args ...i
 	var result []dto.PlanSummary
 	for rows.Next() {
 		var p dto.PlanSummary
-		if err := rows.Scan(&p.ID, &p.FileName, &p.Title, &p.CreatedAt, &p.ModifiedAt, &p.FileSize, &p.WordCount); err != nil {
+		if err := rows.Scan(&p.ID, &p.FileName, &p.Title, &p.CreatedAt, &p.ModifiedAt, &p.FileSize, &p.WordCount, &p.ReadingTime); err != nil {
 			return nil, err
 		}
 		result = append(result, p)
