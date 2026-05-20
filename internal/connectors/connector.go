@@ -4,7 +4,7 @@ package connectors
 import (
 	"context"
 
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+	planviewer "github.com/Javier162380/claude-plan-viewer"
 )
 
 // SendResult contains the result of a send/generate operation.
@@ -59,6 +59,6 @@ type SettingDefinition struct {
 type ConnectorStatus struct {
 	Name        string
 	DisplayName string
-	Role        *dto.ConnectorRole // nil if not assigned to any slot
+	Role        *planviewer.ConnectorRole // nil if not assigned to any slot
 	Configured  bool
 }

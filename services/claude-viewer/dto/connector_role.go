@@ -1,12 +1,12 @@
 package dto
 
-// ConnectorRole identifies which slot a connector is assigned to.
-type ConnectorRole string
+import planviewer "github.com/Javier162380/claude-plan-viewer"
+
+// ConnectorRole is re-exported from the root package as a type alias so
+// existing call sites continue to compile without modification.
+type ConnectorRole = planviewer.ConnectorRole
 
 const (
-	// ConnectorRoleTransmit is the connector used by the transmit command.
-	ConnectorRoleTransmit ConnectorRole = "transmit_connector"
-
-	// ConnectorRoleSummary is the connector used to generate TLDR summaries.
-	ConnectorRoleSummary ConnectorRole = "summary_connector"
+	ConnectorRoleTransmit = planviewer.ConnectorRoleTransmit
+	ConnectorRoleSummary  = planviewer.ConnectorRoleSummary
 )

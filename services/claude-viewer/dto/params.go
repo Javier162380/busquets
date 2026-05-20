@@ -2,6 +2,21 @@ package dto
 
 import "time"
 
+// UpsertConnectorParams contains parameters for upserting a connector.
+type UpsertConnectorParams struct {
+	Name        string
+	DisplayName string
+	Enabled     bool
+}
+
+// UpsertConnectorSettingParams contains parameters for upserting a connector setting.
+type UpsertConnectorSettingParams struct {
+	ConnectorName string
+	SettingKey    string
+	SettingValue  string
+	IsSecret      bool
+}
+
 // InsertPlanParams contains parameters for inserting a new plan.
 type InsertPlanParams struct {
 	FileName   string
@@ -85,21 +100,6 @@ type UpsertSettingParams struct {
 	NumberValue   *float64
 	BooleanValue  *bool
 	DatetimeValue *time.Time
-}
-
-// UpsertConnectorParams contains parameters for upserting a connector.
-type UpsertConnectorParams struct {
-	Name        string
-	DisplayName string
-	Enabled     bool
-}
-
-// UpsertConnectorSettingParams contains parameters for upserting a connector setting.
-type UpsertConnectorSettingParams struct {
-	ConnectorName string
-	SettingKey    string
-	SettingValue  string
-	IsSecret      bool
 }
 
 // InsertTagParams contains parameters for inserting a new tag.
