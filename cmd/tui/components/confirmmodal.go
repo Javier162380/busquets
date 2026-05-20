@@ -56,15 +56,11 @@ func (d *ConfirmModal) Update(msg tea.Msg) tea.Cmd {
 	}
 
 	switch keyMsg.String() {
-	case "left", "h", "tab":
+	case "left", "h":
 		d.confirmed = true
 	case "right", "l":
 		d.confirmed = false
-	case "y":
-		pending := d.pendingMsg
-		d.Close()
-		return func() tea.Msg { return pending }
-	case "n", "esc":
+	case "esc":
 		d.Close()
 		return nil
 	case "enter":
@@ -137,7 +133,7 @@ func (d *ConfirmModal) View() string {
 	sb.WriteString("\n\n")
 
 	helpStyle := lipgloss.NewStyle().Foreground(styles.MutedColor)
-	sb.WriteString(helpStyle.Render("←/→: select  y/n: choose  enter: confirm  esc: cancel"))
+	sb.WriteString(helpStyle.Render("←/→: select  enter: confirm  esc: cancel"))
 
 	return dialogStyle.Render(sb.String())
 }
