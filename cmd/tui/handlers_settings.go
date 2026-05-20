@@ -55,10 +55,10 @@ func (a *App) handlePlansSortDirChanged(_ messages.PlansSortDirChangedMsg) (tea.
 }
 
 func (a *App) reloadPlans() tea.Cmd {
-	return tea.Batch(
-		commands.LoadPlansCmd(a.ctx, a.service),
-		commands.LoadAllTagsForPanelCmd(a.ctx, a.service),
-	)
+	if a.displayMode == claudeviewer.DisplayModeTagPlanContent {
+		return commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
+	}
+	return commands.LoadPlansCmd(a.ctx, a.service)
 }
 
 func (a *App) handleDisplayModeChanged(msg messages.DisplayModeChangedMsg) (tea.Model, tea.Cmd) {
