@@ -24,6 +24,8 @@ const (
 	SettingWatchModeEnabled        = "watch_mode_enabled"
 	SettingWatchIntervalSeconds    = "watch_interval_seconds"
 	SettingDefaultDisplayMode      = "default_display_mode"
+	SettingPlansSortKey            = "plans_sort_key"
+	SettingPlansSortDir            = "plans_sort_dir"
 )
 
 // Display mode values for SettingDefaultDisplayMode.
@@ -31,6 +33,36 @@ const (
 	DisplayModePlanContent    = "plan_content"     //nolint:gci    // two-panel: list + content (default)
 	DisplayModeTagPlanContent = "tag_plan_content" // three-panel: tags + list + content
 )
+
+// Sort key values for SettingPlansSortKey.
+const (
+	SortKeyUpdatedAt    = "updated_at"
+	SortKeyCreatedAt    = "created_at"
+	SortKeyReadingTime  = "reading_time"
+	SortKeySize         = "size"
+	DefaultPlansSortKey = SortKeyUpdatedAt
+)
+
+// Sort direction values for SettingPlansSortDir.
+const (
+	SortDirDesc    = "desc"
+	SortDirAsc     = "asc"
+	DefaultSortDir = SortDirDesc
+)
+
+// sortKeyToColumn maps a sort key setting value to the corresponding DB column name.
+func sortKeyToColumn(key string) string {
+	switch key {
+	case SortKeyCreatedAt:
+		return "created_at"
+	case SortKeyReadingTime:
+		return "reading_time"
+	case SortKeySize:
+		return "file_size"
+	default:
+		return "modified_at"
+	}
+}
 
 // DefaultWatchIntervalSeconds is the default interval for the watch mode background sync.
 const DefaultWatchIntervalSeconds = 5.0
@@ -141,6 +173,19 @@ func (s *Service) SetSetting(ctx context.Context, varName string, values Setting
 	}
 
 	return nil
+}
+
+// getSortSettings returns the sort key and direction from DB settings, with defaults.
+func (s *Service) getSortSettings(ctx context.Context) (sortKey, sortDir string) {
+	sortKey = DefaultPlansSortKey
+	if setting, exists, _ := s.GetSetting(ctx, SettingPlansSortKey); exists && setting.IsString() {
+		sortKey = setting.GetStringValue()
+	}
+	sortDir = DefaultSortDir
+	if setting, exists, _ := s.GetSetting(ctx, SettingPlansSortDir); exists && setting.IsString() {
+		sortDir = setting.GetStringValue()
+	}
+	return sortKey, sortDir
 }
 
 // GetReadingSpeedForDisplay returns the current reading speed WPM setting

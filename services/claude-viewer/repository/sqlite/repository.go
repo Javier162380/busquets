@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+
+	"github.com/huandu/go-sqlbuilder"
 )
 
 // Repository implements dto.Repository for SQLite.
@@ -462,16 +464,21 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
 	return err
 }
 
-func (r *Repository) ListAllPlans(ctx context.Context) ([]dto.PlanSummary, error) {
-	rows, err := r.q.ListAllPlansWithTags(ctx)
-	if err != nil {
-		return nil, err
+func (r *Repository) ListAllPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]dto.PlanSummary, error) {
+	sb := sqlbuilder.SQLite.NewSelectBuilder()
+	rtExpr := fmt.Sprintf("MAX(1, (word_count + %d - 1) / %d) AS reading_time", wpm, wpm)
+	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count", rtExpr).From("plans")
+	if sortCol == "reading_time" {
+		if sortDir == "asc" {
+			sb.OrderByAsc("reading_time")
+		} else {
+			sb.OrderByDesc("reading_time")
+		}
+	} else {
+		applyOrder(sb, sortCol, sortDir)
 	}
-	result := make([]dto.PlanSummary, len(rows))
-	for i, row := range rows {
-		result[i] = planSummaryFromListWithTagsRow(row)
-	}
-	return result, nil
+	q, args := sb.Build()
+	return r.queryPlanSummaries(ctx, q, args...)
 }
 
 func (r *Repository) ListAllPlansWithPagination(ctx context.Context, params dto.PaginationParams) ([]dto.PlanSummary, error) {
@@ -538,7 +545,7 @@ func (r *Repository) SearchPlansWithTags(ctx context.Context, params dto.SearchP
 
 	if params.Query == "" {
 		// No text search, get all plans
-		allPlans, err = r.ListAllPlans(ctx)
+		allPlans, err = r.ListAllPlans(ctx, "modified_at", "desc", 200)
 	} else {
 		// Text search
 		allPlans, err = r.SearchPlans(ctx, params)
@@ -943,24 +950,23 @@ func (r *Repository) GetUntaggedPlanCount(ctx context.Context) (int64, error) {
 	return r.q.GetUntaggedPlanCount(ctx)
 }
 
-func (r *Repository) ListUntaggedPlans(ctx context.Context) ([]dto.PlanSummary, error) {
-	rows, err := r.q.ListUntaggedPlans(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]dto.PlanSummary, len(rows))
-	for i, row := range rows {
-		result[i] = dto.PlanSummary{
-			ID:         row.ID,
-			FileName:   row.FileName,
-			Title:      row.Title,
-			CreatedAt:  row.CreatedAt,
-			ModifiedAt: row.ModifiedAt,
-			FileSize:   row.FileSize,
-			WordCount:  row.WordCount,
+func (r *Repository) ListUntaggedPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]dto.PlanSummary, error) {
+	sb := sqlbuilder.SQLite.NewSelectBuilder()
+	rtExpr := fmt.Sprintf("MAX(1, (word_count + %d - 1) / %d) AS reading_time", wpm, wpm)
+	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count", rtExpr).
+		From("plans").
+		Where("id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)")
+	if sortCol == "reading_time" {
+		if sortDir == "asc" {
+			sb.OrderByAsc("reading_time")
+		} else {
+			sb.OrderByDesc("reading_time")
 		}
+	} else {
+		applyOrder(sb, sortCol, sortDir)
 	}
-	return result, nil
+	q, args := sb.Build()
+	return r.queryPlanSummaries(ctx, q, args...)
 }
 
 func (r *Repository) ListPlansWithTags(ctx context.Context) ([]dto.PlanSummary, error) {
@@ -1111,4 +1117,48 @@ func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int
 		}
 	}
 	return err
+}
+
+func applyOrder(sb *sqlbuilder.SelectBuilder, col, dir string) {
+	if dir == "asc" {
+		sb.OrderByAsc(col)
+	} else {
+		sb.OrderByDesc(col)
+	}
+}
+
+func (r *Repository) queryPlanSummaries(ctx context.Context, q string, args ...interface{}) ([]dto.PlanSummary, error) {
+	rows, err := r.q.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []dto.PlanSummary
+	for rows.Next() {
+		var (
+			id          int64
+			fileName    string
+			title       string
+			createdAt   time.Time
+			modifiedAt  time.Time
+			fileSize    int64
+			wordCount   int64
+			readingTime int64
+		)
+		if err := rows.Scan(&id, &fileName, &title, &createdAt, &modifiedAt, &fileSize, &wordCount, &readingTime); err != nil {
+			return nil, err
+		}
+		result = append(result, dto.PlanSummary{
+			ID:          id,
+			FileName:    fileName,
+			Title:       title,
+			CreatedAt:   createdAt,
+			ModifiedAt:  modifiedAt,
+			FileSize:    fileSize,
+			WordCount:   wordCount,
+			ReadingTime: readingTime,
+		})
+	}
+	return result, rows.Err()
 }

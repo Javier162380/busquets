@@ -46,6 +46,21 @@ func (a *App) handleRenderMarkdownChanged(msg messages.RenderMarkDownByDefaultMs
 	return a, nil
 }
 
+func (a *App) handlePlansSortKeyChanged(_ messages.PlansSortKeyChangedMsg) (tea.Model, tea.Cmd) {
+	return a, a.reloadPlans()
+}
+
+func (a *App) handlePlansSortDirChanged(_ messages.PlansSortDirChangedMsg) (tea.Model, tea.Cmd) {
+	return a, a.reloadPlans()
+}
+
+func (a *App) reloadPlans() tea.Cmd {
+	if a.displayMode == claudeviewer.DisplayModeTagPlanContent {
+		return commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
+	}
+	return commands.LoadPlansCmd(a.ctx, a.service)
+}
+
 func (a *App) handleDisplayModeChanged(msg messages.DisplayModeChangedMsg) (tea.Model, tea.Cmd) {
 	a.displayMode = msg.Mode
 	for _, screen := range a.stack {

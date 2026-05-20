@@ -141,7 +141,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.statusBar.SetError(msg.Error.Error())
 		return a, commands.ClearStatusCmdWithDefaultDuration()
 	case messages.PlansLoadedMsg:
-		return a.delegateToCurrentScreen(msg)
+		return a.delegateToPlansScreen(msg)
 	case messages.PlanDetailLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 	case messages.VersionsLoadedMsg:
@@ -153,7 +153,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.ConnectorSettingsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 	case messages.AllTagsForPanelLoadedMsg:
-		return a.delegateToCurrentScreen(msg)
+		return a.delegateToPlansScreen(msg)
 	case components.TagsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 	case messages.LoadPlanDetailMsg:
@@ -212,6 +212,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleRenderMarkdownChanged(msg)
 	case messages.DisplayModeChangedMsg:
 		return a.handleDisplayModeChanged(msg)
+	case messages.PlansSortKeyChangedMsg:
+		return a.handlePlansSortKeyChanged(msg)
+	case messages.PlansSortDirChangedMsg:
+		return a.handlePlansSortDirChanged(msg)
 	case messages.OpenConnectorsMsg:
 		return a, a.pushConnectorsScreen()
 	case messages.EnableConnectorMsg:
@@ -274,6 +278,21 @@ func (a *App) delegateToCurrentScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
 	a.stack[len(a.stack)-1] = newScreen
 
 	return a, cmd
+}
+
+// delegateToPlansScreen routes a message directly to the PlansScreen wherever it sits in the
+// stack. This is needed for messages like PlansLoadedMsg that must reach the plans screen even
+// when another screen (e.g. settings) is on top. Falls back to the current screen if no
+// PlansScreen is found.
+func (a *App) delegateToPlansScreen(msg tea.Msg) (tea.Model, tea.Cmd) {
+	for i, screen := range a.stack {
+		if _, ok := screen.(*screens.PlansScreen); ok {
+			newScreen, cmd := screen.Update(msg)
+			a.stack[i] = newScreen
+			return a, cmd
+		}
+	}
+	return a.delegateToCurrentScreen(msg)
 }
 
 // View renders the application.

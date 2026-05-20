@@ -10,6 +10,7 @@ import (
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
+	"github.com/huandu/go-sqlbuilder"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -463,16 +464,21 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
 	return err
 }
 
-func (r *Repository) ListAllPlans(ctx context.Context) ([]dto.PlanSummary, error) {
-	rows, err := r.q.ListAllPlansWithTags(ctx)
-	if err != nil {
-		return nil, err
+func (r *Repository) ListAllPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]dto.PlanSummary, error) {
+	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+	rtExpr := fmt.Sprintf("GREATEST(1, CEIL(word_count::numeric / %d)::integer) AS reading_time", wpm)
+	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count", rtExpr).From("plans")
+	if sortCol == "reading_time" {
+		if sortDir == "asc" {
+			sb.OrderByAsc("reading_time")
+		} else {
+			sb.OrderByDesc("reading_time")
+		}
+	} else {
+		applyOrder(sb, sortCol, sortDir)
 	}
-	result := make([]dto.PlanSummary, len(rows))
-	for i, row := range rows {
-		result[i] = planSummaryFromListRow(row)
-	}
-	return result, nil
+	q, args := sb.Build()
+	return r.queryPlanSummaries(ctx, q, args...)
 }
 
 func (r *Repository) ListAllPlansWithPagination(ctx context.Context, params dto.PaginationParams) ([]dto.PlanSummary, error) {
@@ -539,7 +545,7 @@ func (r *Repository) SearchPlansWithTags(ctx context.Context, params dto.SearchP
 
 	if params.Query == "" {
 		// No text search, get all plans
-		allPlans, err = r.ListAllPlans(ctx)
+		allPlans, err = r.ListAllPlans(ctx, "modified_at", "desc", 200)
 	} else {
 		// Text search
 		allPlans, err = r.SearchPlans(ctx, params)
@@ -938,24 +944,23 @@ func (r *Repository) GetUntaggedPlanCount(ctx context.Context) (int64, error) {
 	return r.q.GetUntaggedPlanCount(ctx)
 }
 
-func (r *Repository) ListUntaggedPlans(ctx context.Context) ([]dto.PlanSummary, error) {
-	rows, err := r.q.ListUntaggedPlans(ctx)
-	if err != nil {
-		return nil, err
-	}
-	result := make([]dto.PlanSummary, len(rows))
-	for i, row := range rows {
-		result[i] = dto.PlanSummary{
-			ID:         int64(row.ID),
-			FileName:   row.FileName,
-			Title:      row.Title,
-			CreatedAt:  timestamptzToTime(row.CreatedAt),
-			ModifiedAt: timestamptzToTime(row.ModifiedAt),
-			FileSize:   row.FileSize,
-			WordCount:  row.WordCount,
+func (r *Repository) ListUntaggedPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]dto.PlanSummary, error) {
+	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+	rtExpr := fmt.Sprintf("GREATEST(1, CEIL(word_count::numeric / %d)::integer) AS reading_time", wpm)
+	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count", rtExpr).
+		From("plans").
+		Where("id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)")
+	if sortCol == "reading_time" {
+		if sortDir == "asc" {
+			sb.OrderByAsc("reading_time")
+		} else {
+			sb.OrderByDesc("reading_time")
 		}
+	} else {
+		applyOrder(sb, sortCol, sortDir)
 	}
-	return result, nil
+	q, args := sb.Build()
+	return r.queryPlanSummaries(ctx, q, args...)
 }
 
 func (r *Repository) ListPlansWithTags(ctx context.Context) ([]dto.PlanSummary, error) {
@@ -1107,4 +1112,30 @@ func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int
 	}
 
 	return err
+}
+
+func applyOrder(sb *sqlbuilder.SelectBuilder, col, dir string) {
+	if dir == "asc" {
+		sb.OrderByAsc(col)
+	} else {
+		sb.OrderByDesc(col)
+	}
+}
+
+func (r *Repository) queryPlanSummaries(ctx context.Context, q string, args ...interface{}) ([]dto.PlanSummary, error) {
+	rows, err := r.q.db.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []dto.PlanSummary
+	for rows.Next() {
+		var p dto.PlanSummary
+		if err := rows.Scan(&p.ID, &p.FileName, &p.Title, &p.CreatedAt, &p.ModifiedAt, &p.FileSize, &p.WordCount, &p.ReadingTime); err != nil {
+			return nil, err
+		}
+		result = append(result, p)
+	}
+	return result, rows.Err()
 }

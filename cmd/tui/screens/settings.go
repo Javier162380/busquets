@@ -58,6 +58,18 @@ var KnownSettings = []SettingDefinition{
 		Type:          claudeviewer.SettingTypeString,
 		AllowedValues: []string{claudeviewer.DisplayModePlanContent, claudeviewer.DisplayModeTagPlanContent},
 	},
+	{
+		Name:          claudeviewer.SettingPlansSortKey,
+		Description:   "Sort plans by field",
+		Type:          claudeviewer.SettingTypeString,
+		AllowedValues: []string{claudeviewer.SortKeyUpdatedAt, claudeviewer.SortKeyCreatedAt, claudeviewer.SortKeyReadingTime, claudeviewer.SortKeySize},
+	},
+	{
+		Name:          claudeviewer.SettingPlansSortDir,
+		Description:   "Sort direction",
+		Type:          claudeviewer.SettingTypeString,
+		AllowedValues: []string{claudeviewer.SortDirDesc, claudeviewer.SortDirAsc},
+	},
 }
 
 type SettingItem struct {
@@ -141,6 +153,18 @@ func (s *SettingsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				newVal = *s.settings[s.cursor].Value.StringValue
 			}
 			return s, func() tea.Msg { return messages.DisplayModeChangedMsg{Mode: newVal} }
+		case claudeviewer.SettingPlansSortKey:
+			newVal := claudeviewer.DefaultPlansSortKey
+			if s.settings[s.cursor].Value.StringValue != nil {
+				newVal = *s.settings[s.cursor].Value.StringValue
+			}
+			return s, func() tea.Msg { return messages.PlansSortKeyChangedMsg{SortKey: newVal} }
+		case claudeviewer.SettingPlansSortDir:
+			newVal := claudeviewer.DefaultSortDir
+			if s.settings[s.cursor].Value.StringValue != nil {
+				newVal = *s.settings[s.cursor].Value.StringValue
+			}
+			return s, func() tea.Msg { return messages.PlansSortDirChangedMsg{SortDir: newVal} }
 		}
 
 		return s, nil
