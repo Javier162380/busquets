@@ -263,7 +263,6 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.RestoreResultMsg:
 		return a.handleRestoreResult(msg)
 	}
-
 	return a.delegateToCurrentScreen(msg)
 }
 

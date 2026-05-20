@@ -21,13 +21,14 @@ import (
 // PlansScreen handles plan browsing, viewing, and editing.
 type PlansScreen struct {
 	// Components.
-	list      *components.List
-	viewer    *components.Viewer
-	editor    *components.Editor
-	searchBar *components.SearchBar
-	tagModal  *components.TagModal
-	tagFilter *components.TagFilter
-	tagPanel  *components.TagPanel
+	list          *components.List
+	viewer        *components.Viewer
+	editor        *components.Editor
+	searchBar     *components.SearchBar
+	tagModal      *components.TagModal
+	confirmDialog *components.ConfirmModal
+	tagFilter     *components.TagFilter
+	tagPanel      *components.TagPanel
 
 	// State.
 	layout        types.Layout
@@ -66,17 +67,18 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 	contentHeight := height - 4
 
 	p := PlansScreen{
-		list:        components.NewList(nil, panelWidth, contentHeight, focus),
-		viewer:      components.NewViewer(panelWidth, contentHeight),
-		editor:      components.NewEditor(width-4, contentHeight),
-		searchBar:   components.NewSearchBar(panelWidth),
-		tagModal:    components.NewTagModal(),
-		tagFilter:   components.NewTagFilter(panelWidth),
-		layout:      types.LayoutSplit,
-		focus:       types.FocusList,
-		width:       width,
-		height:      height,
-		displayMode: displayMode,
+		list:          components.NewList(nil, panelWidth, contentHeight, focus),
+		viewer:        components.NewViewer(panelWidth, contentHeight),
+		editor:        components.NewEditor(width-4, contentHeight),
+		searchBar:     components.NewSearchBar(panelWidth),
+		tagModal:      components.NewTagModal(),
+		confirmDialog: components.NewConfirmModal(),
+		tagFilter:     components.NewTagFilter(panelWidth),
+		layout:        types.LayoutSplit,
+		focus:         types.FocusList,
+		width:         width,
+		height:        height,
+		displayMode:   displayMode,
 		borderStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(styles.BorderColor),
@@ -124,6 +126,13 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s, cmd
 	}
 
+	// When confirm dialog is active, route keys to it before the tag modal.
+	if s.confirmDialog.IsActive() {
+		if _, ok := msg.(tea.KeyMsg); ok {
+			return s, s.confirmDialog.Update(msg)
+		}
+	}
+
 	// Handle tag modal if showing.
 	if s.showingModal {
 		switch msg := msg.(type) {
@@ -140,6 +149,12 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			}
 		case components.TagsLoadedMsg:
 			s.tagModal.Open(msg.FileName, msg.PlanTags, msg.AllTags)
+			return s, nil
+		case components.RequestTagDeleteMsg:
+			s.confirmDialog.Open(
+				fmt.Sprintf("Delete tag %q? This will remove it from all plans.", msg.TagName),
+				components.DeleteTagMsg{TagID: msg.TagID, CurrentPlan: msg.CurrentPlan},
+			)
 			return s, nil
 		}
 		return s, nil
@@ -781,7 +796,6 @@ func (s *PlansScreen) View() string {
 	if s.showingModal {
 		modal := s.tagModal.View()
 
-		// Overlay modal on top of main content by placing it centered
 		overlay := lipgloss.Place(
 			s.width,
 			s.height,
@@ -790,8 +804,21 @@ func (s *PlansScreen) View() string {
 			modal,
 		)
 
-		// Combine main content with overlay
-		return s.overlayContent(mainContent, overlay)
+		mainContent = s.overlayContent(mainContent, overlay)
+
+		// Overlay confirm dialog on top of the tag modal when active.
+		if s.confirmDialog.IsActive() {
+			dialogOverlay := lipgloss.Place(
+				s.width,
+				s.height,
+				lipgloss.Center,
+				lipgloss.Center,
+				s.confirmDialog.View(),
+			)
+			return s.overlayContent(mainContent, dialogOverlay)
+		}
+
+		return mainContent
 	}
 
 	return mainContent
@@ -1061,6 +1088,9 @@ func (s *PlansScreen) SetDisplayMode(mode string) {
 
 // ShortHelp returns key binding help.
 func (s *PlansScreen) ShortHelp() string {
+	if s.confirmDialog.IsActive() {
+		return "←/→: select  y: yes  n/esc: cancel  enter: confirm"
+	}
 	switch s.focus {
 	case types.FocusTagPanel:
 		if s.tagPanel != nil && s.tagPanel.IsCreating() {
@@ -1119,6 +1149,9 @@ func (s *PlansScreen) ShortHelp() string {
 // IsInputMode returns true when capturing text input.
 func (s *PlansScreen) IsInputMode() bool {
 	if s.focus == types.FocusTagPanel && s.tagPanel != nil && s.tagPanel.IsCreating() {
+		return true
+	}
+	if s.confirmDialog.IsActive() {
 		return true
 	}
 	return s.focus == types.FocusEditor || s.focus == types.FocusSearch || s.focus == types.FocusTagFilter || s.showingModal
