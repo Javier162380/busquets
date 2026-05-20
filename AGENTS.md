@@ -58,6 +58,14 @@ Service → ConnectorManager → Registry + SettingGetter
 
 **Implementations**: Telegram connector stores settings in database, loaded via `SettingGetter`.
 
+### Dynamic SQL (go-sqlbuilder)
+
+Use `github.com/huandu/go-sqlbuilder` only when the query shape is determined at runtime and SQLC static queries can't cover it — dynamic `ORDER BY` column/direction is the canonical case. Use the correct dialect (`sqlbuilder.SQLite` / `sqlbuilder.PostgreSQL`) and pair it with a shared scan helper rather than repeating row scanning inline. Everything else stays SQLC.
+
+### Summary Cache Invalidation
+
+`summaryCache` is keyed by filename. Both `UpdatePlan` and `SavePlanLocal` call `summaryCache.Delete(req.FileName)` after a successful write. Any new path that modifies plan content must do the same.
+
 ### MCP Integration (Model Context Protocol)
 
 Adapter layer for Claude Code AI integration, following clean architecture principles.
@@ -184,3 +192,4 @@ version = "1.0.0"
 4. **Connector settings in database** - Not in config files
 5. **Tests are comprehensive** - ~2000 lines with subtests pattern
 6. **Time is injectable** - Use `nowProvider` for testability
+7. **WatchManager locking** - In `Stop()`, read `wm.running` directly under the write lock; never call `IsRunning()` from within a method that already holds `wm.mu` (deadlock)
