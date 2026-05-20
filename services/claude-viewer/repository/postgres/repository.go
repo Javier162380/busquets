@@ -791,15 +791,15 @@ func (r *Repository) ListConnectors(ctx context.Context) ([]dto.Connector, error
 	return result, nil
 }
 
-func (r *Repository) GetConnectorForRole(ctx context.Context, role dto.ConnectorRole) (string, error) {
+func (r *Repository) GetConnectorForRole(ctx context.Context, role dto.ConnectorRole) (string, bool, error) {
 	c, err := r.q.GetConnectorByRole(ctx, pgtype.Text{String: string(role), Valid: true})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", dto.ErrNotFound
+		return "", false, nil
 	}
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	return c.Name, nil
+	return c.Name, true, nil
 }
 
 func (r *Repository) SetConnectorForRole(ctx context.Context, name string, role dto.ConnectorRole) error {
@@ -817,11 +817,11 @@ func (r *Repository) ClearConnectorForRole(ctx context.Context, role dto.Connect
 	return r.q.ClearConnectorRole(ctx, pgtype.Text{String: string(role), Valid: true})
 }
 
-func (r *Repository) UpsertConnector(ctx context.Context, params dto.UpsertConnectorParams) error {
+func (r *Repository) UpsertConnector(ctx context.Context, name, displayName string, enabled bool) error {
 	return r.q.UpsertConnector(ctx, UpsertConnectorParams{
-		Name:        params.Name,
-		DisplayName: params.DisplayName,
-		Enabled:     params.Enabled,
+		Name:        name,
+		DisplayName: displayName,
+		Enabled:     enabled,
 	})
 }
 
@@ -831,18 +831,18 @@ func (r *Repository) DeleteConnector(ctx context.Context, name string) error {
 
 // Connector setting operations
 
-func (r *Repository) GetConnectorSetting(ctx context.Context, connectorName, key string) (dto.ConnectorSetting, error) {
+func (r *Repository) GetConnectorSetting(ctx context.Context, connectorName, key string) (string, bool, error) {
 	cs, err := r.q.GetConnectorSetting(ctx, GetConnectorSettingParams{
 		ConnectorName: connectorName,
 		SettingKey:    key,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return dto.ConnectorSetting{}, dto.ErrNotFound
+		return "", false, nil
 	}
 	if err != nil {
-		return dto.ConnectorSetting{}, err
+		return "", false, err
 	}
-	return connectorSettingToDomain(cs), nil
+	return cs.SettingValue, true, nil
 }
 
 func (r *Repository) ListConnectorSettings(ctx context.Context, connectorName string) ([]dto.ConnectorSetting, error) {
@@ -857,12 +857,12 @@ func (r *Repository) ListConnectorSettings(ctx context.Context, connectorName st
 	return result, nil
 }
 
-func (r *Repository) UpsertConnectorSetting(ctx context.Context, params dto.UpsertConnectorSettingParams) error {
+func (r *Repository) UpsertConnectorSetting(ctx context.Context, connectorName, key, value string, isSecret bool) error {
 	return r.q.UpsertConnectorSetting(ctx, UpsertConnectorSettingParams{
-		ConnectorName: params.ConnectorName,
-		SettingKey:    params.SettingKey,
-		SettingValue:  params.SettingValue,
-		IsSecret:      params.IsSecret,
+		ConnectorName: connectorName,
+		SettingKey:    key,
+		SettingValue:  value,
+		IsSecret:      isSecret,
 	})
 }
 
