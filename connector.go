@@ -34,7 +34,6 @@ type Store interface {
 
 var (
 	ErrConnectorNotFound      = errors.New("connector not found")
-	ErrConnectorDisabled      = errors.New("connector not initialized")
 	ErrNoConnectorEnabled     = errors.New("no connector enabled")
 	ErrNoSummarizerConfigured = errors.New("no summarizer configured")
 	ErrConnectorResponseEmpty = errors.New("connector returned no response")

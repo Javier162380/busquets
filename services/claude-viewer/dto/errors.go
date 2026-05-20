@@ -3,6 +3,8 @@ package dto
 import (
 	"errors"
 	"fmt"
+
+	planviewer "github.com/Javier162380/claude-plan-viewer"
 )
 
 // Category represents the type of error for handling at different layers.
@@ -75,10 +77,12 @@ var (
 	ErrInvalidNumber     = &Error{Category: CategoryValidation, Message: "invalid number value"}
 	ErrNoValue           = &Error{Category: CategoryValidation, Message: "no value provided"}
 
-	ErrConnectorDisabled      = &Error{Category: CategoryUnavailable, Message: "connector not initialized"}
-	ErrNoConnectorEnabled     = &Error{Category: CategoryUnavailable, Message: "no connector enabled"}
-	ErrNoSummarizerConfigured = &Error{Category: CategoryUnavailable, Message: "no summarizer configured"}
-	ErrConnectorResponseEmpty = &Error{Category: CategoryUnavailable, Message: "connector returned no response"}
+	ErrConnectorDisabled = &Error{Category: CategoryUnavailable, Message: "connector not initialized"}
+
+	// Re-exported from the root package so errors.Is checks work regardless of which side emitted the error.
+	ErrNoConnectorEnabled     = planviewer.ErrNoConnectorEnabled
+	ErrNoSummarizerConfigured = planviewer.ErrNoSummarizerConfigured
+	ErrConnectorResponseEmpty = planviewer.ErrConnectorResponseEmpty
 )
 
 // GetCategory extracts the error category, defaulting to Internal.

@@ -118,8 +118,14 @@ func (m *Manager) ListAvailable(ctx context.Context) ([]ConnectorStatus, error) 
 	connectors := m.registry.All()
 	statuses := make([]ConnectorStatus, len(connectors))
 
-	transmitName, _, _ := m.db.GetConnectorForRole(ctx, planviewer.ConnectorRoleTransmit)
-	summaryName, _, _ := m.db.GetConnectorForRole(ctx, planviewer.ConnectorRoleSummary)
+	transmitName, _, err := m.db.GetConnectorForRole(ctx, planviewer.ConnectorRoleTransmit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transmit connector role: %w", err)
+	}
+	summaryName, _, err := m.db.GetConnectorForRole(ctx, planviewer.ConnectorRoleSummary)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get summary connector role: %w", err)
+	}
 
 	for i, c := range connectors {
 		var role *planviewer.ConnectorRole
