@@ -188,7 +188,11 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.tagPlanCounts = msg.Counts
 		s.untaggedCount = msg.UntaggedCount
 		s.tagPlanMap = msg.TagPlanMap
+		s.allPlans = msg.AllPlans
 		s.rebuildTagPanelEntries()
+		if s.tagPanel != nil {
+			s.applyTagFilter(s.tagPanel.SelectedTag())
+		}
 		return s, nil
 
 	case components.CreateTagRequestedMsg:

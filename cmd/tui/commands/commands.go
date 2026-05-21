@@ -427,7 +427,8 @@ func WatchChannelListenerCmd(ctx context.Context, svc claudeviewer.UnifiedServic
 	}
 }
 
-// LoadAllTagsForPanelCmd loads all tags, their plan counts, and the untagged count for the tag panel.
+// LoadAllTagsForPanelCmd loads all tags, the tag→plans map, and all plans for the tag panel.
+// Counts and untagged count are derived from the map to avoid redundant DB round-trips.
 func LoadAllTagsForPanelCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -441,17 +442,10 @@ func LoadAllTagsForPanelCmd(ctx context.Context, svc claudeviewer.UnifiedService
 			return err
 		})
 
-		var counts map[string]int
+		var allPlans []claudeviewer.PlanSummary
 		errGroup.Go(func() error {
 			var err error
-			counts, err = svc.GetTagPlanCounts(eggCtx)
-			return err
-		})
-
-		var untaggedCount int64
-		errGroup.Go(func() error {
-			var err error
-			untaggedCount, err = svc.GetUntaggedPlanCount(eggCtx)
+			allPlans, err = svc.ListAllPlansWithReadingTime(eggCtx)
 			return err
 		})
 
@@ -465,7 +459,22 @@ func LoadAllTagsForPanelCmd(ctx context.Context, svc claudeviewer.UnifiedService
 		if err := errGroup.Wait(); err != nil {
 			return messages.ErrorMsg{Error: err}
 		}
-		return messages.AllTagsForPanelLoadedMsg{Tags: tags, Counts: counts, UntaggedCount: int(untaggedCount), TagPlanMap: tagPlanMap}
+
+		counts := make(map[string]int, len(tagPlanMap))
+		for k, v := range tagPlanMap {
+			if k != "" {
+				counts[k] = len(v)
+			}
+		}
+		untaggedCount := len(tagPlanMap[""])
+
+		return messages.AllTagsForPanelLoadedMsg{
+			Tags:          tags,
+			Counts:        counts,
+			UntaggedCount: untaggedCount,
+			TagPlanMap:    tagPlanMap,
+			AllPlans:      allPlans,
+		}
 	}
 }
 

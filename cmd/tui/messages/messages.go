@@ -134,6 +134,7 @@ type AllTagsForPanelLoadedMsg struct {
 	Counts        map[string]int
 	UntaggedCount int
 	TagPlanMap    map[string][]claudeviewer.PlanSummary
+	AllPlans      []claudeviewer.PlanSummary
 }
 
 // --- Search ---
