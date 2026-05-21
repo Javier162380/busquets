@@ -153,11 +153,27 @@ func (m *TagModal) Update(msg tea.Msg) tea.Cmd {
 		case "d":
 			if m.focus == TagModalFocusTagList {
 				tag := m.allTags[m.selectedIdx]
+				planFileName := m.planFileName
+				tagName := tag.Name
+				deleteCmd := func() tea.Msg {
+					return DeleteTagMsg{TagID: tag.ID, CurrentPlan: planFileName}
+				}
+				saveCmd := func() tea.Msg {
+					all := m.Close()
+					remaining := make([]string, 0, len(all))
+					for _, t := range all {
+						if t != tagName {
+							remaining = append(remaining, t)
+						}
+					}
+					return SavePlanTagsMsg{FileName: planFileName, Tags: remaining}
+				}
 				return func() tea.Msg {
 					return RequestTagDeleteMsg{
-						TagID:       tag.ID,
-						TagName:     tag.Name,
-						CurrentPlan: m.planFileName,
+						TagID:         tag.ID,
+						TagName:       tagName,
+						CurrentPlan:   planFileName,
+						OnConfirmFunc: tea.Batch(deleteCmd, saveCmd),
 					}
 				}
 			}
@@ -278,9 +294,10 @@ func (m *TagModal) View() string {
 // RequestTagDeleteMsg is emitted by TagModal when the user presses "d" to delete a tag.
 // PlansScreen intercepts this to show a ConfirmDialog before allowing the delete to proceed.
 type RequestTagDeleteMsg struct {
-	TagID       int64
-	TagName     string
-	CurrentPlan string
+	TagID         int64
+	TagName       string
+	CurrentPlan   string
+	OnConfirmFunc func() tea.Msg
 }
 
 // DeleteTagMsg delete tags for plans searching.

@@ -13,11 +13,11 @@ import (
 // Activate it with Open, passing the message to emit when the user confirms.
 // The default selection is "No" to prevent accidental destructive actions.
 type ConfirmModal struct {
-	isActive   bool
-	message    string
-	pendingMsg tea.Msg
-	confirmed  bool // true = Yes selected
-	width      int
+	isActive      bool
+	message       string
+	onConfirmFunc func() tea.Msg
+	confirmed     bool
+	width         int
 }
 
 // NewConfirmModal creates a new confirm modal.
@@ -25,18 +25,19 @@ func NewConfirmModal() *ConfirmModal {
 	return &ConfirmModal{width: 44}
 }
 
-// Open activates the modal with the given prompt and the message to emit on confirmation.
-func (d *ConfirmModal) Open(message string, onConfirm tea.Msg) {
+// Open activates the modal with the given prompt and the command to run on confirmation.
+// Pass tea.Batch(...) to chain multiple actions.
+func (d *ConfirmModal) Open(message string, onConfirm func() tea.Msg) {
 	d.isActive = true
 	d.message = message
-	d.pendingMsg = onConfirm
+	d.onConfirmFunc = onConfirm
 	d.confirmed = false // default to No
 }
 
 // Close deactivates the modal without emitting anything.
 func (d *ConfirmModal) Close() {
 	d.isActive = false
-	d.pendingMsg = nil
+	d.onConfirmFunc = nil
 }
 
 // IsActive returns whether the modal is currently shown.
@@ -65,9 +66,9 @@ func (d *ConfirmModal) Update(msg tea.Msg) tea.Cmd {
 		return nil
 	case "enter":
 		if d.confirmed {
-			pending := d.pendingMsg
+			fn := d.onConfirmFunc
 			d.Close()
-			return func() tea.Msg { return pending }
+			return fn
 		}
 		d.Close()
 		return nil

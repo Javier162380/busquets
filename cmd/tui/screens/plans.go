@@ -153,7 +153,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		case components.RequestTagDeleteMsg:
 			s.confirmDialog.Open(
 				fmt.Sprintf("Delete tag %q? This will remove it from all plans.", msg.TagName),
-				components.DeleteTagMsg{TagID: msg.TagID, CurrentPlan: msg.CurrentPlan},
+				msg.OnConfirmFunc,
 			)
 			return s, nil
 		}
