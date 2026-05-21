@@ -47,6 +47,8 @@ func (a *App) handleDeleteTagResult(msg components.DeleteTagCmdMsg) (tea.Model, 
 		a.statusBar.SetSuccess("Deleted tag")
 	}
 	return a, tea.Batch(
-		commands.ClearStatusCmdWithDefaultDuration(), commands.LoadTagsForModalCmd(a.ctx, a.service, msg.FileName),
+		commands.ClearStatusCmdWithDefaultDuration(),
+		commands.LoadPlansCmd(a.ctx, a.service),
+		commands.LoadAllTagsForPanelCmd(a.ctx, a.service),
 	)
 }
