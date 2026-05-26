@@ -83,6 +83,12 @@ func (s *StatusBar) IsLoading() bool {
 	return s.isLoading
 }
 
+// ErrorMessage returns the current error message.
+func (s *StatusBar) ErrorMessage() string { return s.errorMessage }
+
+// SuccessMessage returns the current success message.
+func (s *StatusBar) SuccessMessage() string { return s.successMessage }
+
 // View renders the status bar.
 func (s *StatusBar) View() string {
 	var content string
