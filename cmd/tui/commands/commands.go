@@ -39,7 +39,7 @@ func SearchPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService, query 
 		if err != nil {
 			return messages.ErrorMsg{Error: err}
 		}
-		return messages.PlansLoadedMsg{Plans: plans}
+		return messages.PlansLoadedMsg{Plans: plans, IsFiltered: true}
 	}
 }
 

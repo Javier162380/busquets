@@ -11,6 +11,7 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -144,6 +145,7 @@ func TestSearchPlansCmd(t *testing.T) {
 		loaded, ok := msg.(messages.PlansLoadedMsg)
 		require.True(t, ok)
 		require.NotEmpty(t, loaded.Plans)
+		require.True(t, loaded.IsFiltered)
 	})
 
 	t.Run("non-matching query returns empty plans", func(t *testing.T) {
@@ -156,6 +158,7 @@ func TestSearchPlansCmd(t *testing.T) {
 		loaded, ok := msg.(messages.PlansLoadedMsg)
 		require.True(t, ok)
 		require.Empty(t, loaded.Plans)
+		require.True(t, loaded.IsFiltered)
 	})
 }
 
