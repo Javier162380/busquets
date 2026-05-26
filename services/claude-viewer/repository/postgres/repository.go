@@ -161,42 +161,6 @@ func planSummaryFromPaginationRow(r ListAllPlansWithPaginationRow) dto.PlanSumma
 	}
 }
 
-func planSummaryFromSearchPaginationRow(r SearchPlansWithPaginationRow) dto.PlanSummary {
-	return dto.PlanSummary{
-		ID:         int64(r.ID),
-		FileName:   r.FileName,
-		Title:      r.Title,
-		CreatedAt:  timestamptzToTime(r.CreatedAt),
-		ModifiedAt: timestamptzToTime(r.ModifiedAt),
-		FileSize:   r.FileSize,
-		WordCount:  r.WordCount,
-	}
-}
-
-func planSummaryFromSearchWithTagsRow(r SearchPlansWithTagsRow) dto.PlanSummary {
-	planSummaryDto := dto.PlanSummary{
-		ID:         int64(r.ID),
-		FileName:   r.FileName,
-		Title:      r.Title,
-		CreatedAt:  timestamptzToTime(r.CreatedAt),
-		ModifiedAt: timestamptzToTime(r.ModifiedAt),
-		FileSize:   r.FileSize,
-		WordCount:  r.WordCount,
-	}
-
-	tags := make([]dto.Tag, len(r.TagIds))
-	for i, tagID := range r.TagIds {
-		tags[i] = dto.Tag{
-			ID: int64(tagID),
-		}
-		if i < len(r.TagNames) {
-			tags[i].Name = r.TagNames[i]
-		}
-	}
-	planSummaryDto.Tags = tags
-	return planSummaryDto
-}
-
 func planVersionToDomain(pv PlanVersion) dto.PlanVersion {
 	return dto.PlanVersion{
 		ID:            int64(pv.ID),
@@ -497,37 +461,74 @@ func (r *Repository) ListAllPlansWithPagination(ctx context.Context, params dto.
 }
 
 func (r *Repository) SearchPlans(ctx context.Context, params dto.SearchParams) ([]dto.PlanSummary, error) {
-	searchPattern := "%" + params.Query + "%"
-	rows, err := r.q.SearchPlansWithTags(ctx, SearchPlansWithTagsParams{
-		Title:   searchPattern,
-		Content: searchPattern,
-	})
-	if err != nil {
-		return nil, err
-	}
-	result := make([]dto.PlanSummary, len(rows))
-	for i, row := range rows {
-		result[i] = planSummaryFromSearchWithTagsRow(row)
-	}
-	return result, nil
+	return r.searchPlansDynamic(ctx, "%"+params.Query+"%", params.SearchOver)
 }
 
 func (r *Repository) SearchPlansWithPagination(ctx context.Context, params dto.SearchPaginationParams) ([]dto.PlanSummary, error) {
-	searchPattern := "%" + params.Query + "%"
-	rows, err := r.q.SearchPlansWithPagination(ctx, SearchPlansWithPaginationParams{
-		Title:   searchPattern,
-		Content: searchPattern,
-		Limit:   int32(params.Limit),
-		Offset:  int32(params.Offset),
-	})
-	if err != nil {
-		return nil, err
+	return r.searchPlansPaginationDynamic(ctx, "%"+params.Query+"%", params)
+}
+
+func (r *Repository) searchPlansDynamic(ctx context.Context, pattern string, searchOver dto.SearchField) ([]dto.PlanSummary, error) {
+	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+	sb.Select(
+		"p.id", "p.file_name", "p.title",
+		"p.created_at", "p.modified_at", "p.file_size", "p.word_count",
+		"COALESCE(t.tag_ids, ARRAY[]::int4[]) AS tag_ids",
+		"COALESCE(t.tag_names, ARRAY[]::text[]) AS tag_names",
+	).From("plans p").
+		JoinWithOption(sqlbuilder.LeftJoin,
+			`(SELECT pt.plan_id,
+			         array_agg(DISTINCT t.id ORDER BY t.id)::int4[]   AS tag_ids,
+			         array_agg(DISTINCT t.name ORDER BY t.name)::text[] AS tag_names
+			  FROM plan_tags pt
+			  JOIN tags t ON pt.tag_id = t.id
+			  GROUP BY pt.plan_id) t`,
+			"t.plan_id = p.id",
+		).OrderByDesc("p.modified_at")
+
+	switch searchOver {
+	case dto.SearchOverPlanName:
+		sb.Where(sb.Like("p.title", pattern))
+	case dto.SearchOverContent:
+		sb.Where(sb.Like("p.content", pattern))
+	default:
+		sb.Where(sb.Or(sb.Like("p.title", pattern), sb.Like("p.content", pattern)))
 	}
-	result := make([]dto.PlanSummary, len(rows))
-	for i, row := range rows {
-		result[i] = planSummaryFromSearchPaginationRow(row)
+
+	q, args := sb.Build()
+	return r.queryPlanSummariesWithTags(ctx, q, args...)
+}
+
+func (r *Repository) searchPlansPaginationDynamic(ctx context.Context, pattern string, params dto.SearchPaginationParams) ([]dto.PlanSummary, error) {
+	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
+	sb.Select(
+		"p.id", "p.file_name", "p.title",
+		"p.created_at", "p.modified_at", "p.file_size", "p.word_count",
+		"COALESCE(t.tag_ids, ARRAY[]::int4[]) AS tag_ids",
+		"COALESCE(t.tag_names, ARRAY[]::text[]) AS tag_names",
+	).From("plans p").
+		JoinWithOption(sqlbuilder.LeftJoin,
+			`(SELECT pt.plan_id,
+			         array_agg(DISTINCT t.id ORDER BY t.id)::int4[]   AS tag_ids,
+			         array_agg(DISTINCT t.name ORDER BY t.name)::text[] AS tag_names
+			  FROM plan_tags pt
+			  JOIN tags t ON pt.tag_id = t.id
+			  GROUP BY pt.plan_id) t`,
+			"t.plan_id = p.id",
+		).OrderByDesc("p.modified_at").
+		Limit(int(params.Limit)).Offset(int(params.Offset))
+
+	switch params.SearchOver {
+	case dto.SearchOverPlanName:
+		sb.Where(sb.Like("p.title", pattern))
+	case dto.SearchOverContent:
+		sb.Where(sb.Like("p.content", pattern))
+	default:
+		sb.Where(sb.Or(sb.Like("p.title", pattern), sb.Like("p.content", pattern)))
 	}
-	return result, nil
+
+	q, args := sb.Build()
+	return r.queryPlanSummariesWithTags(ctx, q, args...)
 }
 
 func (r *Repository) SearchPlansWithTags(ctx context.Context, params dto.SearchParams) ([]dto.PlanSummary, error) {
@@ -1120,6 +1121,50 @@ func applyOrder(sb *sqlbuilder.SelectBuilder, col, dir string) {
 	} else {
 		sb.OrderByDesc(col)
 	}
+}
+
+func (r *Repository) queryPlanSummariesWithTags(ctx context.Context, q string, args ...interface{}) ([]dto.PlanSummary, error) {
+	rows, err := r.q.db.Query(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var result []dto.PlanSummary
+	for rows.Next() {
+		var (
+			id         int64
+			fileName   string
+			title      string
+			createdAt  time.Time
+			modifiedAt time.Time
+			fileSize   int64
+			wordCount  int64
+			tagIDs     []int32
+			tagNames   []string
+		)
+		if err := rows.Scan(&id, &fileName, &title, &createdAt, &modifiedAt, &fileSize, &wordCount, &tagIDs, &tagNames); err != nil {
+			return nil, err
+		}
+		tags := make([]dto.Tag, len(tagIDs))
+		for i, tagID := range tagIDs {
+			tags[i] = dto.Tag{ID: int64(tagID)}
+			if i < len(tagNames) {
+				tags[i].Name = tagNames[i]
+			}
+		}
+		result = append(result, dto.PlanSummary{
+			ID:         id,
+			FileName:   fileName,
+			Title:      title,
+			CreatedAt:  createdAt,
+			ModifiedAt: modifiedAt,
+			FileSize:   fileSize,
+			WordCount:  wordCount,
+			Tags:       tags,
+		})
+	}
+	return result, rows.Err()
 }
 
 func (r *Repository) queryPlanSummaries(ctx context.Context, q string, args ...interface{}) ([]dto.PlanSummary, error) {

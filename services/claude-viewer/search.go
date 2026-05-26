@@ -43,7 +43,7 @@ func (s *Service) SearchPlansWithReadingTime(ctx context.Context, query string) 
 		return s.ListAllPlansWithReadingTime(ctx)
 	}
 
-	plans, err := s.db.SearchPlans(ctx, dto.SearchParams{Query: query})
+	plans, err := s.db.SearchPlans(ctx, dto.SearchParams{Query: query, SearchOver: s.resolveSearchScope(ctx)})
 	if err != nil {
 		return nil, err
 	}
@@ -69,9 +69,10 @@ func (s *Service) SearchPlansWithPaginationAndReadingTime(ctx context.Context, q
 	}
 
 	plans, err := s.db.SearchPlansWithPagination(ctx, dto.SearchPaginationParams{
-		Query:  query,
-		Limit:  limit,
-		Offset: offset,
+		Query:      query,
+		Limit:      limit,
+		Offset:     offset,
+		SearchOver: s.resolveSearchScope(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -86,9 +87,10 @@ func (s *Service) SearchPlansWithTags(ctx context.Context, query string, tags []
 	}
 
 	plans, err := s.db.SearchPlansWithTags(ctx, dto.SearchParams{
-		Query:    query,
-		TagNames: tags,
-		MatchAll: matchAll,
+		Query:      query,
+		TagNames:   tags,
+		MatchAll:   matchAll,
+		SearchOver: s.resolveSearchScope(ctx),
 	})
 	if err != nil {
 		return nil, err

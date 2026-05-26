@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	planviewer "github.com/Javier162380/claude-plan-viewer"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
@@ -26,6 +27,18 @@ const (
 	SettingDefaultDisplayMode      = "default_display_mode"
 	SettingPlansSortKey            = "plans_sort_key"
 	SettingPlansSortDir            = "plans_sort_dir"
+	SettingSearchOver              = "search_over"
+)
+
+// SearchField re-exports the root type so callers only need one import.
+type SearchField = planviewer.SearchField
+
+// Search field values for SettingSearchOver.
+const (
+	SearchOverAll      = planviewer.SearchOverAll
+	SearchOverPlanName = planviewer.SearchOverPlanName
+	SearchOverContent  = planviewer.SearchOverContent
+	DefaultSearchOver  = planviewer.DefaultSearchOver
 )
 
 // Display mode values for SettingDefaultDisplayMode.
@@ -173,6 +186,14 @@ func (s *Service) SetSetting(ctx context.Context, varName string, values Setting
 	}
 
 	return nil
+}
+
+// resolveSearchScope returns the active SearchField setting, defaulting to SearchOverAll.
+func (s *Service) resolveSearchScope(ctx context.Context) planviewer.SearchField {
+	if setting, exists, _ := s.GetSetting(ctx, SettingSearchOver); exists && setting.IsString() {
+		return planviewer.SearchField(setting.GetStringValue())
+	}
+	return planviewer.DefaultSearchOver
 }
 
 // getSortSettings returns the sort key and direction from DB settings, with defaults.
