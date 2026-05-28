@@ -44,43 +44,6 @@ FROM plans
 ORDER BY modified_at DESC
 LIMIT $1 OFFSET $2;
 
--- name: SearchPlans :many
-SELECT id, file_name, title, created_at, modified_at, file_size, word_count
-FROM plans
-WHERE title LIKE $1 OR content LIKE $2
-ORDER BY modified_at DESC;
-
--- name: SearchPlansWithTags :many
-SELECT
-    p.id,
-    p.file_name,
-    p.title,
-    p.created_at,
-    p.modified_at,
-    p.file_size,
-    p.word_count,
-    t.tag_ids,
-    t.tag_names
-FROM plans p
-         LEFT JOIN (
-    SELECT
-        pt.plan_id,
-        array_agg(DISTINCT t.id ORDER BY t.id)::int4[] AS tag_ids,
-        array_agg(DISTINCT t.name ORDER BY t.name)::text[] AS tag_names
-    FROM plan_tags pt
-             JOIN tags t ON pt.tag_id = t.id
-    GROUP BY pt.plan_id
-) t ON t.plan_id = p.id
-WHERE p.title LIKE $1 OR p.content LIKE $2
-ORDER BY p.modified_at DESC;
-
--- name: SearchPlansWithPagination :many
-SELECT id, file_name, title, created_at, modified_at, file_size, word_count
-FROM plans
-WHERE title LIKE $1 OR content LIKE $2
-ORDER BY modified_at DESC
-LIMIT $3 OFFSET $4;
-
 -- name: DeletePlan :exec
 DELETE FROM plans WHERE file_name = $1;
 

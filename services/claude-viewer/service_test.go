@@ -2563,6 +2563,83 @@ func testPlanTagRelationship(t *testing.T, service *Service, sourcePlansDir stri
 	})
 }
 
+func TestSearchOverSetting(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testSearchOverSetting(t, b.setupFn)
+		})
+	}
+}
+
+func testSearchOverSetting(t *testing.T, setup serviceSetupFn) {
+	t.Helper()
+	service, sourcePlansDir, _, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// plan1: unique term in heading (becomes `title` column); "AlphaTitleUnique" also appears in the
+	// full file text stored in `content`, so content searches can find it too.
+	// plan2: unique term only in the body, NOT in the heading, so `title` column won't contain it.
+	createTestPlanFile(t, sourcePlansDir, "plan1.md", "# AlphaTitleUnique\n\nGeneric body text here.")
+	createTestPlanFile(t, sourcePlansDir, "plan2.md", "# Generic Title\n\nBetaBodyUnique lives here.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+
+	setScope := func(scope SearchField) {
+		err := service.SetSetting(ctx, SettingSearchOver, SettingValues{StringValue: new(string(scope))})
+		require.NoError(t, err)
+	}
+
+	t.Run("SearchOverAll finds by title", func(t *testing.T) {
+		setScope(SearchOverAll)
+		plans, err := service.SearchPlansWithReadingTime(ctx, "AlphaTitleUnique")
+		require.NoError(t, err)
+		require.Len(t, plans, 1)
+		require.Equal(t, "plan1.md", plans[0].FileName)
+	})
+
+	t.Run("SearchOverAll finds by body content", func(t *testing.T) {
+		setScope(SearchOverAll)
+		plans, err := service.SearchPlansWithReadingTime(ctx, "BetaBodyUnique")
+		require.NoError(t, err)
+		require.Len(t, plans, 1)
+		require.Equal(t, "plan2.md", plans[0].FileName)
+	})
+
+	t.Run("SearchOverPlanName finds by title", func(t *testing.T) {
+		setScope(SearchOverPlanName)
+		plans, err := service.SearchPlansWithReadingTime(ctx, "AlphaTitleUnique")
+		require.NoError(t, err)
+		require.Len(t, plans, 1)
+		require.Equal(t, "plan1.md", plans[0].FileName)
+	})
+
+	t.Run("SearchOverPlanName does not find body-only term", func(t *testing.T) {
+		setScope(SearchOverPlanName)
+		// "BetaBodyUnique" is only in plan2's body, not in any heading
+		plans, err := service.SearchPlansWithReadingTime(ctx, "BetaBodyUnique")
+		require.NoError(t, err)
+		require.Empty(t, plans)
+	})
+
+	t.Run("SearchOverContent finds body term", func(t *testing.T) {
+		setScope(SearchOverContent)
+		plans, err := service.SearchPlansWithReadingTime(ctx, "BetaBodyUnique")
+		require.NoError(t, err)
+		require.Len(t, plans, 1)
+		require.Equal(t, "plan2.md", plans[0].FileName)
+	})
+
+	t.Run("SearchOverContent finds term that appears in full file text", func(t *testing.T) {
+		setScope(SearchOverContent)
+		// "AlphaTitleUnique" is in plan1's heading, which is also stored in the content column
+		plans, err := service.SearchPlansWithReadingTime(ctx, "AlphaTitleUnique")
+		require.NoError(t, err)
+		require.Len(t, plans, 1)
+		require.Equal(t, "plan1.md", plans[0].FileName)
+	})
+}
+
 // setupMockConnector creates a gomock MockConnector with standard expectations.
 func setupMockConnector(ctrl *gomock.Controller, name, displayName string) *connectors_test.MockConnector {
 	mock := connectors_test.NewMockConnector(ctrl)

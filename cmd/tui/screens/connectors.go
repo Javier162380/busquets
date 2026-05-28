@@ -431,9 +431,9 @@ func (s *ConnectorsScreen) ShortHelp() string {
 		return "enter: save | esc: cancel"
 	}
 	if s.focusRight {
-		return "j/k: navigate | e: edit | V: validate | tab: switch | s: display secret values | esc: back"
+		return "down/up: navigate | e: edit | V: validate | tab: switch | s: display secret values | esc: back"
 	}
-	return "j/k: navigate | t: set transmit [T] | X: set summarizer [S] | d: clear role | V: validate | tab: switch | esc: back"
+	return "down/up: navigate | t: set transmit [T] | X: set summarizer [S] | d: clear role | V: validate | tab: switch | esc: back"
 }
 
 // IsInputMode returns true when capturing text input.

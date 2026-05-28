@@ -395,9 +395,9 @@ func (s *VersionsScreen) ShortHelp() string {
 		if s.searchQuery != "" {
 			searchHelp = fmt.Sprintf("/: search | c: clear [%s]", s.searchQuery)
 		}
-		return fmt.Sprintf("j/k: navigate | g/G: top/bottom | tab: content | v: view | R: restore | r: render (%s) | %s | esc: back | Versions: %d", mode, searchHelp, len(s.versions))
+		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | r: render (%s) | %s | esc: back | Versions: %d", mode, searchHelp, len(s.versions))
 	case types.FocusContent:
-		return fmt.Sprintf("j/k: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | esc: back", mode)
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | esc: back", mode)
 	case types.FocusSearch:
 		return "enter: search | esc: cancel"
 	default:

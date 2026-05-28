@@ -70,6 +70,13 @@ var KnownSettings = []SettingDefinition{
 		Type:          claudeviewer.SettingTypeString,
 		AllowedValues: []string{claudeviewer.SortDirDesc, claudeviewer.SortDirAsc},
 	},
+	{
+		Name:          claudeviewer.SettingSearchOver,
+		Description:   "Search over: plan name, content, or both",
+		Type:          claudeviewer.SettingTypeString,
+		Default:       claudeviewer.SettingValues{StringValue: new(string(claudeviewer.DefaultSearchOver))},
+		AllowedValues: []string{string(claudeviewer.SearchOverAll), string(claudeviewer.SearchOverPlanName), string(claudeviewer.SearchOverContent)},
+	},
 }
 
 type SettingItem struct {
@@ -362,7 +369,7 @@ func (s *SettingsScreen) ShortHelp() string {
 	if s.editing {
 		return "0-9: type | backspace: delete | enter: save | esc: cancel"
 	}
-	return "j/k: navigate | enter/space: edit | esc: back"
+	return "down/up: navigate | enter/space: edit | esc: back"
 }
 
 // IsInputMode returns true when capturing text input.
