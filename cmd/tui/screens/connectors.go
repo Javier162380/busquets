@@ -441,4 +441,7 @@ func (s *ConnectorsScreen) IsInputMode() bool {
 	return s.editing
 }
 
-// Message types for connectors screen.
+// EditorMOde
+func (s *ConnectorsScreen) EditorMode() bool {
+	return false
+}

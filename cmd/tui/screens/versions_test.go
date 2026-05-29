@@ -7,6 +7,7 @@ import (
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+
 	"github.com/stretchr/testify/require"
 )
 

@@ -135,3 +135,8 @@ func (s *HelpScreen) ShortHelp() string {
 func (s *HelpScreen) IsInputMode() bool {
 	return false
 }
+
+// EditorMode ...
+func (s *HelpScreen) EditorMode() bool {
+	return false
+}

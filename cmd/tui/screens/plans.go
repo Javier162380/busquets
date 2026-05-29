@@ -1161,6 +1161,11 @@ func (s *PlansScreen) IsInputMode() bool {
 	return s.focus == types.FocusEditor || s.focus == types.FocusSearch || s.focus == types.FocusTagFilter || s.showingModal
 }
 
+// EditorMode returns true when the screen is in editor focus.
+func (s *PlansScreen) EditorMode() bool {
+	return s.focus == types.FocusEditor
+}
+
 // overlayContent overlays the modal on top of the main content.
 func (s *PlansScreen) overlayContent(base, overlay string) string {
 	baseLines := strings.Split(base, "\n")

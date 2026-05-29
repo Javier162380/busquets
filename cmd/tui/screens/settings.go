@@ -373,9 +373,10 @@ func (s *SettingsScreen) ShortHelp() string {
 }
 
 // IsInputMode returns true when capturing text input.
-func (s *SettingsScreen) IsInputMode() bool {
-	return s.editing
-}
+func (s *SettingsScreen) IsInputMode() bool { return s.editing }
+
+// EditorMode ....
+func (s *SettingsScreen) EditorMode() bool { return false }
 
 func (s *SettingsScreen) saveSetting(name string, values claudeviewer.SettingValues) tea.Cmd {
 	return func() tea.Msg {

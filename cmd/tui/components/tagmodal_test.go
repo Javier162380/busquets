@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+
 	"github.com/stretchr/testify/require"
 )
 
