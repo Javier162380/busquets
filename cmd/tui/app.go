@@ -122,10 +122,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		}
 		if a.showHelp {
-			if msg.String() == "esc" || msg.String() == "?" {
-				a.showHelp = false
+			newScreen, cmd := a.help.Update(msg)
+			if h, ok := newScreen.(*screens.HelpScreen); ok {
+				a.help = h
 			}
-			return a, nil
+			return a, cmd
 		}
 	case messages.PopScreenMsg:
 		return a, a.popScreen()
