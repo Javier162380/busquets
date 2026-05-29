@@ -441,7 +441,7 @@ func (s *ConnectorsScreen) IsInputMode() bool {
 	return s.editing
 }
 
-// EditorMOde
+// EditorMode .
 func (s *ConnectorsScreen) EditorMode() bool {
 	return false
 }

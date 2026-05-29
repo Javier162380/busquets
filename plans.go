@@ -7,5 +7,5 @@ const (
 	SearchOverAll      SearchField = "all"       // title OR content (default)
 	SearchOverPlanName SearchField = "plan_name" // title only
 	SearchOverContent  SearchField = "content"   // content only
-	DefaultSearchOver= SearchOverAll             //nolint:gci
+	DefaultSearchOver              = SearchOverAll
 )
