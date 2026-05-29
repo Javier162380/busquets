@@ -410,6 +410,11 @@ func (s *VersionsScreen) IsInputMode() bool {
 	return s.focus == types.FocusSearch
 }
 
+// EditorMode ...
+func (s *VersionsScreen) EditorMode() bool {
+	return s.focus == types.FocusEditor
+}
+
 // updateListItems updates the list with current versions.
 func (s *VersionsScreen) updateListItems() {
 	items := make([]components.ListItem, len(s.versions))

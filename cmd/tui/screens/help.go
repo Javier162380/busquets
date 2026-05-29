@@ -4,44 +4,11 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// HelpScreen displays keyboard shortcuts and help information.
-type HelpScreen struct {
-	width  int
-	height int
-}
-
-// NewHelpScreen creates a new help screen.
-func NewHelpScreen(width, height int) *HelpScreen {
-	return &HelpScreen{
-		width:  width,
-		height: height,
-	}
-}
-
-// Init initializes the screen.
-func (s *HelpScreen) Init() tea.Cmd {
-	return nil
-}
-
-// Update handles messages.
-func (s *HelpScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
-	if msg, ok := msg.(tea.KeyMsg); ok {
-		if msg.String() == "?" || msg.String() == "esc" || msg.String() == "q" {
-			return s, func() tea.Msg {
-				return messages.CloseHelpMsg{}
-			}
-		}
-	}
-	return s, nil
-}
-
-// View renders the help screen.
-func (s *HelpScreen) View() string {
-	helpText := `
-Claude Plan Viewer - Keyboard Shortcuts
+const helpContent = `Claude Plan Viewer - Keyboard Shortcuts
 
 PLANS LIST (Two-Panel mode):
   j/k, ↑/↓       Navigate plans list
@@ -112,18 +79,72 @@ SETTINGS:
 GENERAL:
   S              Open settings
   ?              Toggle this help screen
-  q, Ctrl+C      Quit application
+  q, Ctrl+C      Quit application`
 
-Press '?' or 'Esc' to close this help screen
-`
+// HelpScreen displays keyboard shortcuts and help information.
+type HelpScreen struct {
+	width    int
+	height   int
+	viewport viewport.Model
+}
 
-	return "\n\n" + styles.HelpBoxStyle(s.width).Render(helpText)
+// NewHelpScreen creates a new help screen.
+func NewHelpScreen(width, height int) *HelpScreen {
+	s := &HelpScreen{width: width, height: height}
+	s.viewport = viewport.New(s.vpWidth(), s.vpHeight())
+	s.viewport.SetContent(helpContent)
+	return s
+}
+
+func (s *HelpScreen) vpWidth() int {
+	// box: Width(width-4) content area, Padding(2,4) = 8 LR, Border = 2 LR → content = width-14
+	w := s.width - 14
+	if w < 20 {
+		return 20
+	}
+	return w
+}
+
+func (s *HelpScreen) vpHeight() int {
+	// "\n\n" (2) + border top (1) + padding top (2) + padding bot (2) + border bot (1) = 8
+	h := s.height - 8
+	if h < 5 {
+		return 5
+	}
+	return h
+}
+
+// Init initializes the screen.
+func (s *HelpScreen) Init() tea.Cmd {
+	return nil
+}
+
+// Update handles messages.
+func (s *HelpScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
+	if key, ok := msg.(tea.KeyMsg); ok {
+		switch key.String() {
+		case "?", "esc", "q":
+			return s, func() tea.Msg {
+				return messages.CloseHelpMsg{}
+			}
+		}
+	}
+	var cmd tea.Cmd
+	s.viewport, cmd = s.viewport.Update(msg)
+	return s, cmd
+}
+
+// View renders the help screen.
+func (s *HelpScreen) View() string {
+	return "\n\n" + styles.HelpBoxStyle(s.width).Render(s.viewport.View())
 }
 
 // SetSize updates screen dimensions.
 func (s *HelpScreen) SetSize(width, height int) {
 	s.width = width
 	s.height = height
+	s.viewport.Width = s.vpWidth()
+	s.viewport.Height = s.vpHeight()
 }
 
 // ShortHelp returns key binding help.
@@ -133,5 +154,10 @@ func (s *HelpScreen) ShortHelp() string {
 
 // IsInputMode returns true when capturing text input.
 func (s *HelpScreen) IsInputMode() bool {
+	return false
+}
+
+// EditorMode ...
+func (s *HelpScreen) EditorMode() bool {
 	return false
 }

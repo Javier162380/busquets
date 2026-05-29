@@ -472,11 +472,11 @@ func (r *Repository) ListAllPlansWithPagination(ctx context.Context, params dto.
 }
 
 func (r *Repository) SearchPlans(ctx context.Context, params dto.SearchParams) ([]dto.PlanSummary, error) {
-	return r.searchPlansDynamic(ctx, "%" + params.Query + "%", params.SearchOver)
+	return r.searchPlansDynamic(ctx, "%"+params.Query+"%", params.SearchOver)
 }
 
 func (r *Repository) SearchPlansWithPagination(ctx context.Context, params dto.SearchPaginationParams) ([]dto.PlanSummary, error) {
-	return r.searchPlansPaginationDynamic(ctx, "%" + params.Query + "%", params)
+	return r.searchPlansPaginationDynamic(ctx, "%"+params.Query+"%", params)
 }
 
 func (r *Repository) searchPlansDynamic(ctx context.Context, pattern string, searchOver dto.SearchField) ([]dto.PlanSummary, error) {
@@ -1210,5 +1210,4 @@ func (r *Repository) queryPlanSummaries(ctx context.Context, q string, args ...i
 		})
 	}
 	return result, rows.Err()
-
 }

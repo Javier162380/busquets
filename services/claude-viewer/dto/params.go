@@ -57,9 +57,9 @@ type DeleteVersionsParams struct {
 
 // SearchParams contains parameters for searching plans.
 type SearchParams struct {
-	Query      string                // Will be used for both title and content LIKE search
-	TagNames   []string              // Tag names to filter by
-	MatchAll   bool                  // true = AND logic (all tags must match), false = OR logic (any tag can match)
+	Query      string      // Will be used for both title and content LIKE search
+	TagNames   []string    // Tag names to filter by
+	MatchAll   bool        // true = AND logic (all tags must match), false = OR logic (any tag can match)
 	SearchOver SearchField // which fields to search: all, plan_name, or content
 }
 

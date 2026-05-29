@@ -24,4 +24,7 @@ type Screen interface {
 
 	// IsInputMode returns true when the screen is capturing text input.
 	IsInputMode() bool
+
+	// EditorMode returns true when the screen is on an edit focus.
+	EditorMode() bool
 }

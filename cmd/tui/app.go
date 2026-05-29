@@ -110,7 +110,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		a.statusBar.ClearMessages()
-		if msg.String() == "?" {
+		currentScreen := a.stack[len(a.stack)-1]
+		if msg.String() == "?" && !currentScreen.EditorMode() {
 			a.showHelp = !a.showHelp
 			if a.showHelp && a.help == nil {
 				a.help = screens.NewHelpScreen(a.width, a.height)
@@ -121,10 +122,11 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, tea.Quit
 		}
 		if a.showHelp {
-			if msg.String() == "esc" || msg.String() == "?" {
-				a.showHelp = false
+			newScreen, cmd := a.help.Update(msg)
+			if h, ok := newScreen.(*screens.HelpScreen); ok {
+				a.help = h
 			}
-			return a, nil
+			return a, cmd
 		}
 	case messages.PopScreenMsg:
 		return a, a.popScreen()
