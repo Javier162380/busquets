@@ -142,21 +142,14 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.VersionErrorMsg:
 		a.statusBar.SetError(msg.Error.Error())
 		return a, commands.ClearStatusCmdWithDefaultDuration()
-	case messages.PlansLoadedMsg:
+	case messages.PlansLoadedMsg, messages.AllTagsForPanelLoadedMsg:
 		return a.delegateToPlansScreen(msg)
-	case messages.PlanDetailLoadedMsg:
-		return a.delegateToCurrentScreen(msg)
-	case messages.VersionsLoadedMsg:
-		return a.delegateToCurrentScreen(msg)
-	case messages.SettingsLoadedMsg:
-		return a.delegateToCurrentScreen(msg)
-	case messages.ConnectorsLoadedMsg:
-		return a.delegateToCurrentScreen(msg)
-	case messages.ConnectorSettingsLoadedMsg:
-		return a.delegateToCurrentScreen(msg)
-	case messages.AllTagsForPanelLoadedMsg:
-		return a.delegateToPlansScreen(msg)
-	case components.TagsLoadedMsg:
+	case messages.PlanDetailLoadedMsg,
+		messages.VersionsLoadedMsg,
+		messages.SettingsLoadedMsg,
+		messages.ConnectorsLoadedMsg,
+		messages.ConnectorSettingsLoadedMsg,
+		components.TagsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 	case messages.LoadPlanDetailMsg:
 		return a, commands.LoadPlanDetailCmd(a.ctx, a.service, msg.FileName)
@@ -214,10 +207,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleRenderMarkdownChanged(msg)
 	case messages.DisplayModeChangedMsg:
 		return a.handleDisplayModeChanged(msg)
-	case messages.PlansSortKeyChangedMsg:
-		return a.handlePlansSortKeyChanged(msg)
-	case messages.PlansSortDirChangedMsg:
-		return a.handlePlansSortDirChanged(msg)
+	case messages.PlansSortKeyChangedMsg, messages.PlansSortDirChangedMsg:
+		return a, a.reloadPlans()
 	case messages.OpenConnectorsMsg:
 		return a, a.pushConnectorsScreen()
 	case messages.EnableConnectorMsg:
