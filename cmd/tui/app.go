@@ -152,13 +152,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		components.TagsLoadedMsg:
 		return a.delegateToCurrentScreen(msg)
 	case messages.LoadPlanDetailMsg:
-		return a, commands.LoadPlanDetailCmd(a.ctx, a.service, msg.FileName)
+		return a, commands.LoadPlanDetailCmd(a.ctx, a.service, msg.FileName, msg.SyncSource)
 	case messages.SavePlanMsg:
-		return a, commands.SavePlanCmd(a.ctx, a.service, msg.FileName, msg.Content, msg.Modified)
+		return a, commands.SavePlanCmd(a.ctx, a.service, msg.FileName, msg.SyncSource, msg.Content, msg.Modified)
 	case messages.LoadVersionsMsg:
-		return a, commands.LoadVersionsCmd(a.ctx, a.service, msg.PlanName)
+		return a, commands.LoadVersionsCmd(a.ctx, a.service, msg.PlanName, msg.SyncSource)
 	case messages.SearchVersionsMsg:
-		return a, commands.SearchVersionsCmd(a.ctx, a.service, msg.PlanName, msg.Query)
+		return a, commands.SearchVersionsCmd(a.ctx, a.service, msg.PlanName, msg.SyncSource, msg.Query)
 	case messages.ClearSearchMsg:
 		return a, commands.LoadPlansCmd(a.ctx, a.service)
 	case messages.SearchPlansMsg:
@@ -168,7 +168,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.LoadUntaggedPlansMsg:
 		return a, commands.LoadUntaggedPlansCmd(a.ctx, a.service)
 	case messages.LoadTagsForModalMsg:
-		return a, commands.LoadTagsForModalCmd(a.ctx, a.service, msg.FileName)
+		return a, commands.LoadTagsForModalCmd(a.ctx, a.service, msg.FileName, msg.SyncSource)
 	case messages.LoadAllTagsForPanelMsg:
 		return a, commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
 	case messages.LoadSettingsMsg:

@@ -33,8 +33,9 @@ func (s *Server) handleIndex(c echo.Context) error {
 func (s *Server) handleViewPlan(c echo.Context) error {
 	ctx := c.Request().Context()
 	fileName := c.Param("filename")
+	syncSource := s.service.SourcePathForLabel(c.Param("source"))
 
-	planDetail, err := s.service.GetPlanDetailByFileName(ctx, fileName)
+	planDetail, err := s.service.GetPlanDetailByFileName(ctx, fileName, syncSource)
 	if err != nil {
 		return c.String(http.StatusNotFound, "Plan not found")
 	}
@@ -79,6 +80,7 @@ func (s *Server) handleUpdatePlan(c echo.Context) error {
 
 	result, err := s.service.UpdatePlan(ctx, claudeviewer.UpdatePlanRequest{
 		FileName:         req.FileName,
+		SyncSource:       s.service.SourcePathForLabel(req.SyncSource),
 		NewContent:       req.Content,
 		LastModifiedTime: req.LastModifiedTime,
 		Force:            req.Force,
@@ -120,6 +122,7 @@ func (s *Server) handleSavePlanLocal(c echo.Context) error {
 
 	result, err := s.service.SavePlanLocal(ctx, claudeviewer.UpdatePlanRequest{
 		FileName:         req.FileName,
+		SyncSource:       s.service.SourcePathForLabel(req.SyncSource),
 		NewContent:       req.Content,
 		LastModifiedTime: req.LastModifiedTime,
 		Force:            req.Force,
@@ -325,8 +328,9 @@ func (s *Server) handleGetPlanVersionHistory(c echo.Context) error {
 		})
 	}
 
+	syncSource := s.service.SourcePathForLabel(c.Param("source"))
 	// Fetch versions with pagination
-	versions, err := s.service.GetPlanVersionHistory(ctx, planName, token.Offset, pageSize)
+	versions, err := s.service.GetPlanVersionHistory(ctx, planName, syncSource, token.Offset, pageSize)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "Failed to fetch version history",
@@ -373,8 +377,9 @@ func (s *Server) handleGetPlanVersion(c echo.Context) error {
 		})
 	}
 
+	syncSource := s.service.SourcePathForLabel(c.Param("source"))
 	// Get version from service
-	version, err := s.service.GetPlanVersion(ctx, planName, versionNumber)
+	version, err := s.service.GetPlanVersion(ctx, planName, syncSource, versionNumber)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, ErrorResponse{
 			Error:   "Version not found",
@@ -408,8 +413,9 @@ func (s *Server) handleRestorePlanVersion(c echo.Context) error {
 		})
 	}
 
+	syncSource := s.service.SourcePathForLabel(c.Param("source"))
 	// Restore the version
-	err = s.service.RestorePlanVersion(ctx, planName, versionNumber)
+	err = s.service.RestorePlanVersion(ctx, planName, syncSource, versionNumber)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, RestoreVersionResponse{
 			Success: false,
@@ -427,9 +433,9 @@ func (s *Server) handleRestorePlanVersion(c echo.Context) error {
 func (s *Server) handleViewPlanVersions(c echo.Context) error {
 	ctx := c.Request().Context()
 	planName := c.Param("planName")
+	syncSource := s.service.SourcePathForLabel(c.Param("source"))
 
-	// Verify plan exists
-	_, err := s.service.GetPlanByFileName(ctx, planName)
+	_, err := s.service.GetPlanByFileName(ctx, planName, syncSource)
 	if err != nil {
 		return c.String(http.StatusNotFound, "Plan not found")
 	}
@@ -446,25 +452,23 @@ func (s *Server) handleViewPlanVersions(c echo.Context) error {
 func (s *Server) handleSearchVersions(c echo.Context) error {
 	ctx := c.Request().Context()
 	planName := c.Param("planName")
+	syncSource := s.service.SourcePathForLabel(c.Param("source"))
 	query := c.QueryParam("q")
 
-	// Verify plan exists
-	_, err := s.service.GetPlanByFileName(ctx, planName)
+	_, err := s.service.GetPlanByFileName(ctx, planName, syncSource)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, ErrorResponse{
 			Error: "Plan not found",
 		})
 	}
 
-	// Return error if query is empty
 	if query == "" {
 		return c.JSON(http.StatusBadRequest, ErrorResponse{
 			Error: "Search query is required",
 		})
 	}
 
-	// Search versions
-	versions, err := s.service.SearchVersions(ctx, planName, query)
+	versions, err := s.service.SearchVersions(ctx, planName, syncSource, query)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, ErrorResponse{
 			Error:   "Search failed",

@@ -10,12 +10,12 @@ import (
 type Repository interface {
 	// Plan operations
 	CountPlans(ctx context.Context) (int64, error)
-	GetPlanByFileName(ctx context.Context, fileName string) (Plan, error)
+	GetPlanByFileName(ctx context.Context, fileName, syncSource string) (Plan, error)
 	InsertPlan(ctx context.Context, params InsertPlanParams) error
 	UpdatePlan(ctx context.Context, params UpdatePlanParams) error
 	InsertPlanWithTags(ctx context.Context, params InsertPlanWithTagsParams) error
 	UpdatePlanWithTags(ctx context.Context, params UpdatePlanWithTagsParams) error
-	DeletePlan(ctx context.Context, fileName string) error
+	DeletePlan(ctx context.Context, fileName, syncSource string) error
 	ListAllPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]PlanSummary, error)
 	ListAllPlansWithPagination(ctx context.Context, params PaginationParams) ([]PlanSummary, error)
 	SearchPlans(ctx context.Context, params SearchParams) ([]PlanSummary, error)

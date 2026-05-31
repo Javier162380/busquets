@@ -71,7 +71,7 @@ func (a *App) handleValidateConnectorResult(msg messages.ValidateConnectorResult
 func (a *App) handleSendToConnector(msg messages.SendToConnectorMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Sending to connector...")
 	return a, tea.Batch(
-		commands.SendToConnectorCmd(a.ctx, a.service, msg.PlanFileName),
+		commands.SendToConnectorCmd(a.ctx, a.service, msg.PlanFileName, msg.SyncSource),
 		commands.ClearStatusCmdWithDefaultDuration(),
 	)
 }
@@ -87,12 +87,12 @@ func (a *App) handleSendToConnectorResult(msg messages.SendToConnectorResultMsg)
 
 func (a *App) handleGenerateTLDR(msg messages.GenerateTLDRMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Generating summary...")
-	return a, commands.GenerateTLDRCmd(a.ctx, a.service, msg.FileName)
+	return a, commands.GenerateTLDRCmd(a.ctx, a.service, msg.FileName, msg.SyncSource)
 }
 
 func (a *App) handleRegenerateTLDR(msg messages.RegenerateTLDRMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Regenerating summary...")
-	return a, commands.RegenerateTLDRCmd(a.ctx, a.service, msg.FileName)
+	return a, commands.RegenerateTLDRCmd(a.ctx, a.service, msg.FileName, msg.SyncSource)
 }
 
 func (a *App) handleTLDRGenerated(msg messages.TLDRGeneratedMsg) (tea.Model, tea.Cmd) {

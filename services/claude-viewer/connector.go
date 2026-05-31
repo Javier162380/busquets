@@ -7,13 +7,12 @@ import (
 )
 
 // SendToConnector sends a plan to the enabled connector.
-func (s *Service) SendToConnector(ctx context.Context, planFileName string) error {
+func (s *Service) SendToConnector(ctx context.Context, planFileName, syncSource string) error {
 	if s.connectorManager == nil {
 		return dto.ErrConnectorDisabled
 	}
 
-	// Get the plan content
-	plan, err := s.GetPlanDetailByFileName(ctx, planFileName)
+	plan, err := s.GetPlanDetailByFileName(ctx, planFileName, syncSource)
 	if err != nil {
 		return err
 	}
@@ -143,14 +142,15 @@ func (s *Service) ValidateConnector(ctx context.Context, connectorName string) e
 
 // GenerateSummary generates a TLDR summary of a plan using the configured summarizer connector.
 // On a cache hit the result is returned immediately without calling the connector.
-func (s *Service) GenerateSummary(ctx context.Context, planFileName string) (string, error) {
+func (s *Service) GenerateSummary(ctx context.Context, planFileName, syncSource string) (string, error) {
 	if s.connectorManager == nil {
 		return "", dto.ErrConnectorDisabled
 	}
-	if cached, err := s.summaryCache.Get(planFileName); err == nil {
+	cacheKey := planFileName + ":" + syncSource
+	if cached, err := s.summaryCache.Get(cacheKey); err == nil {
 		return cached, nil
 	}
-	plan, err := s.GetPlanDetailByFileName(ctx, planFileName)
+	plan, err := s.GetPlanDetailByFileName(ctx, planFileName, syncSource)
 	if err != nil {
 		return "", err
 	}
@@ -158,16 +158,16 @@ func (s *Service) GenerateSummary(ctx context.Context, planFileName string) (str
 	if err != nil {
 		return "", err
 	}
-	s.summaryCache.Set(planFileName, summary)
+	s.summaryCache.Set(cacheKey, summary)
 	return summary, nil
 }
 
 // RegenerateSummary bypasses the cache, calls the connector, and updates the cache entry.
-func (s *Service) RegenerateSummary(ctx context.Context, planFileName string) (string, error) {
+func (s *Service) RegenerateSummary(ctx context.Context, planFileName, syncSource string) (string, error) {
 	if s.connectorManager == nil {
 		return "", dto.ErrConnectorDisabled
 	}
-	plan, err := s.GetPlanDetailByFileName(ctx, planFileName)
+	plan, err := s.GetPlanDetailByFileName(ctx, planFileName, syncSource)
 	if err != nil {
 		return "", err
 	}
@@ -175,7 +175,8 @@ func (s *Service) RegenerateSummary(ctx context.Context, planFileName string) (s
 	if err != nil {
 		return "", err
 	}
-	s.summaryCache.Set(planFileName, summary)
+	cacheKey := planFileName + ":" + syncSource
+	s.summaryCache.Set(cacheKey, summary)
 	return summary, nil
 }
 

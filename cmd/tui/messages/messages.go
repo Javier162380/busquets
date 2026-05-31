@@ -34,14 +34,16 @@ type PlanDetailLoadedMsg struct {
 
 // LoadPlanDetailMsg requests loading a plan detail.
 type LoadPlanDetailMsg struct {
-	FileName string
+	FileName   string
+	SyncSource string
 }
 
 // SavePlanMsg requests saving a plan.
 type SavePlanMsg struct {
-	FileName string
-	Content  string
-	Modified time.Time
+	FileName   string
+	SyncSource string
+	Content    string
+	Modified   time.Time
 }
 
 // SyncPlansMsg requests syncing plans.
@@ -96,24 +98,28 @@ type CreateTagResultMsg struct {
 
 // OpenTagModalMsg requests opening the tag modal for a plan.
 type OpenTagModalMsg struct {
-	FileName string
+	FileName   string
+	SyncSource string
 }
 
 // LoadTagsForModalMsg requests loading tags for the modal.
 type LoadTagsForModalMsg struct {
-	FileName string
+	FileName   string
+	SyncSource string
 }
 
 // SavePlanTagsMsg requests saving tags for a plan.
 type SavePlanTagsMsg struct {
-	FileName string
-	Tags     []string
+	FileName   string
+	SyncSource string
+	Tags       []string
 }
 
 // SetPlanTagsMsg requests setting tags via service layer.
 type SetPlanTagsMsg struct {
-	FileName string
-	Tags     []string
+	FileName   string
+	SyncSource string
+	Tags       []string
 }
 
 // FilterByTagsMsg requests filtering plans by tags.
@@ -237,6 +243,7 @@ type ValidateConnectorResultMsg struct {
 // SendToConnectorMsg requests sending current plan to connector.
 type SendToConnectorMsg struct {
 	PlanFileName string
+	SyncSource   string
 }
 
 // SendToConnectorResultMsg is the result of sending to connector.
@@ -247,12 +254,14 @@ type SendToConnectorResultMsg struct {
 
 // GenerateTLDRMsg requests generating a TLDR summary for a plan.
 type GenerateTLDRMsg struct {
-	FileName string
+	FileName   string
+	SyncSource string
 }
 
 // RegenerateTLDRMsg requests a fresh TLDR summary, bypassing the in-memory cache.
 type RegenerateTLDRMsg struct {
-	FileName string
+	FileName   string
+	SyncSource string
 }
 
 // TLDRGeneratedMsg carries the generated TLDR summary.
@@ -320,18 +329,21 @@ type WatchModeApplyMsg struct {
 
 // RequestVersionsScreenMsg requests checking versions before navigation.
 type RequestVersionsScreenMsg struct {
-	PlanName string
+	PlanName   string
+	SyncSource string
 }
 
 // VersionsNavigationResultMsg carries the result of a version check.
 type VersionsNavigationResultMsg struct {
-	PlanName string
-	Versions []claudeviewer.PlanVersionDetail
+	PlanName   string
+	SyncSource string
+	Versions   []claudeviewer.PlanVersionDetail
 }
 
 // LoadVersionsMsg requests loading versions for a plan.
 type LoadVersionsMsg struct {
-	PlanName string
+	PlanName   string
+	SyncSource string
 }
 
 // VersionsLoadedMsg is sent when versions are loaded.
@@ -347,6 +359,7 @@ type VersionErrorMsg struct {
 // RestoreVersionMsg requests restoring a version.
 type RestoreVersionMsg struct {
 	PlanName      string
+	SyncSource    string
 	VersionNumber int64
 }
 
@@ -359,8 +372,9 @@ type RestoreResultMsg struct {
 
 // SearchVersionsMsg requests searching within a plan's versions.
 type SearchVersionsMsg struct {
-	PlanName string
-	Query    string
+	PlanName   string
+	SyncSource string
+	Query      string
 }
 
 // ClearVersionSearchMsg requests clearing the version search.

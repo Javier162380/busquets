@@ -20,7 +20,6 @@ type ConnectorsScreen struct {
 	selectedConn    int
 	selectedSetting int
 	currentConnName string
-
 	// Focus: left panel (connectors) or right panel (settings)
 	focusRight bool
 	editing    bool

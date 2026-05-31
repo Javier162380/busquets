@@ -14,6 +14,7 @@ import (
 	"time"
 
 	planviewer "github.com/Javier162380/claude-plan-viewer"
+	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
 	connectors_test "github.com/Javier162380/claude-plan-viewer/internal/connectors/test"
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
@@ -116,7 +117,7 @@ func setupTestServiceBackendSQLite(t *testing.T) (*Service, string, string, func
 	db, err := newTestRepository(ctx, dbPath)
 	require.NoError(t, err)
 
-	service, err := New(db, viewerDir, sourcePlansDir, true)
+	service, err := New(db, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
 	require.NoError(t, err)
 
 	fixedTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
@@ -172,7 +173,7 @@ func setupTestServiceBackendPostgres(t *testing.T) (*Service, string, string, fu
 	require.NoError(t, os.MkdirAll(viewerDir, 0o755))
 	require.NoError(t, os.MkdirAll(sourcePlansDir, 0o755))
 
-	svc, err := New(repo, viewerDir, sourcePlansDir, true)
+	svc, err := New(repo, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
 	require.NoError(t, err)
 
 	fixedTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
@@ -424,7 +425,7 @@ func testSyncOperations(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, err)
 		require.Equal(t, 1, count)
 
-		plan, err := service.GetPlanByFileName(ctx, "test-plan.md")
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, "Test Plan", plan.Title)
 		require.Greater(t, plan.WordCount, int64(0))
@@ -447,7 +448,7 @@ func testSyncOperations(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, err)
 		require.Equal(t, 1, count)
 
-		plan, err := service.GetPlanByFileName(ctx, "test-plan.md")
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, "Updated Plan", plan.Title)
 	})
@@ -507,7 +508,7 @@ func testSyncOperations(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plan, err := service.GetPlanByFileName(ctx, "test-plan.md")
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, int64(101), plan.WordCount)
 	})
@@ -554,7 +555,7 @@ func testRSyncOperations(t *testing.T, setup serviceSetupFn) {
 		content, err := os.ReadFile(filepath.Join(sourcePlansDir, "test-plan.md"))
 		require.NoError(t, err)
 		require.Equal(t, sampleMarkdown, string(content))
-		content, err = os.ReadFile(filepath.Join(viewerDir, "test-plan.md"))
+		content, err = os.ReadFile(filepath.Join(viewerDir, "test", "test-plan.md"))
 		require.NoError(t, err)
 		require.Equal(t, sampleMarkdown, string(content))
 	})
@@ -585,7 +586,7 @@ func testRSyncOperations(t *testing.T, setup serviceSetupFn) {
 
 		// Remove from both locations — nothing can be restored.
 		require.NoError(t, os.Remove(filepath.Join(sourcePlansDir, "test-plan.md")))
-		require.NoError(t, os.Remove(filepath.Join(viewerDir, "test-plan.md")))
+		require.NoError(t, os.Remove(filepath.Join(viewerDir, "test", "test-plan.md")))
 
 		count, err := service.RSyncPlans(ctx)
 		require.NoError(t, err)
@@ -872,7 +873,7 @@ func testPlanRetrieval(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plan, err := service.GetPlanByFileName(ctx, "test-plan.md")
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.NotNil(t, plan)
 		require.Equal(t, "test-plan.md", plan.FileName)
@@ -880,11 +881,11 @@ func testPlanRetrieval(t *testing.T, setup serviceSetupFn) {
 	})
 
 	t.Run("GetPlanByFileName returns error for non-existent file", func(t *testing.T) {
-		service, _, _, cleanup := setup(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		_, err := service.GetPlanByFileName(ctx, "non-existent.md")
+		_, err := service.GetPlanByFileName(ctx, "non-existent.md", sourcePlansDir)
 		require.Error(t, err)
 	})
 
@@ -897,7 +898,7 @@ func testPlanRetrieval(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		detail, err := service.GetPlanDetailByFileName(ctx, "test-plan.md")
+		detail, err := service.GetPlanDetailByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.NotNil(t, detail)
 		require.Equal(t, "Test Plan", detail.Title)
@@ -907,11 +908,11 @@ func testPlanRetrieval(t *testing.T, setup serviceSetupFn) {
 	})
 
 	t.Run("GetPlanDetailByFileName returns error for non-existent file", func(t *testing.T) {
-		service, _, _, cleanup := setup(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
-		_, err := service.GetPlanDetailByFileName(ctx, "non-existent.md")
+		_, err := service.GetPlanDetailByFileName(ctx, "non-existent.md", sourcePlansDir)
 		require.Error(t, err)
 	})
 
@@ -925,7 +926,7 @@ func testPlanRetrieval(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		detail, err := service.GetPlanDetailByFileName(ctx, "long-plan.md")
+		detail, err := service.GetPlanDetailByFileName(ctx, "long-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, 3, detail.ReadingTime)
 	})
@@ -951,10 +952,11 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plan, err := service.GetPlanByFileName(ctx, "test-plan.md")
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 
 		result, err := service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource:       sourcePlansDir,
 			FileName:         "test-plan.md",
 			NewContent:       sampleMarkdownUpdated,
 			LastModifiedTime: plan.ModifiedAt,
@@ -963,7 +965,7 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		require.True(t, result.Success)
 		require.False(t, result.HasConflict)
 
-		updatedPlan, err := service.GetPlanByFileName(ctx, "test-plan.md")
+		updatedPlan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, "Updated Plan", updatedPlan.Title)
 
@@ -971,7 +973,7 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, err)
 		require.Equal(t, sampleMarkdownUpdated, string(sourceContent))
 
-		viewerContent, err := os.ReadFile(filepath.Join(viewerDir, "test-plan.md"))
+		viewerContent, err := os.ReadFile(filepath.Join(viewerDir, "test", "test-plan.md"))
 		require.NoError(t, err)
 		require.Equal(t, sampleMarkdownUpdated, string(viewerContent))
 	})
@@ -985,13 +987,14 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plan, err := service.GetPlanByFileName(ctx, "test-plan.md")
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 
 		time.Sleep(10 * time.Millisecond)
 		createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# External Change\n\nModified externally")
 
 		result, err := service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource:       sourcePlansDir,
 			FileName:         "test-plan.md",
 			NewContent:       sampleMarkdownUpdated,
 			LastModifiedTime: plan.ModifiedAt,
@@ -1012,12 +1015,13 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plan, err := service.GetPlanByFileName(ctx, "test-plan.md")
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		originalWordCount := plan.WordCount
 
 		longContent := "# Updated\n\n" + strings.Repeat("word ", 300)
 		result, err := service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource:       sourcePlansDir,
 			FileName:         "test-plan.md",
 			NewContent:       longContent,
 			LastModifiedTime: plan.ModifiedAt,
@@ -1025,7 +1029,7 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, err)
 		require.True(t, result.Success)
 
-		updatedPlan, err := service.GetPlanByFileName(ctx, "test-plan.md")
+		updatedPlan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Greater(t, updatedPlan.WordCount, originalWordCount)
 		require.Equal(t, int64(301), updatedPlan.WordCount)
@@ -1040,10 +1044,11 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		plan, err := service.GetPlanByFileName(ctx, "test-plan.md")
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 
 		result, err := service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource:       sourcePlansDir,
 			FileName:         "test-plan.md",
 			NewContent:       sampleMarkdownUpdated,
 			LastModifiedTime: plan.ModifiedAt,
@@ -1051,7 +1056,7 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, err)
 		require.True(t, result.Success)
 
-		updatedPlan, err := service.GetPlanByFileName(ctx, "test-plan.md")
+		updatedPlan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.True(t, updatedPlan.ModifiedAt.After(plan.ModifiedAt) || updatedPlan.ModifiedAt.Equal(plan.ModifiedAt))
 		require.True(t, updatedPlan.IndexedAt.After(plan.IndexedAt) || updatedPlan.IndexedAt.Equal(plan.IndexedAt))
@@ -1298,7 +1303,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SavePlanVersion(ctx, "test-plan.md", sampleMarkdown)
+		err = service.SavePlanVersion(ctx, "test-plan.md", sourcePlansDir, sampleMarkdown)
 		require.NoError(t, err)
 
 		versionDir := filepath.Join(service.viewerDir, "versions", "test-plan.md")
@@ -1316,13 +1321,13 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SavePlanVersion(ctx, "version-test.md", sampleMarkdown)
+		err = service.SavePlanVersion(ctx, "version-test.md", sourcePlansDir, sampleMarkdown)
 		require.NoError(t, err)
 
-		err = service.SavePlanVersion(ctx, "version-test.md", sampleMarkdownUpdated)
+		err = service.SavePlanVersion(ctx, "version-test.md", sourcePlansDir, sampleMarkdownUpdated)
 		require.NoError(t, err)
 
-		count, err := service.GetVersionCount(ctx, "version-test.md")
+		count, err := service.GetVersionCount(ctx, "version-test.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, int64(2), count)
 	})
@@ -1336,12 +1341,12 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		require.NoError(t, err)
 
 		for i := 0; i < 3; i++ {
-			err = service.SavePlanVersion(ctx, "history-test.md", fmt.Sprintf("# Version %d\n\nContent %d", i+1, i+1))
+			err = service.SavePlanVersion(ctx, "history-test.md", sourcePlansDir, fmt.Sprintf("# Version %d\n\nContent %d", i+1, i+1))
 			require.NoError(t, err)
 			time.Sleep(10 * time.Millisecond)
 		}
 
-		versions, err := service.GetPlanVersionHistory(ctx, "history-test.md", 0, 10)
+		versions, err := service.GetPlanVersionHistory(ctx, "history-test.md", sourcePlansDir, 0, 10)
 		require.NoError(t, err)
 		require.Equal(t, 3, len(versions))
 
@@ -1359,10 +1364,10 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		require.NoError(t, err)
 
 		testContent := "# Specific Version\n\nThis is version 1"
-		err = service.SavePlanVersion(ctx, "specific-version.md", testContent)
+		err = service.SavePlanVersion(ctx, "specific-version.md", sourcePlansDir, testContent)
 		require.NoError(t, err)
 
-		version, err := service.GetPlanVersion(ctx, "specific-version.md", 1)
+		version, err := service.GetPlanVersion(ctx, "specific-version.md", sourcePlansDir, 1)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), version.VersionNumber)
 		require.Equal(t, testContent, version.Content)
@@ -1376,16 +1381,16 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		count, err := service.GetVersionCount(ctx, "count-test.md")
+		count, err := service.GetVersionCount(ctx, "count-test.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), count)
 
 		for i := 0; i < 5; i++ {
-			err = service.SavePlanVersion(ctx, "count-test.md", fmt.Sprintf("Version %d", i+1))
+			err = service.SavePlanVersion(ctx, "count-test.md", sourcePlansDir, fmt.Sprintf("Version %d", i+1))
 			require.NoError(t, err)
 		}
 
-		count, err = service.GetVersionCount(ctx, "count-test.md")
+		count, err = service.GetVersionCount(ctx, "count-test.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, int64(5), count)
 	})
@@ -1398,7 +1403,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SavePlanVersion(ctx, "consistency-test.md", sampleMarkdown)
+		err = service.SavePlanVersion(ctx, "consistency-test.md", sourcePlansDir, sampleMarkdown)
 		require.NoError(t, err)
 
 		versionDir := filepath.Join(service.viewerDir, "versions", "consistency-test.md")
@@ -1406,7 +1411,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		require.NoError(t, err)
 		initialCount := len(entries)
 
-		count, err := service.GetVersionCount(ctx, "consistency-test.md")
+		count, err := service.GetVersionCount(ctx, "consistency-test.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, int64(1), count)
 		require.Equal(t, initialCount, 1)
@@ -1421,22 +1426,22 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		require.NoError(t, err)
 
 		for i := 1; i <= 7; i++ {
-			err = service.SavePlanVersion(ctx, "cleanup-test.md", fmt.Sprintf("# Version %d", i))
+			err = service.SavePlanVersion(ctx, "cleanup-test.md", sourcePlansDir, fmt.Sprintf("# Version %d", i))
 			require.NoError(t, err)
 		}
 
-		count, err := service.GetVersionCount(ctx, "cleanup-test.md")
+		count, err := service.GetVersionCount(ctx, "cleanup-test.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, int64(7), count)
 
-		err = service.CleanupOldVersions(ctx, "cleanup-test.md", 5)
+		err = service.CleanupOldVersions(ctx, "cleanup-test.md", sourcePlansDir, 5)
 		require.NoError(t, err)
 
-		count, err = service.GetVersionCount(ctx, "cleanup-test.md")
+		count, err = service.GetVersionCount(ctx, "cleanup-test.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, int64(5), count)
 
-		versions, err := service.GetPlanVersionHistory(ctx, "cleanup-test.md", 0, 10)
+		versions, err := service.GetPlanVersionHistory(ctx, "cleanup-test.md", sourcePlansDir, 0, 10)
 		require.NoError(t, err)
 		require.Equal(t, 5, len(versions))
 		require.Equal(t, int64(7), versions[0].VersionNumber)
@@ -1450,10 +1455,10 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SavePlanVersion(ctx, "markdown-test.md", sampleMarkdownWithCode)
+		err = service.SavePlanVersion(ctx, "markdown-test.md", sourcePlansDir, sampleMarkdownWithCode)
 		require.NoError(t, err)
 
-		version, err := service.GetPlanVersion(ctx, "markdown-test.md", 1)
+		version, err := service.GetPlanVersion(ctx, "markdown-test.md", sourcePlansDir, 1)
 		require.NoError(t, err)
 
 		require.Equal(t, sampleMarkdownWithCode, version.Content)
@@ -1469,10 +1474,10 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SavePlanVersion(ctx, "wordcount-test.md", sampleMarkdown)
+		err = service.SavePlanVersion(ctx, "wordcount-test.md", sourcePlansDir, sampleMarkdown)
 		require.NoError(t, err)
 
-		version, err := service.GetPlanVersion(ctx, "wordcount-test.md", 1)
+		version, err := service.GetPlanVersion(ctx, "wordcount-test.md", sourcePlansDir, 1)
 		require.NoError(t, err)
 
 		require.Greater(t, version.WordCount, int64(0))
@@ -1489,15 +1494,15 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		require.NoError(t, err)
 
 		for i := 1; i <= 10; i++ {
-			err = service.SavePlanVersion(ctx, "pagination-test.md", fmt.Sprintf("# Version %d", i))
+			err = service.SavePlanVersion(ctx, "pagination-test.md", sourcePlansDir, fmt.Sprintf("# Version %d", i))
 			require.NoError(t, err)
 		}
 
-		page1, err := service.GetPlanVersionHistory(ctx, "pagination-test.md", 0, 3)
+		page1, err := service.GetPlanVersionHistory(ctx, "pagination-test.md", sourcePlansDir, 0, 3)
 		require.NoError(t, err)
 		require.Equal(t, 3, len(page1))
 
-		page2, err := service.GetPlanVersionHistory(ctx, "pagination-test.md", 3, 3)
+		page2, err := service.GetPlanVersionHistory(ctx, "pagination-test.md", sourcePlansDir, 3, 3)
 		require.NoError(t, err)
 		require.Equal(t, 3, len(page2))
 
@@ -1505,7 +1510,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 	})
 
 	t.Run("SavePlanVersion fails gracefully for non-existent plan", func(t *testing.T) {
-		err := service.SavePlanVersion(ctx, "non-existent.md", "some content")
+		err := service.SavePlanVersion(ctx, "non-existent.md", sourcePlansDir, "some content")
 		require.Error(t, err)
 	})
 
@@ -1535,21 +1540,21 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		v2Content := "# Implementation\nThis is about implementation details"
 		v3Content := "# Testing\nThis is about test cases"
 
-		require.NoError(t, service.SavePlanVersion(ctx, "search-test.md", v1Content))
-		require.NoError(t, service.SavePlanVersion(ctx, "search-test.md", v2Content))
-		require.NoError(t, service.SavePlanVersion(ctx, "search-test.md", v3Content))
+		require.NoError(t, service.SavePlanVersion(ctx, "search-test.md", sourcePlansDir, v1Content))
+		require.NoError(t, service.SavePlanVersion(ctx, "search-test.md", sourcePlansDir, v2Content))
+		require.NoError(t, service.SavePlanVersion(ctx, "search-test.md", sourcePlansDir, v3Content))
 
-		results, err := service.SearchVersions(ctx, "search-test.md", "planning")
+		results, err := service.SearchVersions(ctx, "search-test.md", sourcePlansDir, "planning")
 		require.NoError(t, err)
 		require.Equal(t, 1, len(results), "should find 1 version with 'planning'")
 		require.Equal(t, int64(1), results[0].VersionNumber)
 
-		results, err = service.SearchVersions(ctx, "search-test.md", "implementation")
+		results, err = service.SearchVersions(ctx, "search-test.md", sourcePlansDir, "implementation")
 		require.NoError(t, err)
 		require.Equal(t, 1, len(results), "should find 1 version with 'implementation'")
 		require.Equal(t, int64(2), results[0].VersionNumber)
 
-		results, err = service.SearchVersions(ctx, "search-test.md", "nonexistent")
+		results, err = service.SearchVersions(ctx, "search-test.md", sourcePlansDir, "nonexistent")
 		require.NoError(t, err)
 		require.Equal(t, 0, len(results), "should find no versions with 'nonexistent'")
 	})
@@ -2035,7 +2040,7 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 		_, err = service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SendToConnector(ctx, "connector-test.md")
+		err = service.SendToConnector(ctx, "connector-test.md", sourcePlansDir)
 		require.NoError(t, err)
 
 		err = service.DisableConnector(ctx)
@@ -2066,7 +2071,7 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SendToConnector(ctx, "send-test.md")
+		err = service.SendToConnector(ctx, "send-test.md", sourcePlansDir)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "no connector enabled")
 	})
@@ -2075,7 +2080,7 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 		ctrl := gomock.NewController(t)
 		defer ctrl.Finish()
 
-		service, _, _, cleanup := setup(t)
+		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
 
@@ -2088,7 +2093,7 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 		service.SetConnectorManager(manager)
 		require.NoError(t, manager.EnableConnector(ctx, "test-conn"))
 
-		err := service.SendToConnector(ctx, "non-existent.md")
+		err := service.SendToConnector(ctx, "non-existent.md", sourcePlansDir)
 		require.Error(t, err)
 		require.True(t, dto.IsNotFound(err), "expected not found error, got: %v", err)
 	})
@@ -2167,7 +2172,7 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		result, err := service.GenerateSummary(ctx, "summary-plan.md")
+		result, err := service.GenerateSummary(ctx, "summary-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, summary, result)
 	})
@@ -2185,7 +2190,7 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		_, err = service.GenerateSummary(ctx, "no-summarizer.md")
+		_, err = service.GenerateSummary(ctx, "no-summarizer.md", sourcePlansDir)
 		require.ErrorIs(t, err, planviewer.ErrNoSummarizerConfigured)
 	})
 
@@ -2213,7 +2218,7 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 
 		require.NoError(t, service.ClearSummaryConnector(ctx))
 
-		_, err = service.GenerateSummary(ctx, "clear-summary.md")
+		_, err = service.GenerateSummary(ctx, "clear-summary.md", sourcePlansDir)
 		require.ErrorIs(t, err, planviewer.ErrNoSummarizerConfigured)
 	})
 }
@@ -2240,12 +2245,12 @@ func testConcurrentVersionSaves(t *testing.T, service *Service, sourcePlansDir s
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SavePlanVersion(ctx, "concurrent-test.md", "# Version 1")
+		err = service.SavePlanVersion(ctx, "concurrent-test.md", sourcePlansDir, "# Version 1")
 		require.NoError(t, err)
 
 		versionDir := filepath.Join(service.viewerDir, "versions", "concurrent-test.md")
 
-		plan, err := service.db.GetPlanByFileName(ctx, "concurrent-test.md")
+		plan, err := service.db.GetPlanByFileName(ctx, "concurrent-test.md", sourcePlansDir)
 		require.NoError(t, err)
 
 		fixedTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
@@ -2280,7 +2285,7 @@ func testConcurrentVersionSaves(t *testing.T, service *Service, sourcePlansDir s
 		_, err = os.Stat(versionFile)
 		require.True(t, os.IsNotExist(err), "orphaned file should have been deleted")
 
-		count, err := service.GetVersionCount(ctx, "concurrent-test.md")
+		count, err := service.GetVersionCount(ctx, "concurrent-test.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, int64(2), count, "should have 2 versions (first request succeeded, second was cleaned up)")
 
@@ -2397,16 +2402,16 @@ func testPlanTagRelationship(t *testing.T, service *Service, sourcePlansDir stri
 	require.NoError(t, err)
 
 	t.Run("GetPlanTags returns empty list for plan with no tags", func(t *testing.T) {
-		tags, err := service.GetPlanTags(ctx, "test-plan.md")
+		tags, err := service.GetPlanTags(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Empty(t, tags)
 	})
 
 	t.Run("SetPlanTags creates new tags and associates with plan", func(t *testing.T) {
-		err := service.SetPlanTags(ctx, "test-plan.md", []string{"api", "database"})
+		err := service.SetPlanTags(ctx, "test-plan.md", sourcePlansDir, []string{"api", "database"})
 		require.NoError(t, err)
 
-		tags, err := service.GetPlanTags(ctx, "test-plan.md")
+		tags, err := service.GetPlanTags(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Len(t, tags, 2)
 
@@ -2421,10 +2426,10 @@ func testPlanTagRelationship(t *testing.T, service *Service, sourcePlansDir stri
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SetPlanTags(ctx, "normalize-test.md", []string{"  Frontend  ", "BACKEND"})
+		err = service.SetPlanTags(ctx, "normalize-test.md", sourcePlansDir, []string{"  Frontend  ", "BACKEND"})
 		require.NoError(t, err)
 
-		tags, err := service.GetPlanTags(ctx, "normalize-test.md")
+		tags, err := service.GetPlanTags(ctx, "normalize-test.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Len(t, tags, 2)
 
@@ -2438,13 +2443,13 @@ func testPlanTagRelationship(t *testing.T, service *Service, sourcePlansDir stri
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SetPlanTags(ctx, "replace-test.md", []string{"old-tag"})
+		err = service.SetPlanTags(ctx, "replace-test.md", sourcePlansDir, []string{"old-tag"})
 		require.NoError(t, err)
 
-		err = service.SetPlanTags(ctx, "replace-test.md", []string{"new-tag1", "new-tag2"})
+		err = service.SetPlanTags(ctx, "replace-test.md", sourcePlansDir, []string{"new-tag1", "new-tag2"})
 		require.NoError(t, err)
 
-		tags, err := service.GetPlanTags(ctx, "replace-test.md")
+		tags, err := service.GetPlanTags(ctx, "replace-test.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Len(t, tags, 2)
 
@@ -2461,36 +2466,36 @@ func testPlanTagRelationship(t *testing.T, service *Service, sourcePlansDir stri
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SetPlanTags(ctx, "plan1.md", []string{"shared-tag"})
+		err = service.SetPlanTags(ctx, "plan1.md", sourcePlansDir, []string{"shared-tag"})
 		require.NoError(t, err)
 
 		allTagsBefore, err := service.GetAllTags(ctx)
 		require.NoError(t, err)
 		initialTagCount := len(allTagsBefore)
 
-		err = service.SetPlanTags(ctx, "plan2.md", []string{"shared-tag"})
+		err = service.SetPlanTags(ctx, "plan2.md", sourcePlansDir, []string{"shared-tag"})
 		require.NoError(t, err)
 
 		allTagsAfter, err := service.GetAllTags(ctx)
 		require.NoError(t, err)
 		require.Equal(t, initialTagCount, len(allTagsAfter))
 
-		tags1, err := service.GetPlanTags(ctx, "plan1.md")
+		tags1, err := service.GetPlanTags(ctx, "plan1.md", sourcePlansDir)
 		require.NoError(t, err)
-		tags2, err := service.GetPlanTags(ctx, "plan2.md")
+		tags2, err := service.GetPlanTags(ctx, "plan2.md", sourcePlansDir)
 		require.NoError(t, err)
 
 		require.Equal(t, tags1[0].ID, tags2[0].ID)
 	})
 
 	t.Run("SetPlanTags fails for non-existent plan", func(t *testing.T) {
-		err := service.SetPlanTags(ctx, "non-existent.md", []string{"tag"})
+		err := service.SetPlanTags(ctx, "non-existent.md", sourcePlansDir, []string{"tag"})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "failed to get plan")
 	})
 
 	t.Run("GetPlanTags fails for non-existent plan", func(t *testing.T) {
-		_, err := service.GetPlanTags(ctx, "non-existent.md")
+		_, err := service.GetPlanTags(ctx, "non-existent.md", sourcePlansDir)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "failed to get plan")
 	})
@@ -2503,13 +2508,13 @@ func testPlanTagRelationship(t *testing.T, service *Service, sourcePlansDir stri
 		tag, err := service.CreateTag(ctx, "to-delete", nil, nil)
 		require.NoError(t, err)
 
-		err = service.SetPlanTags(ctx, "delete-test.md", []string{"to-delete", "keep-tag"})
+		err = service.SetPlanTags(ctx, "delete-test.md", sourcePlansDir, []string{"to-delete", "keep-tag"})
 		require.NoError(t, err)
 
 		err = service.DeleteTag(ctx, tag.ID)
 		require.NoError(t, err)
 
-		tags, err := service.GetPlanTags(ctx, "delete-test.md")
+		tags, err := service.GetPlanTags(ctx, "delete-test.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Len(t, tags, 1)
 		require.Equal(t, "keep-tag", tags[0].Name)
@@ -2520,13 +2525,13 @@ func testPlanTagRelationship(t *testing.T, service *Service, sourcePlansDir stri
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SetPlanTags(ctx, "clear-test.md", []string{"tag1", "tag2"})
+		err = service.SetPlanTags(ctx, "clear-test.md", sourcePlansDir, []string{"tag1", "tag2"})
 		require.NoError(t, err)
 
-		err = service.SetPlanTags(ctx, "clear-test.md", []string{})
+		err = service.SetPlanTags(ctx, "clear-test.md", sourcePlansDir, []string{})
 		require.NoError(t, err)
 
-		tags, err := service.GetPlanTags(ctx, "clear-test.md")
+		tags, err := service.GetPlanTags(ctx, "clear-test.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Empty(t, tags)
 	})
@@ -2537,17 +2542,17 @@ func testPlanTagRelationship(t *testing.T, service *Service, sourcePlansDir stri
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SetPlanTags(ctx, "backend-plan.md", []string{"api", "database"})
+		err = service.SetPlanTags(ctx, "backend-plan.md", sourcePlansDir, []string{"api", "database"})
 		require.NoError(t, err)
 
-		err = service.SetPlanTags(ctx, "frontend-plan.md", []string{"ui", "react"})
+		err = service.SetPlanTags(ctx, "frontend-plan.md", sourcePlansDir, []string{"ui", "react"})
 		require.NoError(t, err)
 
-		backendTags, err := service.GetPlanTags(ctx, "backend-plan.md")
+		backendTags, err := service.GetPlanTags(ctx, "backend-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Len(t, backendTags, 2)
 
-		frontendTags, err := service.GetPlanTags(ctx, "frontend-plan.md")
+		frontendTags, err := service.GetPlanTags(ctx, "frontend-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Len(t, frontendTags, 2)
 

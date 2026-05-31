@@ -8,13 +8,12 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
-// GetPlanByFileName retrieves a plan by its file name.
-func (s *Service) GetPlanByFileName(ctx context.Context, fileName string) (*dto.Plan, error) {
-	plan, err := s.db.GetPlanByFileName(ctx, fileName)
+// GetPlanByFileName retrieves a plan by its file name and sync source.
+func (s *Service) GetPlanByFileName(ctx context.Context, fileName, syncSource string) (*dto.Plan, error) {
+	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
 	if err != nil {
 		return nil, err
 	}
-	// Get tags for the plan
 	tags, err := s.db.GetPlanTags(ctx, plan.ID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plan tags: %w", err)
@@ -34,8 +33,8 @@ func (s *Service) RenderMarkdown(content string) (string, error) {
 	return buf.String(), nil
 }
 
-func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName string) (*PlanDetail, error) {
-	plan, err := s.GetPlanByFileName(ctx, fileName)
+func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName, syncSource string) (*PlanDetail, error) {
+	plan, err := s.GetPlanByFileName(ctx, fileName, syncSource)
 	if err != nil {
 		return nil, err
 	}
@@ -52,6 +51,8 @@ func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName string) 
 		PlanSummary: PlanSummary{
 			ID:          plan.ID,
 			FileName:    plan.FileName,
+			SyncSource:  plan.SyncSource,
+			SyncLabel:   s.labelForSource(plan.SyncSource),
 			Title:       plan.Title,
 			CreatedAt:   plan.CreatedAt,
 			ModifiedAt:  plan.ModifiedAt,

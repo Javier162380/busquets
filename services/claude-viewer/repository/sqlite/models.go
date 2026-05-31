@@ -29,6 +29,7 @@ type ConnectorSetting struct {
 type Plan struct {
 	ID         int64     `json:"id"`
 	FileName   string    `json:"file_name"`
+	SyncSource string    `json:"sync_source"`
 	FilePath   string    `json:"file_path"`
 	Title      string    `json:"title"`
 	Content    string    `json:"content"`

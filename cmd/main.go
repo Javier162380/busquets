@@ -167,7 +167,7 @@ func runSync(cfg *config.Config, logger *slog.Logger) error {
 	}
 	defer cleanup()
 
-	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDir, true)
+	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
@@ -179,8 +179,8 @@ func runSync(cfg *config.Config, logger *slog.Logger) error {
 		return fmt.Errorf("failed to sync plans: %w", err)
 	}
 
-	fmt.Printf("✓ Synced %d plans from %s to %s (backend: %s)\n",
-		count, cfg.Paths.PlansDir, cfg.Paths.ViewerDir, cfg.Database.Backend)
+	fmt.Printf("✓ Synced %d plans to %s (backend: %s)\n",
+		count, cfg.Paths.ViewerDir, cfg.Database.Backend)
 	return nil
 }
 
@@ -193,7 +193,7 @@ func runRSync(cfg *config.Config, logger *slog.Logger) error {
 	}
 	defer cleanup()
 
-	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDir, true)
+	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
@@ -205,8 +205,8 @@ func runRSync(cfg *config.Config, logger *slog.Logger) error {
 		return fmt.Errorf("failed to sync plans: %w", err)
 	}
 
-	fmt.Printf("✓ RSynced %d plans from %s to %s (backend: %s)\n",
-		count, cfg.Paths.ViewerDir, cfg.Paths.PlansDir, cfg.Database.Backend)
+	fmt.Printf("✓ RSynced %d plans from %s (backend: %s)\n",
+		count, cfg.Paths.ViewerDir, cfg.Database.Backend)
 	return nil
 }
 
@@ -219,7 +219,7 @@ func runDump(cfg *config.Config, logger *slog.Logger) error {
 	}
 	defer cleanup()
 
-	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDir, true)
+	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
@@ -231,8 +231,8 @@ func runDump(cfg *config.Config, logger *slog.Logger) error {
 		return fmt.Errorf("failed to dump plans: %w", err)
 	}
 
-	fmt.Printf("✓ Dumped %d plans from database to %s (backend: %s)\n",
-		count, cfg.Paths.PlansDir, cfg.Database.Backend)
+	fmt.Printf("✓ Dumped %d plans from database (backend: %s)\n",
+		count, cfg.Database.Backend)
 	return nil
 }
 
@@ -251,7 +251,7 @@ func runServe(cfg *config.Config, logger *slog.Logger) error {
 	}
 	defer cleanup()
 
-	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDir, true)
+	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
@@ -278,7 +278,7 @@ func runTUI(cfg *config.Config, logger *slog.Logger) error {
 	}
 	defer cleanup()
 
-	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDir, true)
+	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
@@ -343,7 +343,7 @@ func runMCP(cfg *config.Config, logger *slog.Logger) error {
 	}
 	defer cleanup()
 
-	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDir, true)
+	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}

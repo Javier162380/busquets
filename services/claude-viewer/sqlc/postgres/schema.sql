@@ -1,6 +1,7 @@
 CREATE TABLE IF NOT EXISTS plans (
     id SERIAL PRIMARY KEY,
-    file_name TEXT NOT NULL UNIQUE,
+    file_name TEXT NOT NULL,
+    sync_source TEXT NOT NULL DEFAULT '',
     file_path TEXT NOT NULL,
     title TEXT NOT NULL,
     content TEXT NOT NULL,
@@ -8,7 +9,8 @@ CREATE TABLE IF NOT EXISTS plans (
     modified_at TIMESTAMPTZ NOT NULL,
     indexed_at TIMESTAMPTZ NOT NULL,
     file_size BIGINT NOT NULL,
-    word_count BIGINT NOT NULL DEFAULT 0
+    word_count BIGINT NOT NULL DEFAULT 0,
+    UNIQUE(file_name, sync_source)
 );
 
 CREATE INDEX IF NOT EXISTS idx_plans_modified_at ON plans(modified_at DESC);

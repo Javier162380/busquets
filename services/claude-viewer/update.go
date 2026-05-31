@@ -13,6 +13,7 @@ import (
 // UpdatePlanRequest contains the data needed to update a plan.
 type UpdatePlanRequest struct {
 	FileName         string
+	SyncSource       string // source directory path (stored in DB)
 	NewContent       string
 	LastModifiedTime time.Time // Client's version timestamp
 	Force            bool      // If true, skip conflict check
@@ -35,16 +36,14 @@ type ConflictInfo struct {
 // UpdatePlan updates a plan file and syncs it back to the source directory.
 // It checks for conflicts by comparing timestamps.
 func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*UpdatePlanResult, error) {
-	sourcePath := filepath.Join(s.sourcePlansDir, req.FileName)
-	viewerPath := filepath.Join(s.viewerDir, req.FileName)
+	sourcePath := filepath.Join(req.SyncSource, req.FileName)
+	viewerPath := filepath.Join(s.viewerDir, s.viewerSubdirFor(req.SyncSource), req.FileName)
 
-	// 1. Check for conflicts - has source file changed since client loaded it?
 	sourceInfo, err := os.Stat(sourcePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to stat source file: %w", err)
 	}
 
-	// Skip conflict check if force flag is set
 	if !req.Force && sourceInfo.ModTime().After(req.LastModifiedTime) {
 		return &UpdatePlanResult{
 			Success:     false,
@@ -79,26 +78,24 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 	}
 
 	err = s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
+		FileName:   req.FileName,
+		SyncSource: req.SyncSource,
 		Title:      title,
 		Content:    contentToStore,
 		ModifiedAt: info.ModTime(),
 		IndexedAt:  s.nowProvider.Now(),
 		FileSize:   info.Size(),
 		WordCount:  int64(wordCount),
-		FileName:   req.FileName,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update database: %w", err)
 	}
 
-	// Save a version of this update
-	if err := s.SavePlanVersion(ctx, req.FileName, req.NewContent); err != nil {
-		// Versioning is best-effort — log the warning but don't fail the update.
+	if err := s.SavePlanVersion(ctx, req.FileName, req.SyncSource, req.NewContent); err != nil {
 		s.logger.Warn("failed to save plan version", "file", req.FileName, "error", err)
 	}
 
 	if s.summaryCache != nil {
-		// Delete Plan from the cache.
 		s.summaryCache.Delete(req.FileName)
 	}
 
@@ -109,17 +106,14 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 }
 
 // SavePlanLocal saves a plan file to the viewer directory only (no sync to source).
-// It checks for conflicts by comparing timestamps.
 func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*UpdatePlanResult, error) {
-	viewerPath := filepath.Join(s.viewerDir, req.FileName)
+	viewerPath := filepath.Join(s.viewerDir, s.viewerSubdirFor(req.SyncSource), req.FileName)
 
-	// 1. Check for conflicts - has the viewer file changed since client loaded it?
 	viewerInfo, err := os.Stat(viewerPath)
 	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("failed to stat viewer file: %w", err)
 	}
 
-	// Skip conflict check if force flag is set or file doesn't exist yet
 	if !req.Force && err == nil && viewerInfo.ModTime().After(req.LastModifiedTime) {
 		return &UpdatePlanResult{
 			Success:     false,
@@ -132,7 +126,6 @@ func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*Up
 		}, nil
 	}
 
-	// Write to viewer directory only
 	if err := os.WriteFile(viewerPath, []byte(req.NewContent), 0o600); err != nil {
 		return nil, fmt.Errorf("failed to write to viewer directory: %w", err)
 	}
@@ -151,25 +144,23 @@ func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*Up
 	}
 
 	err = s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
+		FileName:   req.FileName,
+		SyncSource: req.SyncSource,
 		Title:      title,
 		Content:    contentToStore,
 		ModifiedAt: info.ModTime(),
 		IndexedAt:  s.nowProvider.Now(),
 		FileSize:   info.Size(),
 		WordCount:  int64(wordCount),
-		FileName:   req.FileName,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to update database: %w", err)
 	}
 
-	// Save a version of this update
-	if err := s.SavePlanVersion(ctx, req.FileName, req.NewContent); err != nil {
-		// Versioning is best-effort — log the warning but don't fail the save.
+	if err := s.SavePlanVersion(ctx, req.FileName, req.SyncSource, req.NewContent); err != nil {
 		s.logger.Warn("failed to save plan version", "file", req.FileName, "error", err)
 	}
 
-	// Delete plan from the cache if present.
 	if s.summaryCache != nil {
 		s.summaryCache.Delete(req.FileName)
 	}

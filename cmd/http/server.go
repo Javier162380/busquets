@@ -88,20 +88,20 @@ func parseTemplates() (*template.Template, error) {
 // Server returns the Echo server with routes registered.
 func (s *Server) Server() *echo.Echo {
 	s.echo.GET("/", s.handleIndex)
-	s.echo.GET("/plan/:filename", s.handleViewPlan)
-	s.echo.GET("/plan/:planName/versions", s.handleViewPlanVersions)
-	s.echo.POST("/plan/:filename", s.handleUpdatePlan)
-	s.echo.POST("/plan/:filename/save-local", s.handleSavePlanLocal)
+	s.echo.GET("/plan/:source/:filename", s.handleViewPlan)
+	s.echo.GET("/plan/:source/:planName/versions", s.handleViewPlanVersions)
+	s.echo.POST("/plan/:source/:filename", s.handleUpdatePlan)
+	s.echo.POST("/plan/:source/:filename/save-local", s.handleSavePlanLocal)
 	s.echo.POST("/sync", s.handleSync)
 	s.echo.GET("/api/setting/:variableName", s.handleSetting)
 	s.echo.POST("/api/setting/:variableName", s.handleSetting)
 	s.echo.GET("/api/plans", s.handleListPlansWithPagination)
 
 	// Version control API endpoints
-	s.echo.GET("/api/plan/:planName/versions", s.handleGetPlanVersionHistory)
-	s.echo.GET("/api/plan/:planName/versions/:versionNumber", s.handleGetPlanVersion)
-	s.echo.POST("/api/plan/:planName/restore/:versionNumber", s.handleRestorePlanVersion)
-	s.echo.GET("/api/plan/:planName/versions/search", s.handleSearchVersions)
+	s.echo.GET("/api/plan/:source/:planName/versions", s.handleGetPlanVersionHistory)
+	s.echo.GET("/api/plan/:source/:planName/versions/:versionNumber", s.handleGetPlanVersion)
+	s.echo.POST("/api/plan/:source/:planName/restore/:versionNumber", s.handleRestorePlanVersion)
+	s.echo.GET("/api/plan/:source/:planName/versions/search", s.handleSearchVersions)
 
 	// Serve static assets
 	s.echo.FileFS("/static", "static", static)

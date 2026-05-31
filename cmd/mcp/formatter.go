@@ -13,6 +13,7 @@ import (
 // planSummaryTOON represents a plan summary for TOON encoding.
 type planSummaryTOON struct {
 	FileName    string `toon:"file_name"`
+	SyncLabel   string `toon:"sync_label"`
 	Title       string `toon:"title"`
 	Tags        string `toon:"tags"`
 	ModifiedAt  string `toon:"modified_at"`
@@ -22,6 +23,7 @@ type planSummaryTOON struct {
 // planDetailTOON represents plan metadata for TOON encoding.
 type planDetailTOON struct {
 	FileName    string `toon:"file_name"`
+	SyncLabel   string `toon:"sync_label"`
 	Title       string `toon:"title"`
 	CreatedAt   string `toon:"created_at"`
 	ModifiedAt  string `toon:"modified_at"`
@@ -63,6 +65,7 @@ func FormatSearchResults(plans []claudeviewer.PlanSummary) (string, error) {
 	for i, plan := range plans {
 		toonPlans[i] = planSummaryTOON{
 			FileName:    plan.FileName,
+			SyncLabel:   plan.SyncLabel,
 			Title:       plan.Title,
 			Tags:        formatTagNames(plan.Tags),
 			ModifiedAt:  plan.ModifiedAt.UTC().Format("2006-01-02T15:04:05Z"),
@@ -85,6 +88,7 @@ func FormatPlanDetail(plan *claudeviewer.PlanDetail) (string, error) {
 	metadata := planResponse{
 		Plan: planDetailTOON{
 			FileName:    plan.FileName,
+			SyncLabel:   plan.SyncLabel,
 			Title:       plan.Title,
 			CreatedAt:   plan.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 			ModifiedAt:  plan.ModifiedAt.UTC().Format("2006-01-02T15:04:05Z"),

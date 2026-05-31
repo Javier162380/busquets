@@ -41,8 +41,8 @@ type PostgresConfig struct {
 
 // PathsConfig contains path-related configuration.
 type PathsConfig struct {
-	ViewerDir string `toml:"viewer_dir"`
-	PlansDir  string `toml:"plans_dir"`
+	ViewerDir string    `toml:"viewer_dir"`
+	PlansDirs []SyncDir `toml:"plans_dirs"`
 }
 
 // MCPConfig contains MCP server configuration.
@@ -102,7 +102,10 @@ func DefaultConfig() *Config {
 		},
 		Paths: PathsConfig{
 			ViewerDir: filepath.Join(homeDir, ".claude-viewer"),
-			PlansDir:  filepath.Join(homeDir, ".claude", "plans"),
+			PlansDirs: []SyncDir{{
+				Path:  filepath.Join(homeDir, ".claude", "plans"),
+				Label: "plans",
+			}},
 		},
 		MCP: MCPConfig{
 			ServerName: "claude-plan-viewer",
@@ -124,9 +127,6 @@ func (c *Config) applyEnvOverrides() {
 	}
 	if v := os.Getenv("PLAN_VIEWER_DIR"); v != "" {
 		c.Paths.ViewerDir = v
-	}
-	if v := os.Getenv("PLAN_VIEWER_PLANS_DIR"); v != "" {
-		c.Paths.PlansDir = v
 	}
 	if v := os.Getenv("PLAN_VIEWER_MCP_SERVER_NAME"); v != "" {
 		c.MCP.ServerName = v
@@ -152,8 +152,8 @@ func (c *Config) applyDefaults() {
 	if c.Paths.ViewerDir == "" {
 		c.Paths.ViewerDir = defaults.Paths.ViewerDir
 	}
-	if c.Paths.PlansDir == "" {
-		c.Paths.PlansDir = defaults.Paths.PlansDir
+	if len(c.Paths.PlansDirs) == 0 {
+		c.Paths.PlansDirs = defaults.Paths.PlansDirs
 	}
 	if c.MCP.ServerName == "" {
 		c.MCP.ServerName = defaults.MCP.ServerName
@@ -172,6 +172,12 @@ func (c *Config) Validate() error {
 
 	if c.Database.Backend == BackendPostgres && c.Database.Postgres.ConnectionString == "" {
 		return fmt.Errorf("postgres connection_string is required when backend is %q", BackendPostgres)
+	}
+
+	for i, d := range c.Paths.PlansDirs {
+		if d.Path == "" {
+			return fmt.Errorf("plans_dirs[%d] is missing a path", i)
+		}
 	}
 
 	return nil

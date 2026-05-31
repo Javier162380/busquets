@@ -20,6 +20,8 @@ const (
 type PlanSummary struct {
 	ID          int64
 	FileName    string
+	SyncSource  string
+	SyncLabel   string
 	Title       string
 	CreatedAt   time.Time
 	ModifiedAt  time.Time

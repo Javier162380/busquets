@@ -31,7 +31,7 @@ func (a *App) handleCreateTagResult(msg messages.CreateTagResultMsg) (tea.Model,
 func (a *App) handleSetPlanTags(msg messages.SetPlanTagsMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Saving tags...")
 	return a, tea.Batch(
-		commands.SetPlanTagsCmd(a.ctx, a.service, msg.FileName, msg.Tags),
+		commands.SetPlanTagsCmd(a.ctx, a.service, msg.FileName, msg.SyncSource, msg.Tags),
 		commands.ClearStatusCmd(1*time.Second),
 	)
 }

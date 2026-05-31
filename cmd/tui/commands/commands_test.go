@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
+	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
@@ -35,7 +36,7 @@ func setupTestService(t *testing.T) (*claudeviewer.Service, string, func()) {
 	ctx := context.Background()
 	db, err := newTestRepository(ctx, dbPath)
 	require.NoError(t, err)
-	svc, err := claudeviewer.New(db, viewerDir, sourcePlansDir, true)
+	svc, err := claudeviewer.New(db, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
 	require.NoError(t, err)
 	return svc, sourcePlansDir, func() { os.RemoveAll(tempDir) }
 }
@@ -89,7 +90,7 @@ func TestLoadPlanDetailCmd(t *testing.T) {
 		createTestPlanFile(t, sourcePlansDir, "detail.md", "# Detail Plan\nContent here")
 		_, err := svc.SyncPlans(ctx)
 		require.NoError(t, err)
-		msg := LoadPlanDetailCmd(ctx, svc, "detail.md")()
+		msg := LoadPlanDetailCmd(ctx, svc, "detail.md", sourcePlansDir)()
 		detail, ok := msg.(messages.PlanDetailLoadedMsg)
 		require.True(t, ok)
 		require.NotNil(t, detail.Detail)
@@ -97,9 +98,9 @@ func TestLoadPlanDetailCmd(t *testing.T) {
 	})
 
 	t.Run("unknown filename returns error message", func(t *testing.T) {
-		svc, _, cleanup := setupTestService(t)
+		svc, sourcePlansDir, cleanup := setupTestService(t)
 		defer cleanup()
-		msg := LoadPlanDetailCmd(ctx, svc, "nonexistent.md")()
+		msg := LoadPlanDetailCmd(ctx, svc, "nonexistent.md", sourcePlansDir)()
 		_, ok := msg.(messages.ErrorMsg)
 		require.True(t, ok)
 	})

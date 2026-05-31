@@ -8,6 +8,7 @@ import "time"
 type Plan struct {
 	ID         int64
 	FileName   string
+	SyncSource string
 	FilePath   string
 	Title      string
 	Content    string
@@ -24,6 +25,7 @@ type Plan struct {
 type PlanSummary struct {
 	ID          int64
 	FileName    string
+	SyncSource  string
 	Title       string
 	CreatedAt   time.Time
 	ModifiedAt  time.Time

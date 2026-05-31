@@ -136,6 +136,7 @@ func planToDomain(p Plan) dto.Plan {
 	return dto.Plan{
 		ID:         p.ID,
 		FileName:   p.FileName,
+		SyncSource: p.SyncSource,
 		FilePath:   p.FilePath,
 		Title:      p.Title,
 		Content:    p.Content,
@@ -151,6 +152,7 @@ func planSummaryFromPaginationRow(r ListAllPlansWithPaginationRow) dto.PlanSumma
 	return dto.PlanSummary{
 		ID:         r.ID,
 		FileName:   r.FileName,
+		SyncSource: r.SyncSource,
 		Title:      r.Title,
 		CreatedAt:  r.CreatedAt,
 		ModifiedAt: r.ModifiedAt,
@@ -163,6 +165,7 @@ func planSummaryFromListWithTagsRow(r ListAllPlansWithTagsRow) dto.PlanSummary {
 	return dto.PlanSummary{
 		ID:         r.ID,
 		FileName:   r.FileName,
+		SyncSource: r.SyncSource,
 		Title:      r.Title,
 		CreatedAt:  r.CreatedAt,
 		ModifiedAt: r.ModifiedAt,
@@ -221,8 +224,11 @@ func (r *Repository) CountPlans(ctx context.Context) (int64, error) {
 	return r.q.CountPlans(ctx)
 }
 
-func (r *Repository) GetPlanByFileName(ctx context.Context, fileName string) (dto.Plan, error) {
-	p, err := r.q.GetPlanByFileName(ctx, fileName)
+func (r *Repository) GetPlanByFileName(ctx context.Context, fileName, syncSource string) (dto.Plan, error) {
+	p, err := r.q.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
+		FileName:   fileName,
+		SyncSource: syncSource,
+	})
 	if errors.Is(err, sql.ErrNoRows) {
 		return dto.Plan{}, dto.ErrNotFound
 	}
@@ -235,6 +241,7 @@ func (r *Repository) GetPlanByFileName(ctx context.Context, fileName string) (dt
 func (r *Repository) InsertPlan(ctx context.Context, params dto.InsertPlanParams) error {
 	return r.q.InsertPlan(ctx, InsertPlanParams{
 		FileName:   params.FileName,
+		SyncSource: params.SyncSource,
 		FilePath:   params.FilePath,
 		Title:      params.Title,
 		Content:    params.Content,
@@ -249,6 +256,7 @@ func (r *Repository) InsertPlan(ctx context.Context, params dto.InsertPlanParams
 func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams) error {
 	return r.q.UpdatePlan(ctx, UpdatePlanParams{
 		FileName:   params.FileName,
+		SyncSource: params.SyncSource,
 		Title:      params.Title,
 		Content:    params.Content,
 		ModifiedAt: params.ModifiedAt,
@@ -272,6 +280,7 @@ func (r *Repository) InsertPlanWithTags(ctx context.Context, params dto.InsertPl
 
 	if err := qtx.InsertPlan(ctx, InsertPlanParams{
 		FileName:   params.Plan.FileName,
+		SyncSource: params.Plan.SyncSource,
 		FilePath:   params.Plan.FilePath,
 		Title:      params.Plan.Title,
 		Content:    params.Plan.Content,
@@ -288,7 +297,10 @@ func (r *Repository) InsertPlanWithTags(ctx context.Context, params dto.InsertPl
 		return fmt.Errorf("failed to insert plan: %w", err)
 	}
 
-	plan, err := qtx.GetPlanByFileName(ctx, params.Plan.FileName)
+	plan, err := qtx.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
+		FileName:   params.Plan.FileName,
+		SyncSource: params.Plan.SyncSource,
+	})
 	if err != nil {
 		rollbackErr := tx.Rollback()
 		if rollbackErr != nil {
@@ -335,6 +347,7 @@ func (r *Repository) UpdatePlanWithTags(ctx context.Context, params dto.UpdatePl
 
 	if err := qtx.UpdatePlan(ctx, UpdatePlanParams{
 		FileName:   params.Plan.FileName,
+		SyncSource: params.Plan.SyncSource,
 		Title:      params.Plan.Title,
 		Content:    params.Plan.Content,
 		ModifiedAt: params.Plan.ModifiedAt,
@@ -349,7 +362,10 @@ func (r *Repository) UpdatePlanWithTags(ctx context.Context, params dto.UpdatePl
 		return fmt.Errorf("failed to update plan: %w", err)
 	}
 
-	plan, err := qtx.GetPlanByFileName(ctx, params.Plan.FileName)
+	plan, err := qtx.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
+		FileName:   params.Plan.FileName,
+		SyncSource: params.Plan.SyncSource,
+	})
 	if err != nil {
 		rollbackErr := tx.Rollback()
 		if rollbackErr != nil {
@@ -390,21 +406,22 @@ func (r *Repository) UpdatePlanWithTags(ctx context.Context, params dto.UpdatePl
 	return err
 }
 
-func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
+func (r *Repository) DeletePlan(ctx context.Context, fileName, syncSource string) error {
 	if r.db == nil {
 		return errors.New("transaction support not available")
 	}
 
-	// Begin transaction
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 
-	// Create queries with transaction
 	qtx := r.q.WithTx(tx)
 
-	plan, err := qtx.GetPlanByFileName(ctx, fileName)
+	plan, err := qtx.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
+		FileName:   fileName,
+		SyncSource: syncSource,
+	})
 	if err != nil {
 		rollbackErr := tx.Rollback()
 		if rollbackErr != nil {
@@ -421,7 +438,7 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
 		return fmt.Errorf("failed to delete plan_tags associations: %w", err)
 	}
 
-	if err := qtx.DeletePlan(ctx, fileName); err != nil {
+	if err := qtx.DeletePlan(ctx, DeletePlanParams{FileName: fileName, SyncSource: syncSource}); err != nil {
 		rollbackErr := tx.Rollback()
 		if rollbackErr != nil {
 			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
@@ -442,7 +459,7 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName string) error {
 func (r *Repository) ListAllPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]dto.PlanSummary, error) {
 	sb := sqlbuilder.SQLite.NewSelectBuilder()
 	rtExpr := fmt.Sprintf("MAX(1, (word_count + %d - 1) / %d) AS reading_time", wpm, wpm)
-	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count", rtExpr).From("plans")
+	sb.Select("id", "file_name", "sync_source", "title", "created_at", "modified_at", "file_size", "word_count", rtExpr).From("plans")
 	if sortCol == "reading_time" {
 		if sortDir == "asc" {
 			sb.OrderByAsc("reading_time")
@@ -482,7 +499,7 @@ func (r *Repository) SearchPlansWithPagination(ctx context.Context, params dto.S
 func (r *Repository) searchPlansDynamic(ctx context.Context, pattern string, searchOver dto.SearchField) ([]dto.PlanSummary, error) {
 	sb := sqlbuilder.SQLite.NewSelectBuilder()
 	sb.Select(
-		"p.id", "p.file_name", "p.title",
+		"p.id", "p.file_name", "p.sync_source", "p.title",
 		"p.created_at", "p.modified_at", "p.file_size", "p.word_count",
 		"COALESCE(t.tag_ids, '') AS tag_ids",
 		"COALESCE(t.tag_names, '') AS tag_names",
@@ -513,7 +530,7 @@ func (r *Repository) searchPlansDynamic(ctx context.Context, pattern string, sea
 func (r *Repository) searchPlansPaginationDynamic(ctx context.Context, pattern string, params dto.SearchPaginationParams) ([]dto.PlanSummary, error) {
 	sb := sqlbuilder.SQLite.NewSelectBuilder()
 	sb.Select(
-		"p.id", "p.file_name", "p.title",
+		"p.id", "p.file_name", "p.sync_source", "p.title",
 		"p.created_at", "p.modified_at", "p.file_size", "p.word_count",
 		"COALESCE(t.tag_ids, '') AS tag_ids",
 		"COALESCE(t.tag_names, '') AS tag_names",
@@ -632,6 +649,7 @@ func (r *Repository) RestorePlanVersion(ctx context.Context, params dto.RestoreP
 
 	if err := qtx.UpdatePlan(ctx, UpdatePlanParams{
 		FileName:   params.Plan.FileName,
+		SyncSource: params.Plan.SyncSource,
 		Title:      params.Plan.Title,
 		Content:    params.Plan.Content,
 		ModifiedAt: params.Plan.ModifiedAt,
@@ -965,7 +983,7 @@ func (r *Repository) GetUntaggedPlanCount(ctx context.Context) (int64, error) {
 func (r *Repository) ListUntaggedPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]dto.PlanSummary, error) {
 	sb := sqlbuilder.SQLite.NewSelectBuilder()
 	rtExpr := fmt.Sprintf("MAX(1, (word_count + %d - 1) / %d) AS reading_time", wpm, wpm)
-	sb.Select("id", "file_name", "title", "created_at", "modified_at", "file_size", "word_count", rtExpr).
+	sb.Select("id", "file_name", "sync_source", "title", "created_at", "modified_at", "file_size", "word_count", rtExpr).
 		From("plans").
 		Where("id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)")
 	if sortCol == "reading_time" {
@@ -1151,6 +1169,7 @@ func (r *Repository) queryPlanSummariesWithTags(ctx context.Context, q string, a
 		var (
 			id         int64
 			fileName   string
+			syncSource string
 			title      string
 			createdAt  time.Time
 			modifiedAt time.Time
@@ -1159,12 +1178,13 @@ func (r *Repository) queryPlanSummariesWithTags(ctx context.Context, q string, a
 			tagIDs     string
 			tagNames   string
 		)
-		if err := rows.Scan(&id, &fileName, &title, &createdAt, &modifiedAt, &fileSize, &wordCount, &tagIDs, &tagNames); err != nil {
+		if err := rows.Scan(&id, &fileName, &syncSource, &title, &createdAt, &modifiedAt, &fileSize, &wordCount, &tagIDs, &tagNames); err != nil {
 			return nil, err
 		}
 		result = append(result, dto.PlanSummary{
 			ID:         id,
 			FileName:   fileName,
+			SyncSource: syncSource,
 			Title:      title,
 			CreatedAt:  createdAt,
 			ModifiedAt: modifiedAt,
@@ -1188,6 +1208,7 @@ func (r *Repository) queryPlanSummaries(ctx context.Context, q string, args ...i
 		var (
 			id          int64
 			fileName    string
+			syncSource  string
 			title       string
 			createdAt   time.Time
 			modifiedAt  time.Time
@@ -1195,12 +1216,13 @@ func (r *Repository) queryPlanSummaries(ctx context.Context, q string, args ...i
 			wordCount   int64
 			readingTime int64
 		)
-		if err := rows.Scan(&id, &fileName, &title, &createdAt, &modifiedAt, &fileSize, &wordCount, &readingTime); err != nil {
+		if err := rows.Scan(&id, &fileName, &syncSource, &title, &createdAt, &modifiedAt, &fileSize, &wordCount, &readingTime); err != nil {
 			return nil, err
 		}
 		result = append(result, dto.PlanSummary{
 			ID:          id,
 			FileName:    fileName,
+			SyncSource:  syncSource,
 			Title:       title,
 			CreatedAt:   createdAt,
 			ModifiedAt:  modifiedAt,

@@ -5,6 +5,7 @@ import "time"
 // InsertPlanParams contains parameters for inserting a new plan.
 type InsertPlanParams struct {
 	FileName   string
+	SyncSource string
 	FilePath   string
 	Title      string
 	Content    string
@@ -18,6 +19,7 @@ type InsertPlanParams struct {
 // UpdatePlanParams contains parameters for updating an existing plan.
 type UpdatePlanParams struct {
 	FileName   string // WHERE clause
+	SyncSource string // WHERE clause
 	Title      string
 	Content    string
 	ModifiedAt time.Time

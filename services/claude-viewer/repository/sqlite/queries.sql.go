@@ -82,11 +82,16 @@ func (q *Queries) DeleteConnectorSetting(ctx context.Context, arg DeleteConnecto
 }
 
 const deletePlan = `-- name: DeletePlan :exec
-DELETE FROM plans WHERE file_name = ?
+DELETE FROM plans WHERE file_name = ? AND sync_source = ?
 `
 
-func (q *Queries) DeletePlan(ctx context.Context, fileName string) error {
-	_, err := q.db.ExecContext(ctx, deletePlan, fileName)
+type DeletePlanParams struct {
+	FileName   string `json:"file_name"`
+	SyncSource string `json:"sync_source"`
+}
+
+func (q *Queries) DeletePlan(ctx context.Context, arg DeletePlanParams) error {
+	_, err := q.db.ExecContext(ctx, deletePlan, arg.FileName, arg.SyncSource)
 	return err
 }
 
@@ -196,16 +201,22 @@ func (q *Queries) GetLatestVersionNumber(ctx context.Context, planID int64) (int
 	return coalesce, err
 }
 
-const getPlanByFileName = `-- name: GetPlanByFileName :one
-SELECT id, file_name, file_path, title, content, created_at, modified_at, indexed_at, file_size, word_count FROM plans WHERE file_name = ? LIMIT 1
+const getPlanByFileNameAndSource = `-- name: GetPlanByFileNameAndSource :one
+SELECT id, file_name, sync_source, file_path, title, content, created_at, modified_at, indexed_at, file_size, word_count FROM plans WHERE file_name = ? AND sync_source = ? LIMIT 1
 `
 
-func (q *Queries) GetPlanByFileName(ctx context.Context, fileName string) (Plan, error) {
-	row := q.db.QueryRowContext(ctx, getPlanByFileName, fileName)
+type GetPlanByFileNameAndSourceParams struct {
+	FileName   string `json:"file_name"`
+	SyncSource string `json:"sync_source"`
+}
+
+func (q *Queries) GetPlanByFileNameAndSource(ctx context.Context, arg GetPlanByFileNameAndSourceParams) (Plan, error) {
+	row := q.db.QueryRowContext(ctx, getPlanByFileNameAndSource, arg.FileName, arg.SyncSource)
 	var i Plan
 	err := row.Scan(
 		&i.ID,
 		&i.FileName,
+		&i.SyncSource,
 		&i.FilePath,
 		&i.Title,
 		&i.Content,
@@ -328,7 +339,7 @@ func (q *Queries) GetPlanVersionHistory(ctx context.Context, arg GetPlanVersionH
 }
 
 const getPlansWithTag = `-- name: GetPlansWithTag :many
-SELECT p.id, p.file_name, p.title, p.created_at, p.modified_at, p.file_size, p.word_count
+SELECT p.id, p.file_name, p.sync_source, p.title, p.created_at, p.modified_at, p.file_size, p.word_count
 FROM plans p
 JOIN plan_tags pt ON p.id = pt.plan_id
 WHERE pt.tag_id = ?
@@ -338,6 +349,7 @@ ORDER BY p.modified_at DESC
 type GetPlansWithTagRow struct {
 	ID         int64     `json:"id"`
 	FileName   string    `json:"file_name"`
+	SyncSource string    `json:"sync_source"`
 	Title      string    `json:"title"`
 	CreatedAt  time.Time `json:"created_at"`
 	ModifiedAt time.Time `json:"modified_at"`
@@ -357,6 +369,7 @@ func (q *Queries) GetPlansWithTag(ctx context.Context, tagID int64) ([]GetPlansW
 		if err := rows.Scan(
 			&i.ID,
 			&i.FileName,
+			&i.SyncSource,
 			&i.Title,
 			&i.CreatedAt,
 			&i.ModifiedAt,
@@ -490,12 +503,13 @@ func (q *Queries) GetVersionCount(ctx context.Context, planID int64) (int64, err
 }
 
 const insertPlan = `-- name: InsertPlan :exec
-INSERT INTO plans (file_name, file_path, title, content, created_at, modified_at, indexed_at, file_size, word_count)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+INSERT INTO plans (file_name, sync_source, file_path, title, content, created_at, modified_at, indexed_at, file_size, word_count)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertPlanParams struct {
 	FileName   string    `json:"file_name"`
+	SyncSource string    `json:"sync_source"`
 	FilePath   string    `json:"file_path"`
 	Title      string    `json:"title"`
 	Content    string    `json:"content"`
@@ -509,6 +523,7 @@ type InsertPlanParams struct {
 func (q *Queries) InsertPlan(ctx context.Context, arg InsertPlanParams) error {
 	_, err := q.db.ExecContext(ctx, insertPlan,
 		arg.FileName,
+		arg.SyncSource,
 		arg.FilePath,
 		arg.Title,
 		arg.Content,
@@ -584,7 +599,7 @@ func (q *Queries) InsertTag(ctx context.Context, arg InsertTagParams) (Tag, erro
 }
 
 const listAllPlans = `-- name: ListAllPlans :many
-SELECT id, file_name, title, created_at, modified_at, file_size, word_count
+SELECT id, file_name, sync_source, title, created_at, modified_at, file_size, word_count
 FROM plans
 ORDER BY modified_at DESC
 `
@@ -592,6 +607,7 @@ ORDER BY modified_at DESC
 type ListAllPlansRow struct {
 	ID         int64     `json:"id"`
 	FileName   string    `json:"file_name"`
+	SyncSource string    `json:"sync_source"`
 	Title      string    `json:"title"`
 	CreatedAt  time.Time `json:"created_at"`
 	ModifiedAt time.Time `json:"modified_at"`
@@ -611,6 +627,7 @@ func (q *Queries) ListAllPlans(ctx context.Context) ([]ListAllPlansRow, error) {
 		if err := rows.Scan(
 			&i.ID,
 			&i.FileName,
+			&i.SyncSource,
 			&i.Title,
 			&i.CreatedAt,
 			&i.ModifiedAt,
@@ -631,7 +648,7 @@ func (q *Queries) ListAllPlans(ctx context.Context) ([]ListAllPlansRow, error) {
 }
 
 const listAllPlansWithPagination = `-- name: ListAllPlansWithPagination :many
-SELECT id, file_name, title, created_at, modified_at, file_size, word_count
+SELECT id, file_name, sync_source, title, created_at, modified_at, file_size, word_count
 FROM plans
 ORDER BY modified_at DESC
 LIMIT ? OFFSET ?
@@ -645,6 +662,7 @@ type ListAllPlansWithPaginationParams struct {
 type ListAllPlansWithPaginationRow struct {
 	ID         int64     `json:"id"`
 	FileName   string    `json:"file_name"`
+	SyncSource string    `json:"sync_source"`
 	Title      string    `json:"title"`
 	CreatedAt  time.Time `json:"created_at"`
 	ModifiedAt time.Time `json:"modified_at"`
@@ -664,6 +682,7 @@ func (q *Queries) ListAllPlansWithPagination(ctx context.Context, arg ListAllPla
 		if err := rows.Scan(
 			&i.ID,
 			&i.FileName,
+			&i.SyncSource,
 			&i.Title,
 			&i.CreatedAt,
 			&i.ModifiedAt,
@@ -687,6 +706,7 @@ const listAllPlansWithTags = `-- name: ListAllPlansWithTags :many
 SELECT
     p.id,
     p.file_name,
+    p.sync_source,
     p.title,
     p.created_at,
     p.modified_at,
@@ -710,6 +730,7 @@ ORDER BY p.modified_at DESC
 type ListAllPlansWithTagsRow struct {
 	ID         int64     `json:"id"`
 	FileName   string    `json:"file_name"`
+	SyncSource string    `json:"sync_source"`
 	Title      string    `json:"title"`
 	CreatedAt  time.Time `json:"created_at"`
 	ModifiedAt time.Time `json:"modified_at"`
@@ -731,6 +752,7 @@ func (q *Queries) ListAllPlansWithTags(ctx context.Context) ([]ListAllPlansWithT
 		if err := rows.Scan(
 			&i.ID,
 			&i.FileName,
+			&i.SyncSource,
 			&i.Title,
 			&i.CreatedAt,
 			&i.ModifiedAt,
@@ -854,7 +876,7 @@ func (q *Queries) ListConnectors(ctx context.Context) ([]Connector, error) {
 }
 
 const listUntaggedPlans = `-- name: ListUntaggedPlans :many
-SELECT id, file_name, title, created_at, modified_at, file_size, word_count
+SELECT id, file_name, sync_source, title, created_at, modified_at, file_size, word_count
 FROM plans
 WHERE id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)
 ORDER BY modified_at DESC
@@ -863,6 +885,7 @@ ORDER BY modified_at DESC
 type ListUntaggedPlansRow struct {
 	ID         int64     `json:"id"`
 	FileName   string    `json:"file_name"`
+	SyncSource string    `json:"sync_source"`
 	Title      string    `json:"title"`
 	CreatedAt  time.Time `json:"created_at"`
 	ModifiedAt time.Time `json:"modified_at"`
@@ -882,6 +905,7 @@ func (q *Queries) ListUntaggedPlans(ctx context.Context) ([]ListUntaggedPlansRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.FileName,
+			&i.SyncSource,
 			&i.Title,
 			&i.CreatedAt,
 			&i.ModifiedAt,
@@ -993,7 +1017,7 @@ func (q *Queries) SetConnectorRole(ctx context.Context, arg SetConnectorRolePara
 const updatePlan = `-- name: UpdatePlan :exec
 UPDATE plans
 SET title = ?, content = ?, modified_at = ?, indexed_at = ?, file_size = ?, word_count = ?
-WHERE file_name = ?
+WHERE file_name = ? AND sync_source = ?
 `
 
 type UpdatePlanParams struct {
@@ -1004,6 +1028,7 @@ type UpdatePlanParams struct {
 	FileSize   int64     `json:"file_size"`
 	WordCount  int64     `json:"word_count"`
 	FileName   string    `json:"file_name"`
+	SyncSource string    `json:"sync_source"`
 }
 
 func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) error {
@@ -1015,6 +1040,7 @@ func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) error {
 		arg.FileSize,
 		arg.WordCount,
 		arg.FileName,
+		arg.SyncSource,
 	)
 	return err
 }

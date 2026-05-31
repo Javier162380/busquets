@@ -26,6 +26,7 @@ type ViewPlanData struct {
 // UpdatePlanRequest represents the request body for updating a plan.
 type UpdatePlanRequest struct {
 	FileName         string    `json:"fileName"`
+	SyncSource       string    `json:"syncSource"` // label from config
 	Content          string    `json:"content"`
 	LastModifiedTime time.Time `json:"lastModifiedTime"`
 	Force            bool      `json:"force,omitempty"`

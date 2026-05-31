@@ -1,6 +1,12 @@
 // Package config provides configuration loading and types for the application.
 package config
 
+// SyncDir represents a source directory to sync plans from.
+type SyncDir struct {
+	Path  string `toml:"path"`
+	Label string `toml:"label"`
+}
+
 // DatabaseBackend represents the type of database backend to use.
 type DatabaseBackend string
 

@@ -8,7 +8,7 @@ import (
 )
 
 func (a *App) handleRequestVersionsScreen(msg messages.RequestVersionsScreenMsg) (tea.Model, tea.Cmd) {
-	return a, commands.LoadVersionsForNavigationCmd(a.ctx, a.service, msg.PlanName)
+	return a, commands.LoadVersionsForNavigationCmd(a.ctx, a.service, msg.PlanName, msg.SyncSource)
 }
 
 func (a *App) handleVersionsNavigation(msg messages.VersionsNavigationResultMsg) (tea.Model, tea.Cmd) {
@@ -21,7 +21,7 @@ func (a *App) handleVersionsNavigation(msg messages.VersionsNavigationResultMsg)
 
 func (a *App) handleRestoreVersion(msg messages.RestoreVersionMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Restoring version...")
-	return a, commands.RestoreVersionCmd(a.ctx, a.service, msg.PlanName, msg.VersionNumber)
+	return a, commands.RestoreVersionCmd(a.ctx, a.service, msg.PlanName, msg.SyncSource, msg.VersionNumber)
 }
 
 func (a *App) handleRestoreResult(msg messages.RestoreResultMsg) (tea.Model, tea.Cmd) {

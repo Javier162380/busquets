@@ -9,6 +9,7 @@ import (
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
+	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
@@ -37,7 +38,7 @@ func setupTestService(t *testing.T) (*claudeviewer.Service, func()) {
 	ctx := context.Background()
 	db, err := newTestRepository(ctx, dbPath)
 	require.NoError(t, err)
-	svc, err := claudeviewer.New(db, viewerDir, sourcePlansDir, true)
+	svc, err := claudeviewer.New(db, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
 	require.NoError(t, err)
 	return svc, func() { os.RemoveAll(tempDir) }
 }

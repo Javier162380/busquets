@@ -13,7 +13,8 @@ import (
 // planService defines the interface for plan operations needed by MCP handlers.
 type planService interface {
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]claudeviewer.PlanSummary, error)
-	GetPlanDetailByFileName(ctx context.Context, fileName string) (*claudeviewer.PlanDetail, error)
+	GetPlanDetailByFileName(ctx context.Context, fileName, syncSource string) (*claudeviewer.PlanDetail, error)
+	LabelForSource(syncSource string) string
 }
 
 // Handler wraps the service and handles MCP protocol concerns.

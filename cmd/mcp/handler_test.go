@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
@@ -33,7 +34,7 @@ func setupTestService(t *testing.T) (*claudeviewer.Service, string, func()) {
 	require.NoError(t, err)
 
 	repo := sqlite.NewRepository(db.DB())
-	service, err := claudeviewer.New(repo, viewerDir, sourcePlansDir, true)
+	service, err := claudeviewer.New(repo, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
 	require.NoError(t, err)
 
 	cleanup := func() {
@@ -216,7 +217,8 @@ More testing details.`
 
 	t.Run("successful get plan", func(t *testing.T) {
 		args := GetPlanArgs{
-			FileName: "test-plan.md",
+			FileName:   "test-plan.md",
+			SyncSource: sourcePlansDir,
 		}
 
 		result, plan, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
@@ -255,7 +257,8 @@ More testing details.`
 
 	t.Run("verify TOON format with content", func(t *testing.T) {
 		args := GetPlanArgs{
-			FileName: "test-plan.md",
+			FileName:   "test-plan.md",
+			SyncSource: sourcePlansDir,
 		}
 
 		result, _, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)

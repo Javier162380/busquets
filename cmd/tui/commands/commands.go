@@ -44,12 +44,12 @@ func SearchPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService, query 
 }
 
 // LoadPlanDetailCmd loads a specific plan's details.
-func LoadPlanDetailCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName string) tea.Cmd {
+func LoadPlanDetailCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, syncSource string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
-		detail, err := svc.GetPlanDetailByFileName(ctx, fileName)
+		detail, err := svc.GetPlanDetailByFileName(ctx, fileName, syncSource)
 		if err != nil {
 			return messages.ErrorMsg{Error: err}
 		}
@@ -58,12 +58,12 @@ func LoadPlanDetailCmd(ctx context.Context, svc claudeviewer.UnifiedService, fil
 }
 
 // LoadVersionsCmd loads version history for a plan.
-func LoadVersionsCmd(ctx context.Context, svc claudeviewer.UnifiedService, planName string) tea.Cmd {
+func LoadVersionsCmd(ctx context.Context, svc claudeviewer.UnifiedService, planName, syncSource string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		versions, err := svc.GetPlanVersionHistory(ctx, planName, 0, 100)
+		versions, err := svc.GetPlanVersionHistory(ctx, planName, syncSource, 0, 100)
 		if err != nil {
 			return messages.VersionErrorMsg{Error: err}
 		}
@@ -72,30 +72,32 @@ func LoadVersionsCmd(ctx context.Context, svc claudeviewer.UnifiedService, planN
 }
 
 // LoadVersionsForNavigationCmd checks versions before navigating to versions screen.
-func LoadVersionsForNavigationCmd(ctx context.Context, svc claudeviewer.UnifiedService, planName string) tea.Cmd {
+func LoadVersionsForNavigationCmd(ctx context.Context, svc claudeviewer.UnifiedService, planName, syncSource string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 
-		versions, err := svc.GetPlanVersionHistory(ctx, planName, 0, 100)
+		versions, err := svc.GetPlanVersionHistory(ctx, planName, syncSource, 0, 100)
 		if err != nil {
 			return messages.ErrorMsg{Error: err}
 		}
 		return messages.VersionsNavigationResultMsg{
-			PlanName: planName,
-			Versions: versions,
+			PlanName:   planName,
+			SyncSource: syncSource,
+			Versions:   versions,
 		}
 	}
 }
 
 // SavePlanCmd saves a plan and syncs to source directory.
-func SavePlanCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, content string, lastModified time.Time) tea.Cmd {
+func SavePlanCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, syncSource, content string, lastModified time.Time) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
 		req := claudeviewer.UpdatePlanRequest{
 			FileName:         fileName,
+			SyncSource:       syncSource,
 			NewContent:       content,
 			LastModifiedTime: lastModified,
 			Force:            true,
@@ -163,11 +165,11 @@ func DumpPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd 
 }
 
 // SearchVersionsCmd searches a plan over its different versions.
-func SearchVersionsCmd(ctx context.Context, svc claudeviewer.UnifiedService, currentPlanName, query string) tea.Cmd {
+func SearchVersionsCmd(ctx context.Context, svc claudeviewer.UnifiedService, currentPlanName, syncSource, query string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
-		planVersions, err := svc.SearchVersions(ctx, currentPlanName, query)
+		planVersions, err := svc.SearchVersions(ctx, currentPlanName, syncSource, query)
 		if err != nil {
 			return messages.ErrorMsg{Error: err}
 		}
@@ -177,12 +179,12 @@ func SearchVersionsCmd(ctx context.Context, svc claudeviewer.UnifiedService, cur
 }
 
 // RestoreVersionCmd restores a plan to a previous version.
-func RestoreVersionCmd(ctx context.Context, svc claudeviewer.UnifiedService, planName string, versionNumber int64) tea.Cmd {
+func RestoreVersionCmd(ctx context.Context, svc claudeviewer.UnifiedService, planName, syncSource string, versionNumber int64) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
-		err := svc.RestorePlanVersion(ctx, planName, versionNumber)
+		err := svc.RestorePlanVersion(ctx, planName, syncSource, versionNumber)
 		if err != nil {
 			return messages.RestoreResultMsg{Error: err}
 		}
@@ -228,12 +230,12 @@ func SetSettingCmd(ctx context.Context, svc claudeviewer.UnifiedService, name st
 }
 
 // SendToConnectorCmd sends a plan to the enabled connector.
-func SendToConnectorCmd(ctx context.Context, svc claudeviewer.UnifiedService, planFileName string) tea.Cmd {
+func SendToConnectorCmd(ctx context.Context, svc claudeviewer.UnifiedService, planFileName, syncSource string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 
-		err := svc.SendToConnector(ctx, planFileName)
+		err := svc.SendToConnector(ctx, planFileName, syncSource)
 		if err != nil {
 			return messages.SendToConnectorResultMsg{Success: false, Error: err}
 		}
@@ -366,33 +368,33 @@ func ValidateConnectorCmd(ctx context.Context, svc claudeviewer.UnifiedService, 
 }
 
 // GenerateTLDRCmd generates a TLDR summary for the given plan using the configured summarizer.
-func GenerateTLDRCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName string) tea.Cmd {
+func GenerateTLDRCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, syncSource string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 
-		plan, err := svc.GetPlanDetailByFileName(ctx, fileName)
+		plan, err := svc.GetPlanDetailByFileName(ctx, fileName, syncSource)
 		if err != nil {
 			return messages.TLDRGeneratedMsg{Err: err}
 		}
 
-		summary, err := svc.GenerateSummary(ctx, fileName)
+		summary, err := svc.GenerateSummary(ctx, fileName, syncSource)
 		return messages.TLDRGeneratedMsg{Summary: summary, PlanTitle: plan.Title, Err: err}
 	}
 }
 
 // RegenerateTLDRCmd force-regenerates a TLDR summary, bypassing the in-memory cache.
-func RegenerateTLDRCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName string) tea.Cmd {
+func RegenerateTLDRCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, syncSource string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 60*time.Second)
 		defer cancel()
 
-		plan, err := svc.GetPlanDetailByFileName(ctx, fileName)
+		plan, err := svc.GetPlanDetailByFileName(ctx, fileName, syncSource)
 		if err != nil {
 			return messages.TLDRGeneratedMsg{Err: err}
 		}
 
-		summary, err := svc.RegenerateSummary(ctx, fileName)
+		summary, err := svc.RegenerateSummary(ctx, fileName, syncSource)
 		return messages.TLDRGeneratedMsg{Summary: summary, PlanTitle: plan.Title, Err: err}
 	}
 }
@@ -506,7 +508,7 @@ func ClearStatusCmdWithDefaultDuration() tea.Cmd {
 }
 
 // LoadTagsForModalCmd loads all tags and current plan tags for the tag modal.
-func LoadTagsForModalCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName string) tea.Cmd {
+func LoadTagsForModalCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, syncSource string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
@@ -516,7 +518,7 @@ func LoadTagsForModalCmd(ctx context.Context, svc claudeviewer.UnifiedService, f
 			return messages.ErrorMsg{Error: err}
 		}
 
-		planTags, err := svc.GetPlanTags(ctx, fileName)
+		planTags, err := svc.GetPlanTags(ctx, fileName, syncSource)
 		if err != nil {
 			return messages.ErrorMsg{Error: err}
 		}
@@ -530,12 +532,12 @@ func LoadTagsForModalCmd(ctx context.Context, svc claudeviewer.UnifiedService, f
 }
 
 // SetPlanTagsCmd sets tags for a plan.
-func SetPlanTagsCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName string, tags []string) tea.Cmd {
+func SetPlanTagsCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, syncSource string, tags []string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
-		err := svc.SetPlanTags(ctx, fileName, tags)
+		err := svc.SetPlanTags(ctx, fileName, syncSource, tags)
 		if err != nil {
 			return messages.ErrorMsg{Error: err}
 		}

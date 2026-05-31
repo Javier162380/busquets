@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/cache"
+	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
 	"github.com/Javier162380/claude-plan-viewer/internal/nowprovider"
 	"github.com/Javier162380/claude-plan-viewer/internal/retrier"
@@ -29,7 +32,7 @@ const (
 type Service struct {
 	db                   dto.Repository
 	viewerDir            string
-	sourcePlansDir       string
+	sourcePlansDirs      []config.SyncDir
 	indexFullContent     bool
 	markdownHTMLRendered goldmark.Markdown
 	nowProvider          nowprovider.NowProvider
@@ -58,7 +61,7 @@ func (s *Service) DB() dto.Repository {
 
 // New creates a new Claude Plan Viewer service instance.
 // The db parameter must implement dto.Repository (sqlite.Repository or postgres.Repository).
-func New(db dto.Repository, viewerDir, sourcePlansDir string, indexFullContent bool) (*Service, error) {
+func New(db dto.Repository, viewerDir string, syncDirs []config.SyncDir, indexFullContent bool) (*Service, error) {
 	md := goldmark.New(
 		goldmark.WithExtensions(extension.GFM),
 		goldmark.WithRendererOptions(html.WithUnsafe()),
@@ -67,7 +70,7 @@ func New(db dto.Repository, viewerDir, sourcePlansDir string, indexFullContent b
 	svc := &Service{
 		db:                   db,
 		viewerDir:            viewerDir,
-		sourcePlansDir:       sourcePlansDir,
+		sourcePlansDirs:      syncDirs,
 		indexFullContent:     indexFullContent,
 		markdownHTMLRendered: md,
 		nowProvider:          nowprovider.SystemTimeProvider{},
@@ -79,6 +82,48 @@ func New(db dto.Repository, viewerDir, sourcePlansDir string, indexFullContent b
 	svc.watchManager = NewWatchManager(svc)
 
 	return svc, nil
+}
+
+// LabelForSource maps a stored sync_source path to a display label.
+// Falls back to the last path component if no configured label matches.
+func (s *Service) LabelForSource(syncSource string) string {
+	return s.labelForSource(syncSource)
+}
+
+// SourcePathForLabel returns the sync_source path for a given label.
+// Returns empty string if not found.
+func (s *Service) SourcePathForLabel(label string) string {
+	for _, d := range s.sourcePlansDirs {
+		if d.Label == label {
+			return d.Path
+		}
+	}
+	return ""
+}
+
+func (s *Service) labelForSource(syncSource string) string {
+	for _, d := range s.sourcePlansDirs {
+		if d.Path == syncSource {
+			if d.Label != "" {
+				return d.Label
+			}
+			return filepath.Base(syncSource)
+		}
+	}
+	return filepath.Base(syncSource)
+}
+
+// viewerSubdirFor returns the viewer subdirectory label (slugified) for a sync source path.
+func (s *Service) viewerSubdirFor(syncSource string) string {
+	label := s.labelForSource(syncSource)
+	return slugify(label)
+}
+
+// slugify converts a label to a safe directory name (lowercase, spaces→hyphens).
+func slugify(s string) string {
+	s = strings.ToLower(s)
+	s = strings.ReplaceAll(s, " ", "-")
+	return s
 }
 
 // Close stops background goroutines started by New (cache GC and watch manager).
@@ -287,10 +332,10 @@ func (s *Service) resolveTagIDs(ctx context.Context, tagNames []string, now time
 // SetPlanTags sets the tags for a plan, replacing any existing tags.
 // Tag names will be normalized (lowercase, trimmed).
 // If a tag doesn't exist, it will be created automatically.
-func (s *Service) SetPlanTags(ctx context.Context, fileName string, tagNames []string) error {
+func (s *Service) SetPlanTags(ctx context.Context, fileName, syncSource string, tagNames []string) error {
 	tagNames = NormalizeTags(tagNames)
 
-	plan, err := s.db.GetPlanByFileName(ctx, fileName)
+	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
 	if err != nil {
 		return fmt.Errorf("failed to get plan: %w", err)
 	}
@@ -305,9 +350,8 @@ func (s *Service) SetPlanTags(ctx context.Context, fileName string, tagNames []s
 }
 
 // GetPlanTags returns all tags associated with a plan.
-func (s *Service) GetPlanTags(ctx context.Context, fileName string) ([]dto.Tag, error) {
-	// Get plan by filename
-	plan, err := s.db.GetPlanByFileName(ctx, fileName)
+func (s *Service) GetPlanTags(ctx context.Context, fileName, syncSource string) ([]dto.Tag, error) {
+	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plan: %w", err)
 	}

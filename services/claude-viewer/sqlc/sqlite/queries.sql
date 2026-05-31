@@ -1,17 +1,17 @@
 -- name: InsertPlan :exec
-INSERT INTO plans (file_name, file_path, title, content, created_at, modified_at, indexed_at, file_size, word_count)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+INSERT INTO plans (file_name, sync_source, file_path, title, content, created_at, modified_at, indexed_at, file_size, word_count)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: UpdatePlan :exec
 UPDATE plans
 SET title = ?, content = ?, modified_at = ?, indexed_at = ?, file_size = ?, word_count = ?
-WHERE file_name = ?;
+WHERE file_name = ? AND sync_source = ?;
 
--- name: GetPlanByFileName :one
-SELECT * FROM plans WHERE file_name = ? LIMIT 1;
+-- name: GetPlanByFileNameAndSource :one
+SELECT * FROM plans WHERE file_name = ? AND sync_source = ? LIMIT 1;
 
 -- name: ListAllPlans :many
-SELECT id, file_name, title, created_at, modified_at, file_size, word_count
+SELECT id, file_name, sync_source, title, created_at, modified_at, file_size, word_count
 FROM plans
 ORDER BY modified_at DESC;
 
@@ -19,6 +19,7 @@ ORDER BY modified_at DESC;
 SELECT
     p.id,
     p.file_name,
+    p.sync_source,
     p.title,
     p.created_at,
     p.modified_at,
@@ -39,13 +40,13 @@ LEFT JOIN (
 ORDER BY p.modified_at DESC;
 
 -- name: ListAllPlansWithPagination :many
-SELECT id, file_name, title, created_at, modified_at, file_size, word_count
+SELECT id, file_name, sync_source, title, created_at, modified_at, file_size, word_count
 FROM plans
 ORDER BY modified_at DESC
 LIMIT ? OFFSET ?;
 
 -- name: DeletePlan :exec
-DELETE FROM plans WHERE file_name = ?;
+DELETE FROM plans WHERE file_name = ? AND sync_source = ?;
 
 -- name: CountPlans :one
 SELECT COUNT(*) FROM plans;
@@ -193,7 +194,7 @@ WHERE pt.plan_id = ?
 ORDER BY t.name ASC;
 
 -- name: GetPlansWithTag :many
-SELECT p.id, p.file_name, p.title, p.created_at, p.modified_at, p.file_size, p.word_count
+SELECT p.id, p.file_name, p.sync_source, p.title, p.created_at, p.modified_at, p.file_size, p.word_count
 FROM plans p
 JOIN plan_tags pt ON p.id = pt.plan_id
 WHERE pt.tag_id = ?
@@ -211,7 +212,7 @@ SELECT COUNT(*) AS count FROM plans
 WHERE id NOT IN (SELECT DISTINCT plan_id FROM plan_tags);
 
 -- name: ListUntaggedPlans :many
-SELECT id, file_name, title, created_at, modified_at, file_size, word_count
+SELECT id, file_name, sync_source, title, created_at, modified_at, file_size, word_count
 FROM plans
 WHERE id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)
 ORDER BY modified_at DESC;

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	"github.com/Javier162380/claude-plan-viewer/internal/storage"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
@@ -42,7 +43,7 @@ func setupTestServer(t *testing.T) (*Server, string, func()) {
 	db, err := newTestRepository(ctx, dbPath)
 	require.NoError(t, err)
 
-	service, err := claudeviewer.New(db, viewerDir, sourcePlansDir, true)
+	service, err := claudeviewer.New(db, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
 	require.NoError(t, err)
 
 	server, err := NewServer(service, ":8081")
@@ -74,8 +75,8 @@ This is a test plan for version control API testing.`
 		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetParamNames("planName")
-		c.SetParamValues("api-test.md")
+		c.SetParamNames("source", "planName")
+		c.SetParamValues("test", "api-test.md")
 
 		require.NoError(t, server.handleGetPlanVersionHistory(c))
 		require.Equal(t, http.StatusOK, rec.Code)
@@ -91,8 +92,8 @@ This is a test plan for version control API testing.`
 		req := httptest.NewRequest("POST", "/api/plan/api-test.md/restore/999", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetParamNames("planName", "versionNumber")
-		c.SetParamValues("api-test.md", "999")
+		c.SetParamNames("source", "planName", "versionNumber")
+		c.SetParamValues("test", "api-test.md", "999")
 
 		require.NoError(t, server.handleRestorePlanVersion(c))
 		require.Equal(t, http.StatusInternalServerError, rec.Code)
@@ -105,12 +106,12 @@ This is a test plan for version control API testing.`
 	t.Run("Version operations flow", func(t *testing.T) {
 		// Create a version
 		version1Content := "# Version 1\nInitial version"
-		err := server.service.SavePlanVersion(ctx, "api-test.md", version1Content)
+		err := server.service.SavePlanVersion(ctx, "api-test.md", sourcePlansDir, version1Content)
 		require.NoError(t, err)
 
 		// Create another version
 		version2Content := "# Version 2\nUpdated content"
-		err = server.service.SavePlanVersion(ctx, "api-test.md", version2Content)
+		err = server.service.SavePlanVersion(ctx, "api-test.md", sourcePlansDir, version2Content)
 		require.NoError(t, err)
 
 		// Test: GET /api/plan/:planName/versions
@@ -118,8 +119,8 @@ This is a test plan for version control API testing.`
 		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetParamNames("planName")
-		c.SetParamValues("api-test.md")
+		c.SetParamNames("source", "planName")
+		c.SetParamValues("test", "api-test.md")
 
 		require.NoError(t, server.handleGetPlanVersionHistory(c))
 		require.Equal(t, http.StatusOK, rec.Code)
@@ -133,8 +134,8 @@ This is a test plan for version control API testing.`
 		req = httptest.NewRequest("GET", "/api/plan/api-test.md/versions/1", nil) //nolint:noctx // its a test all good
 		rec = httptest.NewRecorder()
 		c = e.NewContext(req, rec)
-		c.SetParamNames("planName", "versionNumber")
-		c.SetParamValues("api-test.md", "1")
+		c.SetParamNames("source", "planName", "versionNumber")
+		c.SetParamValues("test", "api-test.md", "1")
 
 		require.NoError(t, server.handleGetPlanVersion(c))
 		require.Equal(t, http.StatusOK, rec.Code)
@@ -148,8 +149,8 @@ This is a test plan for version control API testing.`
 		req = httptest.NewRequest("POST", "/api/plan/api-test.md/restore/1", nil) //nolint:noctx // its a test all good
 		rec = httptest.NewRecorder()
 		c = e.NewContext(req, rec)
-		c.SetParamNames("planName", "versionNumber")
-		c.SetParamValues("api-test.md", "1")
+		c.SetParamNames("source", "planName", "versionNumber")
+		c.SetParamValues("test", "api-test.md", "1")
 
 		require.NoError(t, server.handleRestorePlanVersion(c))
 		require.Equal(t, http.StatusOK, rec.Code)
@@ -170,7 +171,7 @@ This is a test plan for version control API testing.`
 		// Create multiple versions to test pagination
 		for i := 3; i <= 25; i++ {
 			content := "# Version " + string(rune(i)) + "\nContent for version " + string(rune(i))
-			err := server.service.SavePlanVersion(ctx, "api-test.md", content)
+			err := server.service.SavePlanVersion(ctx, "api-test.md", sourcePlansDir, content)
 			require.NoError(t, err)
 		}
 
@@ -180,8 +181,8 @@ This is a test plan for version control API testing.`
 		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions?pageSize=10", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetParamNames("planName")
-		c.SetParamValues("api-test.md")
+		c.SetParamNames("source", "planName")
+		c.SetParamValues("test", "api-test.md")
 
 		require.NoError(t, server.handleGetPlanVersionHistory(c))
 		require.Equal(t, http.StatusOK, rec.Code)
@@ -196,8 +197,8 @@ This is a test plan for version control API testing.`
 		req = httptest.NewRequest("GET", "/api/plan/api-test.md/versions?pageToken="+page1.NextToken, nil) //nolint:noctx // its a test all good
 		rec = httptest.NewRecorder()
 		c = e.NewContext(req, rec)
-		c.SetParamNames("planName")
-		c.SetParamValues("api-test.md")
+		c.SetParamNames("source", "planName")
+		c.SetParamValues("test", "api-test.md")
 
 		require.NoError(t, server.handleGetPlanVersionHistory(c))
 		require.Equal(t, http.StatusOK, rec.Code)
@@ -212,8 +213,8 @@ This is a test plan for version control API testing.`
 		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions/invalid", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetParamNames("planName", "versionNumber")
-		c.SetParamValues("api-test.md", "invalid")
+		c.SetParamNames("source", "planName", "versionNumber")
+		c.SetParamValues("test", "api-test.md", "invalid")
 
 		require.NoError(t, server.handleGetPlanVersion(c))
 		require.Equal(t, http.StatusBadRequest, rec.Code)
@@ -224,8 +225,8 @@ This is a test plan for version control API testing.`
 		req := httptest.NewRequest("GET", "/api/plan/non-existent.md/versions", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetParamNames("planName")
-		c.SetParamValues("non-existent.md")
+		c.SetParamNames("source", "planName")
+		c.SetParamValues("test", "non-existent.md")
 
 		require.NoError(t, server.handleGetPlanVersionHistory(c))
 		require.Equal(t, http.StatusInternalServerError, rec.Code)
@@ -236,8 +237,8 @@ This is a test plan for version control API testing.`
 		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions/search?q=architecture", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetParamNames("planName")
-		c.SetParamValues("api-test.md")
+		c.SetParamNames("source", "planName")
+		c.SetParamValues("test", "api-test.md")
 
 		require.NoError(t, server.handleSearchVersions(c))
 		require.Equal(t, http.StatusOK, rec.Code)
@@ -254,8 +255,8 @@ This is a test plan for version control API testing.`
 		req := httptest.NewRequest("GET", "/api/plan/api-test.md/versions/search?q=", nil) //nolint:noctx // its a test all good
 		rec := httptest.NewRecorder()
 		c := e.NewContext(req, rec)
-		c.SetParamNames("planName")
-		c.SetParamValues("api-test.md")
+		c.SetParamNames("source", "planName")
+		c.SetParamValues("test", "api-test.md")
 
 		require.NoError(t, server.handleSearchVersions(c))
 		require.Equal(t, http.StatusBadRequest, rec.Code)

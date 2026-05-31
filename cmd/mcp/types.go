@@ -10,5 +10,6 @@ type SearchPlansArgs struct {
 
 // GetPlanArgs contains arguments for the get_plan tool.
 type GetPlanArgs struct {
-	FileName string `json:"fileName"` // Plan filename (e.g., "my-plan.md")
+	FileName   string `json:"fileName"`   // Plan filename (e.g., "my-plan.md")
+	SyncSource string `json:"syncSource"` // Source label (e.g., "personal") or slash-joined "label/file.md"
 }
