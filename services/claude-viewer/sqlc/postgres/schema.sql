@@ -78,3 +78,13 @@ CREATE TABLE IF NOT EXISTS plan_tags (
 
 CREATE INDEX IF NOT EXISTS idx_plan_tags_tag_id ON plan_tags(tag_id);
 CREATE INDEX IF NOT EXISTS idx_plan_tags_plan_id ON plan_tags(plan_id);
+
+CREATE TABLE IF NOT EXISTS plan_comments (
+    id SERIAL PRIMARY KEY,
+    plan_id BIGINT NOT NULL REFERENCES plans(id) ON DELETE CASCADE,
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL,
+    updated_at TIMESTAMPTZ NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_plan_comments_plan_id ON plan_comments(plan_id);

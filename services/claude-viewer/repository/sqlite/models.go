@@ -40,6 +40,14 @@ type Plan struct {
 	WordCount  int64     `json:"word_count"`
 }
 
+type PlanComment struct {
+	ID        int64     `json:"id"`
+	PlanID    int64     `json:"plan_id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type PlanTag struct {
 	PlanID     int64     `json:"plan_id"`
 	TagID      int64     `json:"tag_id"`

@@ -58,6 +58,15 @@ func (q *Queries) DeleteAllConnectorSettings(ctx context.Context, connectorName 
 	return err
 }
 
+const deleteComment = `-- name: DeleteComment :exec
+DELETE FROM plan_comments WHERE id = ?
+`
+
+func (q *Queries) DeleteComment(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteComment, id)
+	return err
+}
+
 const deleteConnector = `-- name: DeleteConnector :exec
 DELETE FROM connectors WHERE name = ?
 `
@@ -227,6 +236,71 @@ func (q *Queries) GetPlanByFileNameAndSource(ctx context.Context, arg GetPlanByF
 		&i.WordCount,
 	)
 	return i, err
+}
+
+const getPlanCommentCounts = `-- name: GetPlanCommentCounts :many
+SELECT plan_id, COUNT(*) AS comment_count FROM plan_comments GROUP BY plan_id
+`
+
+type GetPlanCommentCountsRow struct {
+	PlanID       int64 `json:"plan_id"`
+	CommentCount int64 `json:"comment_count"`
+}
+
+func (q *Queries) GetPlanCommentCounts(ctx context.Context) ([]GetPlanCommentCountsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getPlanCommentCounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []GetPlanCommentCountsRow{}
+	for rows.Next() {
+		var i GetPlanCommentCountsRow
+		if err := rows.Scan(&i.PlanID, &i.CommentCount); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getPlanComments = `-- name: GetPlanComments :many
+SELECT id, plan_id, content, created_at, updated_at FROM plan_comments WHERE plan_id = ? ORDER BY created_at ASC
+`
+
+func (q *Queries) GetPlanComments(ctx context.Context, planID int64) ([]PlanComment, error) {
+	rows, err := q.db.QueryContext(ctx, getPlanComments, planID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PlanComment{}
+	for rows.Next() {
+		var i PlanComment
+		if err := rows.Scan(
+			&i.ID,
+			&i.PlanID,
+			&i.Content,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getPlanTags = `-- name: GetPlanTags :many
@@ -500,6 +574,38 @@ func (q *Queries) GetVersionCount(ctx context.Context, planID int64) (int64, err
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const insertComment = `-- name: InsertComment :one
+
+INSERT INTO plan_comments (plan_id, content, created_at, updated_at)
+VALUES (?, ?, ?, ?) RETURNING id, plan_id, content, created_at, updated_at
+`
+
+type InsertCommentParams struct {
+	PlanID    int64     `json:"plan_id"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// Comment queries
+func (q *Queries) InsertComment(ctx context.Context, arg InsertCommentParams) (PlanComment, error) {
+	row := q.db.QueryRowContext(ctx, insertComment,
+		arg.PlanID,
+		arg.Content,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var i PlanComment
+	err := row.Scan(
+		&i.ID,
+		&i.PlanID,
+		&i.Content,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const insertPlan = `-- name: InsertPlan :exec

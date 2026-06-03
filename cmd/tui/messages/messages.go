@@ -387,3 +387,46 @@ type PopScreenMsg struct{}
 
 // CloseHelpMsg requests closing the help screen.
 type CloseHelpMsg struct{}
+
+// --- Comments ---
+
+// OpenCommentModalMsg requests opening the comment modal for a plan.
+type OpenCommentModalMsg struct {
+	FileName   string
+	SyncSource string
+}
+
+// CommentsLoadedMsg carries comments fetched from the service.
+type CommentsLoadedMsg struct {
+	Comments   []claudeviewer.Comment
+	FileName   string
+	SyncSource string
+}
+
+// AddCommentMsg requests saving a new comment.
+type AddCommentMsg struct {
+	FileName   string
+	SyncSource string
+	Content    string
+}
+
+// AddCommentResultMsg carries the result of adding a comment.
+type AddCommentResultMsg struct {
+	FileName   string
+	SyncSource string
+	Error      error
+}
+
+// DeleteCommentMsg requests deleting a comment by ID.
+type DeleteCommentMsg struct {
+	CommentID  int64
+	FileName   string
+	SyncSource string
+}
+
+// DeleteCommentResultMsg carries the result of deleting a comment.
+type DeleteCommentResultMsg struct {
+	FileName   string
+	SyncSource string
+	Error      error
+}

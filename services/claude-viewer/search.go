@@ -15,16 +15,17 @@ func (s *Service) toSummaries(ctx context.Context, plans []dto.PlanSummary) []Pl
 			rt = s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
 		}
 		summaries[i] = PlanSummary{
-			ID:          plan.ID,
-			FileName:    plan.FileName,
-			SyncSource:  plan.SyncSource,
-			SyncLabel:   s.labelForSource(plan.SyncSource),
-			Title:       plan.Title,
-			CreatedAt:   plan.CreatedAt,
-			ModifiedAt:  plan.ModifiedAt,
-			FileSize:    plan.FileSize,
-			ReadingTime: rt,
-			Tags:        plan.Tags,
+			ID:           plan.ID,
+			FileName:     plan.FileName,
+			SyncSource:   plan.SyncSource,
+			SyncLabel:    s.labelForSource(plan.SyncSource),
+			Title:        plan.Title,
+			CreatedAt:    plan.CreatedAt,
+			ModifiedAt:   plan.ModifiedAt,
+			FileSize:     plan.FileSize,
+			ReadingTime:  rt,
+			Tags:         plan.Tags,
+			CommentCount: int(plan.CommentCount),
 		}
 	}
 	return summaries

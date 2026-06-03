@@ -216,3 +216,18 @@ SELECT id, file_name, sync_source, title, created_at, modified_at, file_size, wo
 FROM plans
 WHERE id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)
 ORDER BY modified_at DESC;
+
+-- Comment queries
+
+-- name: InsertComment :one
+INSERT INTO plan_comments (plan_id, content, created_at, updated_at)
+VALUES (?, ?, ?, ?) RETURNING *;
+
+-- name: GetPlanComments :many
+SELECT * FROM plan_comments WHERE plan_id = ? ORDER BY created_at ASC;
+
+-- name: DeleteComment :exec
+DELETE FROM plan_comments WHERE id = ?;
+
+-- name: GetPlanCommentCounts :many
+SELECT plan_id, COUNT(*) AS comment_count FROM plan_comments GROUP BY plan_id;

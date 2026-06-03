@@ -29,26 +29,28 @@ type PlansScreen struct {
 	confirmDialog *components.ConfirmModal
 	tagFilter     *components.TagFilter
 	tagPanel      *components.TagPanel
+	commentModal  *components.CommentModal
 
 	// State.
-	layout        types.Layout
-	focus         types.Focus
-	plans         []claudeviewer.PlanSummary            // filtered view shown in list
-	allPlans      []claudeviewer.PlanSummary            // full unfiltered source of truth
-	allTags       []claudeviewer.Tag                    // all tags in the system (including unassigned)
-	tagPlanCounts map[string]int                        // authoritative plan count per tag from DB
-	tagPlanMap    map[string][]claudeviewer.PlanSummary // map tags to a planSummary
-	untaggedCount int                                   // number of plans with no tags assigned
-	displayMode   string                                // one of DisplayModePlanContent, DisplayModeTagPlanContent
-	current       *claudeviewer.PlanDetail
-	searchQuery   string   // Current active search query (empty = show all).
-	tagFilters    []string // Active tag filters.
-	showingModal  bool     // Whether tag modal is shown.
-	showingTLDR   bool     // Whether TLDR popup is shown.
-	tldrTitle     string   // Title of the plan being summarized.
-	tldrViewport  viewport.Model
-	lastKey       string    // Last key pressed in editor (for double-key detection).
-	lastKeyTime   time.Time // Time of last key press in editor.
+	layout              types.Layout
+	focus               types.Focus
+	plans               []claudeviewer.PlanSummary            // filtered view shown in list
+	allPlans            []claudeviewer.PlanSummary            // full unfiltered source of truth
+	allTags             []claudeviewer.Tag                    // all tags in the system (including unassigned)
+	tagPlanCounts       map[string]int                        // authoritative plan count per tag from DB
+	tagPlanMap          map[string][]claudeviewer.PlanSummary // map tags to a planSummary
+	untaggedCount       int                                   // number of plans with no tags assigned
+	displayMode         string                                // one of DisplayModePlanContent, DisplayModeTagPlanContent
+	current             *claudeviewer.PlanDetail
+	searchQuery         string   // Current active search query (empty = show all).
+	tagFilters          []string // Active tag filters.
+	showingModal        bool     // Whether tag modal is shown.
+	showingCommentModal bool     // Whether comment modal is shown.
+	showingTLDR         bool     // Whether TLDR popup is shown.
+	tldrTitle           string   // Title of the plan being summarized.
+	tldrViewport        viewport.Model
+	lastKey             string    // Last key pressed in editor (for double-key detection).
+	lastKeyTime         time.Time // Time of last key press in editor.
 
 	// Dimensions.
 	width  int
@@ -73,6 +75,7 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 		searchBar:     components.NewSearchBar(panelWidth),
 		tagModal:      components.NewTagModal(),
 		confirmDialog: components.NewConfirmModal(),
+		commentModal:  components.NewCommentModal(),
 		tagFilter:     components.NewTagFilter(panelWidth),
 		layout:        types.LayoutSplit,
 		focus:         types.FocusList,
@@ -157,6 +160,24 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				msg.OnConfirmFunc,
 			)
 			return s, nil
+		}
+		return s, nil
+	}
+
+	// Handle comment modal if showing.
+	if s.showingCommentModal {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			cmd := s.commentModal.Update(msg)
+			if !s.commentModal.IsActive() {
+				s.showingCommentModal = false
+			}
+			return s, cmd
+		case messages.CommentsLoadedMsg:
+			s.commentModal.SetComments(msg.Comments)
+			return s, nil
+		case messages.AddCommentMsg, messages.DeleteCommentMsg:
+			return s, func() tea.Msg { return msg }
 		}
 		return s, nil
 	}
@@ -306,6 +327,7 @@ func (s *PlansScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		return s.handleTagFilterKey(key, msg)
 	case types.FocusTagPanel:
 		return s.handleTagPanelKey(key, msg)
+	default:
 	}
 
 	return s, nil
@@ -405,6 +427,16 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		if s.current != nil {
 			return s, func() tea.Msg {
 				return messages.OpenTagModalMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
+			}
+		}
+		return s, nil
+
+	case "n":
+		if s.current != nil {
+			s.showingCommentModal = true
+			s.commentModal.SetSize(s.width*3/4, s.height*3/4)
+			return s, func() tea.Msg {
+				return messages.OpenCommentModalMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
 			}
 		}
 		return s, nil
@@ -827,6 +859,18 @@ func (s *PlansScreen) View() string {
 		return mainContent
 	}
 
+	// Overlay comment modal if showing.
+	if s.showingCommentModal {
+		overlay := lipgloss.Place(
+			s.width,
+			s.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			s.commentModal.View(),
+		)
+		return s.overlayContent(mainContent, overlay)
+	}
+
 	return mainContent
 }
 
@@ -1148,8 +1192,9 @@ func (s *PlansScreen) ShortHelp() string {
 			mode = "AND"
 		}
 		return fmt.Sprintf("enter: filter | ctrl+t: toggle mode (%s) | esc: cancel", mode)
+	default:
+		return ""
 	}
-	return ""
 }
 
 // IsInputMode returns true when capturing text input.
@@ -1160,7 +1205,7 @@ func (s *PlansScreen) IsInputMode() bool {
 	if s.confirmDialog.IsActive() {
 		return true
 	}
-	return s.focus == types.FocusEditor || s.focus == types.FocusSearch || s.focus == types.FocusTagFilter || s.showingModal
+	return s.focus == types.FocusEditor || s.focus == types.FocusSearch || s.focus == types.FocusTagFilter || s.showingModal || s.showingCommentModal
 }
 
 // EditorMode returns true when the screen is in editor focus.
@@ -1212,6 +1257,9 @@ func (s *PlansScreen) updateListItems() {
 				tagNames[j] = tag.Name
 			}
 			desc += fmt.Sprintf(" | [%s]", strings.Join(tagNames, ", "))
+		}
+		if plan.CommentCount > 0 {
+			desc += fmt.Sprintf(" | 💬%d", plan.CommentCount)
 		}
 		items[i] = components.NewListItem(
 			plan.Title,

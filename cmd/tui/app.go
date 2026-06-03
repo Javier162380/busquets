@@ -255,6 +255,18 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleRestoreVersion(msg)
 	case messages.RestoreResultMsg:
 		return a.handleRestoreResult(msg)
+	case messages.OpenCommentModalMsg:
+		return a.handleOpenCommentModal(msg)
+	case messages.CommentsLoadedMsg:
+		return a.handleCommentsLoaded(msg)
+	case messages.AddCommentMsg:
+		return a.handleAddComment(msg)
+	case messages.AddCommentResultMsg:
+		return a.handleAddCommentResult(msg)
+	case messages.DeleteCommentMsg:
+		return a.handleDeleteComment(msg)
+	case messages.DeleteCommentResultMsg:
+		return a.handleDeleteCommentResult(msg)
 	}
 	return a.delegateToCurrentScreen(msg)
 }

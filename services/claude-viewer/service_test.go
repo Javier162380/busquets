@@ -3006,3 +3006,133 @@ func setupMockConnector(ctrl *gomock.Controller, name, displayName string) *conn
 	}).AnyTimes()
 	return mock
 }
+
+// --- Comment tests ---
+
+func TestCommentOperations(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			service, sourcePlansDir, _, cleanup := b.setupFn(t)
+			defer cleanup()
+			testCommentOperations(t, service, sourcePlansDir, b.setupFn)
+		})
+	}
+}
+
+func testCommentOperations(t *testing.T, service *Service, sourcePlansDir string, setup serviceSetupFn) {
+	t.Helper()
+	ctx := context.Background()
+
+	// Seed a plan for all sub-tests.
+	createTestPlanFile(t, sourcePlansDir, "commented.md", sampleMarkdown)
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+
+	fileName := "commented.md"
+	syncSource := sourcePlansDir
+
+	t.Run("AddComment stores and retrieves comment", func(t *testing.T) {
+		c, err := service.AddComment(ctx, fileName, syncSource, "This is my first note")
+		require.NoError(t, err)
+		require.Equal(t, "This is my first note", c.Content)
+		require.False(t, c.CreatedAt.IsZero())
+
+		comments, err := service.GetPlanComments(ctx, fileName, syncSource)
+		require.NoError(t, err)
+		require.Len(t, comments, 1)
+		require.Equal(t, "This is my first note", comments[0].Content)
+	})
+
+	t.Run("GetPlanComments returns comments in ASC order", func(t *testing.T) {
+		freshService, freshDir, _, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, freshDir, "ordered.md", sampleMarkdown)
+		_, err := freshService.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		now := time.Now()
+		freshService.nowProvider = newMockNowProvider(now)
+		_, err = freshService.AddComment(ctx, "ordered.md", freshDir, "first")
+		require.NoError(t, err)
+
+		freshService.nowProvider = newMockNowProvider(now.Add(time.Second))
+		_, err = freshService.AddComment(ctx, "ordered.md", freshDir, "second")
+		require.NoError(t, err)
+
+		comments, err := freshService.GetPlanComments(ctx, "ordered.md", freshDir)
+		require.NoError(t, err)
+		require.Len(t, comments, 2)
+		require.Equal(t, "first", comments[0].Content)
+		require.Equal(t, "second", comments[1].Content)
+		require.True(t, comments[0].CreatedAt.Before(comments[1].CreatedAt) || comments[0].CreatedAt.Equal(comments[1].CreatedAt))
+	})
+
+	t.Run("DeleteComment removes comment", func(t *testing.T) {
+		freshService, freshDir, _, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, freshDir, "deleteme.md", sampleMarkdown)
+		_, err := freshService.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		c, err := freshService.AddComment(ctx, "deleteme.md", freshDir, "to be deleted")
+		require.NoError(t, err)
+
+		err = freshService.DeleteComment(ctx, c.ID)
+		require.NoError(t, err)
+
+		comments, err := freshService.GetPlanComments(ctx, "deleteme.md", freshDir)
+		require.NoError(t, err)
+		require.Empty(t, comments)
+	})
+
+	t.Run("CommentCount appears in plan summary", func(t *testing.T) {
+		freshService, freshDir, _, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, freshDir, "planA.md", sampleMarkdown)
+		createTestPlanFile(t, freshDir, "planB.md", sampleMarkdownUpdated)
+		_, err := freshService.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		_, err = freshService.AddComment(ctx, "planA.md", freshDir, "note one")
+		require.NoError(t, err)
+		_, err = freshService.AddComment(ctx, "planA.md", freshDir, "note two")
+		require.NoError(t, err)
+
+		plans, err := freshService.ListAllPlansWithReadingTime(ctx)
+		require.NoError(t, err)
+
+		counts := make(map[string]int)
+		for _, p := range plans {
+			counts[p.FileName] = p.CommentCount
+		}
+		require.Equal(t, 2, counts["planA.md"])
+		require.Equal(t, 0, counts["planB.md"])
+	})
+
+	t.Run("Comments survive SyncPlans re-run", func(t *testing.T) {
+		freshService, freshDir, _, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, freshDir, "survive.md", sampleMarkdown)
+		_, err := freshService.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		_, err = freshService.AddComment(ctx, "survive.md", freshDir, "survives re-sync")
+		require.NoError(t, err)
+
+		// Touch the file to force a re-sync.
+		path := filepath.Join(freshDir, "survive.md")
+		require.NoError(t, os.WriteFile(path, []byte(sampleMarkdown+" extra"), 0o600))
+
+		_, err = freshService.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		comments, err := freshService.GetPlanComments(ctx, "survive.md", freshDir)
+		require.NoError(t, err)
+		require.Len(t, comments, 1)
+		require.Equal(t, "survives re-sync", comments[0].Content)
+	})
+}

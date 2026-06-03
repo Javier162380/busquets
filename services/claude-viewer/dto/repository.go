@@ -61,6 +61,12 @@ type Repository interface {
 	UpdateTag(ctx context.Context, params UpdateTagParams) error
 	DeleteTag(ctx context.Context, id int64) error
 
+	// Comment operations
+	InsertComment(ctx context.Context, params InsertCommentParams) (Comment, error)
+	GetPlanComments(ctx context.Context, planID int64) ([]Comment, error)
+	DeleteComment(ctx context.Context, id int64) error
+	GetPlanCommentCounts(ctx context.Context) (map[int64]int, error)
+
 	// Plan-Tag associations
 	AddTagToPlan(ctx context.Context, planID, tagID int64, assignedAt time.Time) error
 	RemoveTagFromPlan(ctx context.Context, planID, tagID int64) error

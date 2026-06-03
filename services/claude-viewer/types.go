@@ -11,6 +11,9 @@ import (
 // Tag is an alias for dto.Tag to expose in the service layer.
 type Tag = dto.Tag
 
+// Comment is an alias for dto.Comment to expose in the service layer.
+type Comment = dto.Comment
+
 const (
 	AverageReadingSpeed    = 200
 	DefaultReadingSpeedWPM = 200
@@ -18,16 +21,17 @@ const (
 
 // PlanSummary represents a summary of a plan for listing.
 type PlanSummary struct {
-	ID          int64
-	FileName    string
-	SyncSource  string
-	SyncLabel   string
-	Title       string
-	CreatedAt   time.Time
-	ModifiedAt  time.Time
-	FileSize    int64
-	ReadingTime int
-	Tags        []dto.Tag
+	ID           int64
+	FileName     string
+	SyncSource   string
+	SyncLabel    string
+	Title        string
+	CreatedAt    time.Time
+	ModifiedAt   time.Time
+	FileSize     int64
+	ReadingTime  int
+	Tags         []dto.Tag
+	CommentCount int
 }
 
 // PlanDetail represents detailed plan information with rendered HTML.

@@ -23,16 +23,26 @@ type Plan struct {
 // PlanSummary represents a plan summary for listing.
 // Used by ListAllPlans, SearchPlans, and their paginated variants.
 type PlanSummary struct {
-	ID          int64
-	FileName    string
-	SyncSource  string
-	Title       string
-	CreatedAt   time.Time
-	ModifiedAt  time.Time
-	FileSize    int64
-	WordCount   int64
-	ReadingTime int64
-	Tags        []Tag
+	ID           int64
+	FileName     string
+	SyncSource   string
+	Title        string
+	CreatedAt    time.Time
+	ModifiedAt   time.Time
+	FileSize     int64
+	WordCount    int64
+	ReadingTime  int64
+	Tags         []Tag
+	CommentCount int64
+}
+
+// Comment represents a user-written annotation on a plan.
+type Comment struct {
+	ID        int64
+	PlanID    int64
+	Content   string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 }
 
 // PlanVersion represents a versioned snapshot of a plan.

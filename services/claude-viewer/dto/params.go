@@ -133,3 +133,11 @@ type UpdatePlanWithTagsParams struct {
 	TagIDs     []int64
 	AssignedAt time.Time
 }
+
+// InsertCommentParams contains parameters for inserting a new plan comment.
+type InsertCommentParams struct {
+	PlanID    int64
+	Content   string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}

@@ -67,6 +67,13 @@ type ConnectorService interface {
 	ClearSummaryConnector(ctx context.Context) error
 }
 
+// CommentService defines comment operations.
+type CommentService interface {
+	AddComment(ctx context.Context, planFileName, syncSource, content string) (dto.Comment, error)
+	GetPlanComments(ctx context.Context, planFileName, syncSource string) ([]dto.Comment, error)
+	DeleteComment(ctx context.Context, commentID int64) error
+}
+
 // WatchService defines watcher operations.
 type WatchService interface {
 	StartWatchMode(ctx context.Context, intervalSeconds float64) error
@@ -112,6 +119,7 @@ type UnifiedService interface {
 	SyncService
 	ConnectorService
 	WatchService
+	CommentService
 }
 
 // Verify that *Service implements UnifiedService at compile time.

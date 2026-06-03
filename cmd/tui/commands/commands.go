@@ -583,6 +583,42 @@ func ApplyWatchSettingCmd(ctx context.Context, svc claudeviewer.UnifiedService) 
 	}
 }
 
+// LoadCommentsCmd loads comments for a plan.
+func LoadCommentsCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, syncSource string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		comments, err := svc.GetPlanComments(ctx, fileName, syncSource)
+		if err != nil {
+			return messages.ErrorMsg{Error: err}
+		}
+		return messages.CommentsLoadedMsg{Comments: comments, FileName: fileName, SyncSource: syncSource}
+	}
+}
+
+// AddCommentCmd adds a new comment to a plan.
+func AddCommentCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, syncSource, content string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		_, err := svc.AddComment(ctx, fileName, syncSource, content)
+		return messages.AddCommentResultMsg{FileName: fileName, SyncSource: syncSource, Error: err}
+	}
+}
+
+// DeleteCommentCmd deletes a comment by ID.
+func DeleteCommentCmd(ctx context.Context, svc claudeviewer.UnifiedService, commentID int64, fileName, syncSource string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		err := svc.DeleteComment(ctx, commentID)
+		return messages.DeleteCommentResultMsg{FileName: fileName, SyncSource: syncSource, Error: err}
+	}
+}
+
 // DeleteTagsCmd deletes a tag.
 func DeleteTagsCmd(ctx context.Context, svc claudeviewer.UnifiedService, tagID int64, fileName string) tea.Cmd {
 	return func() tea.Msg {

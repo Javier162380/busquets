@@ -458,8 +458,13 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName, syncSource string
 
 func (r *Repository) ListAllPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]dto.PlanSummary, error) {
 	sb := sqlbuilder.SQLite.NewSelectBuilder()
-	rtExpr := fmt.Sprintf("MAX(1, (word_count + %d - 1) / %d) AS reading_time", wpm, wpm)
-	sb.Select("id", "file_name", "sync_source", "title", "created_at", "modified_at", "file_size", "word_count", rtExpr).From("plans")
+	rtExpr := fmt.Sprintf("MAX(1, (p.word_count + %d - 1) / %d) AS reading_time", wpm, wpm)
+	sb.Select("p.id", "p.file_name", "p.sync_source", "p.title", "p.created_at", "p.modified_at", "p.file_size", "p.word_count", rtExpr, "COALESCE(cc.comment_count, 0) AS comment_count").
+		From("plans p").
+		JoinWithOption(sqlbuilder.LeftJoin,
+			"(SELECT plan_id, COUNT(*) AS comment_count FROM plan_comments GROUP BY plan_id) cc",
+			"cc.plan_id = p.id",
+		)
 	if sortCol == "reading_time" {
 		if sortDir == "asc" {
 			sb.OrderByAsc("reading_time")
@@ -467,7 +472,7 @@ func (r *Repository) ListAllPlans(ctx context.Context, sortCol, sortDir string, 
 			sb.OrderByDesc("reading_time")
 		}
 	} else {
-		applyOrder(sb, sortCol, sortDir)
+		applyOrder(sb, "p."+sortCol, sortDir)
 	}
 	q, args := sb.Build()
 	return r.queryPlanSummaries(ctx, q, args...)
@@ -982,10 +987,14 @@ func (r *Repository) GetUntaggedPlanCount(ctx context.Context) (int64, error) {
 
 func (r *Repository) ListUntaggedPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]dto.PlanSummary, error) {
 	sb := sqlbuilder.SQLite.NewSelectBuilder()
-	rtExpr := fmt.Sprintf("MAX(1, (word_count + %d - 1) / %d) AS reading_time", wpm, wpm)
-	sb.Select("id", "file_name", "sync_source", "title", "created_at", "modified_at", "file_size", "word_count", rtExpr).
-		From("plans").
-		Where("id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)")
+	rtExpr := fmt.Sprintf("MAX(1, (p.word_count + %d - 1) / %d) AS reading_time", wpm, wpm)
+	sb.Select("p.id", "p.file_name", "p.sync_source", "p.title", "p.created_at", "p.modified_at", "p.file_size", "p.word_count", rtExpr, "COALESCE(cc.comment_count, 0) AS comment_count").
+		From("plans p").
+		JoinWithOption(sqlbuilder.LeftJoin,
+			"(SELECT plan_id, COUNT(*) AS comment_count FROM plan_comments GROUP BY plan_id) cc",
+			"cc.plan_id = p.id",
+		).
+		Where("p.id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)")
 	if sortCol == "reading_time" {
 		if sortDir == "asc" {
 			sb.OrderByAsc("reading_time")
@@ -993,7 +1002,7 @@ func (r *Repository) ListUntaggedPlans(ctx context.Context, sortCol, sortDir str
 			sb.OrderByDesc("reading_time")
 		}
 	} else {
-		applyOrder(sb, sortCol, sortDir)
+		applyOrder(sb, "p."+sortCol, sortDir)
 	}
 	q, args := sb.Build()
 	return r.queryPlanSummaries(ctx, q, args...)
@@ -1157,6 +1166,59 @@ func applyOrder(sb *sqlbuilder.SelectBuilder, col, dir string) {
 	}
 }
 
+// Comment operations
+
+func commentToDomain(c PlanComment) dto.Comment {
+	return dto.Comment{
+		ID:        c.ID,
+		PlanID:    c.PlanID,
+		Content:   c.Content,
+		CreatedAt: c.CreatedAt,
+		UpdatedAt: c.UpdatedAt,
+	}
+}
+
+func (r *Repository) InsertComment(ctx context.Context, params dto.InsertCommentParams) (dto.Comment, error) {
+	c, err := r.q.InsertComment(ctx, InsertCommentParams{
+		PlanID:    params.PlanID,
+		Content:   params.Content,
+		CreatedAt: params.CreatedAt,
+		UpdatedAt: params.UpdatedAt,
+	})
+	if err != nil {
+		return dto.Comment{}, err
+	}
+	return commentToDomain(c), nil
+}
+
+func (r *Repository) GetPlanComments(ctx context.Context, planID int64) ([]dto.Comment, error) {
+	rows, err := r.q.GetPlanComments(ctx, planID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.Comment, len(rows))
+	for i, row := range rows {
+		result[i] = commentToDomain(row)
+	}
+	return result, nil
+}
+
+func (r *Repository) DeleteComment(ctx context.Context, id int64) error {
+	return r.q.DeleteComment(ctx, id)
+}
+
+func (r *Repository) GetPlanCommentCounts(ctx context.Context) (map[int64]int, error) {
+	rows, err := r.q.GetPlanCommentCounts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	counts := make(map[int64]int, len(rows))
+	for _, row := range rows {
+		counts[row.PlanID] = int(row.CommentCount)
+	}
+	return counts, nil
+}
+
 func (r *Repository) queryPlanSummariesWithTags(ctx context.Context, q string, args ...interface{}) ([]dto.PlanSummary, error) {
 	rows, err := r.q.db.QueryContext(ctx, q, args...)
 	if err != nil {
@@ -1206,29 +1268,31 @@ func (r *Repository) queryPlanSummaries(ctx context.Context, q string, args ...i
 	var result []dto.PlanSummary
 	for rows.Next() {
 		var (
-			id          int64
-			fileName    string
-			syncSource  string
-			title       string
-			createdAt   time.Time
-			modifiedAt  time.Time
-			fileSize    int64
-			wordCount   int64
-			readingTime int64
+			id           int64
+			fileName     string
+			syncSource   string
+			title        string
+			createdAt    time.Time
+			modifiedAt   time.Time
+			fileSize     int64
+			wordCount    int64
+			readingTime  int64
+			commentCount int64
 		)
-		if err := rows.Scan(&id, &fileName, &syncSource, &title, &createdAt, &modifiedAt, &fileSize, &wordCount, &readingTime); err != nil {
+		if err := rows.Scan(&id, &fileName, &syncSource, &title, &createdAt, &modifiedAt, &fileSize, &wordCount, &readingTime, &commentCount); err != nil {
 			return nil, err
 		}
 		result = append(result, dto.PlanSummary{
-			ID:          id,
-			FileName:    fileName,
-			SyncSource:  syncSource,
-			Title:       title,
-			CreatedAt:   createdAt,
-			ModifiedAt:  modifiedAt,
-			FileSize:    fileSize,
-			WordCount:   wordCount,
-			ReadingTime: readingTime,
+			ID:           id,
+			FileName:     fileName,
+			SyncSource:   syncSource,
+			Title:        title,
+			CreatedAt:    createdAt,
+			ModifiedAt:   modifiedAt,
+			FileSize:     fileSize,
+			WordCount:    wordCount,
+			ReadingTime:  readingTime,
+			CommentCount: commentCount,
 		})
 	}
 	return result, rows.Err()

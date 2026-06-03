@@ -13,10 +13,12 @@ const (
 type Focus int
 
 const (
-	FocusList      Focus = iota // Navigating a list.
-	FocusContent                // Viewing content.
-	FocusEditor                 // Editing content.
-	FocusSearch                 // Search input.
-	FocusTagFilter              // Tag filter input.
-	FocusTagPanel               // Left-side tag navigation panel.
+	FocusList         Focus = iota // Navigating a list.
+	FocusContent                   // Viewing content.
+	FocusEditor                    // Editing content.
+	FocusSearch                    // Search input.
+	FocusTagFilter                 // Tag filter input.
+	FocusTagPanel                  // Left-side tag navigation panel.
+	FocusCommentList               // Navigating the comment list in the comment modal.
+	FocusCommentInput              // Composing a new comment in the comment modal.
 )
