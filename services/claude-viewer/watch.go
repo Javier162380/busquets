@@ -102,7 +102,9 @@ func (wm *WatchManager) watchLoop(ctx context.Context) {
 				tickerInterval = currentInterval
 			}
 
-			count, err := wm.service.SyncPlans(ctx)
+			timeoutCtx, cancel := context.WithTimeout(ctx, wm.interval/2)
+			count, err := wm.service.SyncPlans(timeoutCtx)
+			cancel()
 			select {
 			case wm.resultChan <- WatchResult{Count: count, Error: err}:
 			case <-ctx.Done():
