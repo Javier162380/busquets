@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 )
@@ -128,6 +129,14 @@ func (c *Config) applyEnvOverrides() {
 	if v := os.Getenv("PLAN_VIEWER_DIR"); v != "" {
 		c.Paths.ViewerDir = v
 	}
+	if v := os.Getenv("PLAN_VIEWER_PLANS_DIR"); v != "" {
+		// PLAN_VIEWER_PLANS_DIR was replaced by [[paths.plans_dirs]] in the TOML config.
+		// Fall back gracefully: treat the value as a single unlabelled sync directory.
+		fmt.Fprintf(os.Stderr, "warning: PLAN_VIEWER_PLANS_DIR is deprecated; use [[paths.plans_dirs]] in plan-viewer.toml instead\n")
+		if len(c.Paths.PlansDirs) == 0 {
+			c.Paths.PlansDirs = []SyncDir{{Path: v}}
+		}
+	}
 	if v := os.Getenv("PLAN_VIEWER_MCP_SERVER_NAME"); v != "" {
 		c.MCP.ServerName = v
 	}
@@ -179,6 +188,9 @@ func (c *Config) Validate() error {
 	for i, d := range c.Paths.PlansDirs {
 		if d.Path == "" {
 			return fmt.Errorf("plans_dirs[%d] is missing a path", i)
+		}
+		if strings.ContainsAny(d.Label, "/\\") {
+			return fmt.Errorf("plans_dirs[%d] label %q must not contain path separators", i, d.Label)
 		}
 		if prev, dup := seenPaths[d.Path]; dup {
 			return fmt.Errorf("plans_dirs[%d] and plans_dirs[%d] share the same path %q", prev, i, d.Path)

@@ -245,7 +245,8 @@ More testing details.`
 
 	t.Run("plan not found", func(t *testing.T) {
 		args := GetPlanArgs{
-			FileName: "nonexistent-plan.md",
+			FileName:   "nonexistent-plan.md",
+			SyncSource: "test",
 		}
 
 		result, plan, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
@@ -253,6 +254,19 @@ More testing details.`
 		require.Nil(t, result)
 		require.Nil(t, plan)
 		require.Contains(t, err.Error(), "failed to get plan")
+	})
+
+	t.Run("unknown source returns error", func(t *testing.T) {
+		args := GetPlanArgs{
+			FileName:   "test-plan.md",
+			SyncSource: "does-not-exist",
+		}
+
+		result, plan, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Nil(t, plan)
+		require.Contains(t, err.Error(), "unknown source")
 	})
 
 	t.Run("verify TOON format with content", func(t *testing.T) {

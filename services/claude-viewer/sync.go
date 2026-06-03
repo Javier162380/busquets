@@ -106,6 +106,28 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("failed to list plans: %w", err)
 	}
 
+	// Pre-build a per-source set of files already on disk — one ReadDir per unique
+	// source directory rather than one per plan.
+	sourceFiles := make(map[string]map[string]struct{})
+	for _, summary := range summaries {
+		if _, seen := sourceFiles[summary.SyncSource]; seen {
+			continue
+		}
+		entries, readErr := os.ReadDir(summary.SyncSource)
+		if readErr != nil {
+			s.logger.Warn("failed to read source dir for rsync", "dir", summary.SyncSource, "error", readErr)
+			sourceFiles[summary.SyncSource] = map[string]struct{}{} // empty — nothing to skip
+			continue
+		}
+		set := make(map[string]struct{}, len(entries))
+		for _, entry := range entries {
+			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".md") {
+				set[entry.Name()] = struct{}{}
+			}
+		}
+		sourceFiles[summary.SyncSource] = set
+	}
+
 	rsyncPlans := atomic.Int64{}
 	errGroup := errgroup.Group{}
 	errGroup.SetLimit(5)
@@ -115,20 +137,7 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 		syncSource := summary.SyncSource
 		viewerSubdir := s.viewerSubdirFor(syncSource)
 
-		// Build set of files already in source dir
-		sourceEntries, err := os.ReadDir(syncSource)
-		if err != nil {
-			s.logger.Warn("failed to read source dir for rsync", "dir", syncSource, "error", err)
-			continue
-		}
-		sourcePlanFiles := make(map[string]struct{}, len(sourceEntries))
-		for _, entry := range sourceEntries {
-			if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".md") {
-				sourcePlanFiles[entry.Name()] = struct{}{}
-			}
-		}
-
-		if _, ok := sourcePlanFiles[fileName]; ok {
+		if _, ok := sourceFiles[syncSource][fileName]; ok {
 			continue
 		}
 

@@ -66,6 +66,9 @@ func (h *Handler) GetPlanHandler(ctx context.Context, req *mcp.CallToolRequest, 
 	}
 
 	syncSource := h.service.SourcePathForLabel(args.SyncSource)
+	if syncSource == "" {
+		return nil, nil, fmt.Errorf("unknown source %q: use a label from search_plans results", args.SyncSource)
+	}
 	plan, err := h.service.GetPlanDetailByFileName(ctx, args.FileName, syncSource)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get plan: %w", err)

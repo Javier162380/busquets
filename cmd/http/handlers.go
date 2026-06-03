@@ -34,6 +34,9 @@ func (s *Server) handleViewPlan(c echo.Context) error {
 	ctx := c.Request().Context()
 	fileName := c.Param("filename")
 	syncSource := s.service.SourcePathForLabel(c.Param("source"))
+	if syncSource == "" {
+		return c.String(http.StatusNotFound, "Unknown source")
+	}
 
 	planDetail, err := s.service.GetPlanDetailByFileName(ctx, fileName, syncSource)
 	if err != nil {
@@ -78,9 +81,13 @@ func (s *Server) handleUpdatePlan(c echo.Context) error {
 		})
 	}
 
+	syncSource := s.service.SourcePathForLabel(req.SyncSource)
+	if syncSource == "" {
+		return c.JSON(http.StatusNotFound, ErrorResponse{Error: "Unknown source"})
+	}
 	result, err := s.service.UpdatePlan(ctx, claudeviewer.UpdatePlanRequest{
 		FileName:         req.FileName,
-		SyncSource:       s.service.SourcePathForLabel(req.SyncSource),
+		SyncSource:       syncSource,
 		NewContent:       req.Content,
 		LastModifiedTime: req.LastModifiedTime,
 		Force:            req.Force,
@@ -120,9 +127,13 @@ func (s *Server) handleSavePlanLocal(c echo.Context) error {
 		})
 	}
 
+	syncSource := s.service.SourcePathForLabel(req.SyncSource)
+	if syncSource == "" {
+		return c.JSON(http.StatusNotFound, ErrorResponse{Error: "Unknown source"})
+	}
 	result, err := s.service.SavePlanLocal(ctx, claudeviewer.UpdatePlanRequest{
 		FileName:         req.FileName,
-		SyncSource:       s.service.SourcePathForLabel(req.SyncSource),
+		SyncSource:       syncSource,
 		NewContent:       req.Content,
 		LastModifiedTime: req.LastModifiedTime,
 		Force:            req.Force,
@@ -329,6 +340,9 @@ func (s *Server) handleGetPlanVersionHistory(c echo.Context) error {
 	}
 
 	syncSource := s.service.SourcePathForLabel(c.Param("source"))
+	if syncSource == "" {
+		return c.JSON(http.StatusNotFound, ErrorResponse{Error: "Unknown source"})
+	}
 	// Fetch versions with pagination
 	versions, err := s.service.GetPlanVersionHistory(ctx, planName, syncSource, token.Offset, pageSize)
 	if err != nil {
@@ -378,6 +392,9 @@ func (s *Server) handleGetPlanVersion(c echo.Context) error {
 	}
 
 	syncSource := s.service.SourcePathForLabel(c.Param("source"))
+	if syncSource == "" {
+		return c.JSON(http.StatusNotFound, ErrorResponse{Error: "Unknown source"})
+	}
 	// Get version from service
 	version, err := s.service.GetPlanVersion(ctx, planName, syncSource, versionNumber)
 	if err != nil {
@@ -414,6 +431,9 @@ func (s *Server) handleRestorePlanVersion(c echo.Context) error {
 	}
 
 	syncSource := s.service.SourcePathForLabel(c.Param("source"))
+	if syncSource == "" {
+		return c.JSON(http.StatusNotFound, ErrorResponse{Error: "Unknown source"})
+	}
 	// Restore the version
 	err = s.service.RestorePlanVersion(ctx, planName, syncSource, versionNumber)
 	if err != nil {
@@ -434,6 +454,9 @@ func (s *Server) handleViewPlanVersions(c echo.Context) error {
 	ctx := c.Request().Context()
 	planName := c.Param("planName")
 	syncSource := s.service.SourcePathForLabel(c.Param("source"))
+	if syncSource == "" {
+		return c.String(http.StatusNotFound, "Unknown source")
+	}
 
 	_, err := s.service.GetPlanByFileName(ctx, planName, syncSource)
 	if err != nil {
@@ -453,6 +476,9 @@ func (s *Server) handleSearchVersions(c echo.Context) error {
 	ctx := c.Request().Context()
 	planName := c.Param("planName")
 	syncSource := s.service.SourcePathForLabel(c.Param("source"))
+	if syncSource == "" {
+		return c.JSON(http.StatusNotFound, ErrorResponse{Error: "Unknown source"})
+	}
 	query := c.QueryParam("q")
 
 	_, err := s.service.GetPlanByFileName(ctx, planName, syncSource)

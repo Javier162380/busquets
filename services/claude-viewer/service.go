@@ -91,10 +91,15 @@ func (s *Service) LabelForSource(syncSource string) string {
 }
 
 // SourcePathForLabel returns the sync_source path for a given label.
-// Returns empty string if not found.
+// Mirrors the fallback in labelForSource: a dir with no explicit label is
+// matched by filepath.Base(path). Returns empty string if not found.
 func (s *Service) SourcePathForLabel(label string) string {
 	for _, d := range s.sourcePlansDirs {
-		if d.Label == label {
+		effective := d.Label
+		if effective == "" {
+			effective = filepath.Base(d.Path)
+		}
+		if effective == label {
 			return d.Path
 		}
 	}
@@ -119,11 +124,21 @@ func (s *Service) viewerSubdirFor(syncSource string) string {
 	return slugify(label)
 }
 
-// slugify converts a label to a safe directory name (lowercase, spaces→hyphens).
+// slugify converts a label to a safe directory name.
+// Only characters in [a-z0-9-_] are kept; spaces become hyphens; all other
+// characters (including path separators) are stripped.
 func slugify(s string) string {
 	s = strings.ToLower(s)
-	s = strings.ReplaceAll(s, " ", "-")
-	return s
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		case r == ' ':
+			b.WriteRune('-')
+		}
+	}
+	return b.String()
 }
 
 // Close stops background goroutines started by New (cache GC and watch manager).
