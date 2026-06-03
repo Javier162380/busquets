@@ -2645,6 +2645,430 @@ func testSearchOverSetting(t *testing.T, setup serviceSetupFn) {
 	})
 }
 
+// ---- Multi-source setup helpers ----
+
+type multiSourceSetup struct {
+	sourceDir1 string
+	sourceDir2 string
+	viewerDir  string
+}
+
+type multiSourceSetupFn func(t *testing.T) (*Service, multiSourceSetup, func())
+
+func setupMultiSourceSQLite(t *testing.T) (*Service, multiSourceSetup, func()) {
+	t.Helper()
+
+	tempDir, err := os.MkdirTemp(os.TempDir(), "claude-viewer-multi-*")
+	require.NoError(t, err)
+
+	viewerDir := filepath.Join(tempDir, "viewer")
+	sourceDir1 := filepath.Join(tempDir, "source-a")
+	sourceDir2 := filepath.Join(tempDir, "source-b")
+	dbPath := filepath.Join(tempDir, "test.db")
+
+	require.NoError(t, os.MkdirAll(viewerDir, 0o755))
+	require.NoError(t, os.MkdirAll(sourceDir1, 0o755))
+	require.NoError(t, os.MkdirAll(sourceDir2, 0o755))
+
+	ctx := context.Background()
+	db, err := newTestRepository(ctx, dbPath)
+	require.NoError(t, err)
+
+	svc, err := New(db, viewerDir, []config.SyncDir{
+		{Path: sourceDir1, Label: "dir-a"},
+		{Path: sourceDir2, Label: "dir-b"},
+	}, true)
+	require.NoError(t, err)
+
+	fixedTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
+	svc.nowProvider = newMockNowProvider(fixedTime)
+
+	return svc, multiSourceSetup{
+		sourceDir1: sourceDir1,
+		sourceDir2: sourceDir2,
+		viewerDir:  viewerDir,
+	}, func() { os.RemoveAll(tempDir) }
+}
+
+func setupMultiSourcePostgres(t *testing.T) (*Service, multiSourceSetup, func()) {
+	t.Helper()
+	ctx := context.Background()
+
+	dbName := fmt.Sprintf("testdb_multi_%d", time.Now().UnixNano())
+	adminConnStr := pgDBConnStr(pgBaseConnStr, "postgres")
+
+	adminPool, err := pgxpool.New(ctx, adminConnStr)
+	require.NoError(t, err)
+	_, err = adminPool.Exec(ctx, "CREATE DATABASE "+dbName)
+	adminPool.Close()
+	require.NoError(t, err)
+
+	testConnStr := pgDBConnStr(pgBaseConnStr, dbName)
+	err = storage.RunPostgresMigrations(ctx, storage.PostgresConfig{ConnectionString: testConnStr}, nil)
+	require.NoError(t, err)
+
+	pool, err := storage.NewPostgresClient(ctx, storage.PostgresConfig{
+		ConnectionString: testConnStr,
+		MaxOpenConns:     5,
+		MaxIdleConns:     2,
+	})
+	require.NoError(t, err)
+
+	repo := postgresrepo.NewRepository(pool.Pool())
+
+	tempDir, err := os.MkdirTemp(os.TempDir(), "claude-viewer-pg-multi-*")
+	require.NoError(t, err)
+
+	viewerDir := filepath.Join(tempDir, "viewer")
+	sourceDir1 := filepath.Join(tempDir, "source-a")
+	sourceDir2 := filepath.Join(tempDir, "source-b")
+
+	require.NoError(t, os.MkdirAll(viewerDir, 0o755))
+	require.NoError(t, os.MkdirAll(sourceDir1, 0o755))
+	require.NoError(t, os.MkdirAll(sourceDir2, 0o755))
+
+	svc, err := New(repo, viewerDir, []config.SyncDir{
+		{Path: sourceDir1, Label: "dir-a"},
+		{Path: sourceDir2, Label: "dir-b"},
+	}, true)
+	require.NoError(t, err)
+
+	fixedTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
+	svc.nowProvider = newMockNowProvider(fixedTime)
+
+	cleanup := func() {
+		pool.Close()
+		dropPool, err := pgxpool.New(ctx, adminConnStr)
+		if err == nil {
+			_, _ = dropPool.Exec(ctx, "DROP DATABASE "+dbName+" WITH (FORCE)")
+			dropPool.Close()
+		}
+		os.RemoveAll(tempDir)
+	}
+	return svc, multiSourceSetup{
+		sourceDir1: sourceDir1,
+		sourceDir2: sourceDir2,
+		viewerDir:  viewerDir,
+	}, cleanup
+}
+
+func multiSourceTestBackends() []struct {
+	name    string
+	setupFn multiSourceSetupFn
+} {
+	backends := []struct {
+		name    string
+		setupFn multiSourceSetupFn
+	}{
+		{"sqlite", setupMultiSourceSQLite},
+	}
+	if os.Getenv("INTEGRATION") != "" {
+		backends = append(backends, struct {
+			name    string
+			setupFn multiSourceSetupFn
+		}{"postgres", setupMultiSourcePostgres})
+	}
+	return backends
+}
+
+// ---- Multi-source tests ----
+
+func TestSlugify(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"plans", "plans"},
+		{"My Plans", "my-plans"},
+		{"WORK", "work"},
+		{"A B C", "a-b-c"},
+		{"already-slug", "already-slug"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			require.Equal(t, tc.want, slugify(tc.input))
+		})
+	}
+}
+
+func TestLabelHelpers(t *testing.T) {
+	for _, b := range multiSourceTestBackends() {
+		t.Run(b.name, func(t *testing.T) {
+			testLabelHelpers(t, b.setupFn)
+		})
+	}
+}
+
+func testLabelHelpers(t *testing.T, setup multiSourceSetupFn) {
+	t.Helper()
+	svc, dirs, cleanup := setup(t)
+	defer cleanup()
+
+	t.Run("LabelForSource known path returns configured label", func(t *testing.T) {
+		require.Equal(t, "dir-a", svc.LabelForSource(dirs.sourceDir1))
+		require.Equal(t, "dir-b", svc.LabelForSource(dirs.sourceDir2))
+	})
+
+	t.Run("LabelForSource unknown path falls back to base dir name", func(t *testing.T) {
+		unknownPath := filepath.Join(dirs.viewerDir, "unknown", "nested")
+		require.Equal(t, "nested", svc.LabelForSource(unknownPath))
+	})
+
+	t.Run("SourcePathForLabel known label returns path", func(t *testing.T) {
+		require.Equal(t, dirs.sourceDir1, svc.SourcePathForLabel("dir-a"))
+		require.Equal(t, dirs.sourceDir2, svc.SourcePathForLabel("dir-b"))
+	})
+
+	t.Run("SourcePathForLabel unknown label returns empty string", func(t *testing.T) {
+		require.Equal(t, "", svc.SourcePathForLabel("nonexistent"))
+	})
+
+	t.Run("viewerSubdirFor returns slugified label", func(t *testing.T) {
+		require.Equal(t, "dir-a", svc.viewerSubdirFor(dirs.sourceDir1))
+		require.Equal(t, "dir-b", svc.viewerSubdirFor(dirs.sourceDir2))
+	})
+}
+
+func TestMultiDirSyncPlans(t *testing.T) {
+	for _, b := range multiSourceTestBackends() {
+		t.Run(b.name, func(t *testing.T) {
+			testMultiDirSyncPlans(t, b.setupFn)
+		})
+	}
+}
+
+func testMultiDirSyncPlans(t *testing.T, setup multiSourceSetupFn) {
+	t.Helper()
+	ctx := context.Background()
+
+	t.Run("plans from both dirs are indexed", func(t *testing.T) {
+		svc, dirs, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, dirs.sourceDir1, "plan-a.md", "# Plan A\n\nFrom dir a.")
+		createTestPlanFile(t, dirs.sourceDir2, "plan-b.md", "# Plan B\n\nFrom dir b.")
+
+		count, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 2, count)
+
+		plans, err := svc.ListAllPlansWithReadingTime(ctx)
+		require.NoError(t, err)
+		require.Len(t, plans, 2)
+	})
+
+	t.Run("same filename in two dirs no collision", func(t *testing.T) {
+		svc, dirs, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, dirs.sourceDir1, "plan.md", "# Plan from A\n\nContent A.")
+		createTestPlanFile(t, dirs.sourceDir2, "plan.md", "# Plan from B\n\nContent B.")
+
+		count, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 2, count)
+
+		planA, err := svc.GetPlanByFileName(ctx, "plan.md", dirs.sourceDir1)
+		require.NoError(t, err)
+		require.Equal(t, "Plan from A", planA.Title)
+
+		planB, err := svc.GetPlanByFileName(ctx, "plan.md", dirs.sourceDir2)
+		require.NoError(t, err)
+		require.Equal(t, "Plan from B", planB.Title)
+	})
+
+	t.Run("sync_source stored correctly on each plan", func(t *testing.T) {
+		svc, dirs, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, dirs.sourceDir1, "mine.md", "# Mine\n\nContent.")
+		createTestPlanFile(t, dirs.sourceDir2, "theirs.md", "# Theirs\n\nContent.")
+		_, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		planA, err := svc.GetPlanByFileName(ctx, "mine.md", dirs.sourceDir1)
+		require.NoError(t, err)
+		require.Equal(t, dirs.sourceDir1, planA.SyncSource)
+
+		planB, err := svc.GetPlanByFileName(ctx, "theirs.md", dirs.sourceDir2)
+		require.NoError(t, err)
+		require.Equal(t, dirs.sourceDir2, planB.SyncSource)
+	})
+
+	t.Run("sync_label resolved on plan detail", func(t *testing.T) {
+		svc, dirs, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, dirs.sourceDir1, "label-test.md", "# Label Test\n\nContent.")
+		_, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		detail, err := svc.GetPlanDetailByFileName(ctx, "label-test.md", dirs.sourceDir1)
+		require.NoError(t, err)
+		require.Equal(t, "dir-a", detail.SyncLabel)
+	})
+
+	t.Run("viewer copies land in separate subdirs", func(t *testing.T) {
+		svc, dirs, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, dirs.sourceDir1, "plan.md", "# Plan A\n\nContent.")
+		createTestPlanFile(t, dirs.sourceDir2, "plan.md", "# Plan B\n\nContent.")
+		_, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		_, err = os.Stat(filepath.Join(dirs.viewerDir, "dir-a", "plan.md"))
+		require.NoError(t, err, "viewer copy missing from dir-a subdir")
+
+		_, err = os.Stat(filepath.Join(dirs.viewerDir, "dir-b", "plan.md"))
+		require.NoError(t, err, "viewer copy missing from dir-b subdir")
+	})
+
+	t.Run("second sync is idempotent across dirs", func(t *testing.T) {
+		svc, dirs, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, dirs.sourceDir1, "idem.md", "# Idempotent\n\nContent.")
+		createTestPlanFile(t, dirs.sourceDir2, "idem2.md", "# Idempotent 2\n\nContent.")
+		_, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		count, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 0, count)
+	})
+
+	t.Run("one dir empty count reflects only non-empty dir", func(t *testing.T) {
+		svc, dirs, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, dirs.sourceDir1, "only-a.md", "# Only A\n\nContent.")
+		// sourceDir2 intentionally empty
+
+		count, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+	})
+}
+
+func TestMultiDirRSyncPlans(t *testing.T) {
+	for _, b := range multiSourceTestBackends() {
+		t.Run(b.name, func(t *testing.T) {
+			testMultiDirRSyncPlans(t, b.setupFn)
+		})
+	}
+}
+
+func testMultiDirRSyncPlans(t *testing.T, setup multiSourceSetupFn) {
+	t.Helper()
+	ctx := context.Background()
+
+	t.Run("restores plan to its original source dir", func(t *testing.T) {
+		svc, dirs, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, dirs.sourceDir1, "restore-me.md", "# Restore Me\n\nContent.")
+		createTestPlanFile(t, dirs.sourceDir2, "stay.md", "# Stay\n\nContent.")
+		_, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, os.Remove(filepath.Join(dirs.sourceDir1, "restore-me.md")))
+
+		count, err := svc.RSyncPlans(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		_, err = os.Stat(filepath.Join(dirs.sourceDir1, "restore-me.md"))
+		require.NoError(t, err, "plan should be restored to its original source dir")
+	})
+
+	t.Run("does not restore plan to wrong source dir", func(t *testing.T) {
+		svc, dirs, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, dirs.sourceDir2, "only-b.md", "# Only B\n\nContent.")
+		_, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, os.Remove(filepath.Join(dirs.sourceDir2, "only-b.md")))
+
+		_, err = svc.RSyncPlans(ctx)
+		require.NoError(t, err)
+
+		_, err = os.Stat(filepath.Join(dirs.sourceDir1, "only-b.md"))
+		require.ErrorIs(t, err, os.ErrNotExist, "plan must not be placed in wrong source dir")
+	})
+}
+
+func TestMultiDirUpdatePlan(t *testing.T) {
+	for _, b := range multiSourceTestBackends() {
+		t.Run(b.name, func(t *testing.T) {
+			testMultiDirUpdatePlan(t, b.setupFn)
+		})
+	}
+}
+
+func testMultiDirUpdatePlan(t *testing.T, setup multiSourceSetupFn) {
+	t.Helper()
+	ctx := context.Background()
+
+	t.Run("update writes to correct source path", func(t *testing.T) {
+		svc, dirs, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, dirs.sourceDir1, "target.md", "# Original\n\nOriginal content.")
+		createTestPlanFile(t, dirs.sourceDir2, "unrelated.md", "# Unrelated\n\nStay unchanged.")
+		_, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plan, err := svc.GetPlanByFileName(ctx, "target.md", dirs.sourceDir1)
+		require.NoError(t, err)
+
+		result, err := svc.UpdatePlan(ctx, UpdatePlanRequest{
+			FileName:         "target.md",
+			SyncSource:       dirs.sourceDir1,
+			NewContent:       "# Updated\n\nNew content.",
+			LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+		require.True(t, result.Success)
+
+		content, err := os.ReadFile(filepath.Join(dirs.sourceDir1, "target.md"))
+		require.NoError(t, err)
+		require.Equal(t, "# Updated\n\nNew content.", string(content))
+	})
+
+	t.Run("update in dir-a does not affect same filename in dir-b", func(t *testing.T) {
+		svc, dirs, cleanup := setup(t)
+		defer cleanup()
+
+		createTestPlanFile(t, dirs.sourceDir1, "shared-name.md", "# A Version\n\nContent from A.")
+		createTestPlanFile(t, dirs.sourceDir2, "shared-name.md", "# B Version\n\nContent from B.")
+		_, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		planA, err := svc.GetPlanByFileName(ctx, "shared-name.md", dirs.sourceDir1)
+		require.NoError(t, err)
+
+		result, err := svc.UpdatePlan(ctx, UpdatePlanRequest{
+			FileName:         "shared-name.md",
+			SyncSource:       dirs.sourceDir1,
+			NewContent:       "# A Updated\n\nUpdated content from A.",
+			LastModifiedTime: planA.ModifiedAt,
+		})
+		require.NoError(t, err)
+		require.True(t, result.Success)
+
+		contentB, err := os.ReadFile(filepath.Join(dirs.sourceDir2, "shared-name.md"))
+		require.NoError(t, err)
+		require.Equal(t, "# B Version\n\nContent from B.", string(contentB))
+
+		planB, err := svc.GetPlanByFileName(ctx, "shared-name.md", dirs.sourceDir2)
+		require.NoError(t, err)
+		require.Equal(t, "B Version", planB.Title)
+	})
+}
+
 // setupMockConnector creates a gomock MockConnector with standard expectations.
 func setupMockConnector(ctrl *gomock.Controller, name, displayName string) *connectors_test.MockConnector {
 	mock := connectors_test.NewMockConnector(ctrl)

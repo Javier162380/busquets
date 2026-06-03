@@ -358,7 +358,7 @@
             hx-select="li">
             {{range .Plans}}
             <li class="plan-item">
-                <a href="/plan/{{.FileName}}" class="plan-title">{{.Title}}</a>
+                <a href="/plan/{{.SyncLabel}}/{{.FileName}}" class="plan-title">{{.Title}}</a>
                 <div class="plan-meta">
                     {{.FileName}} • Modified: {{.ModifiedAt.Format "2006-01-02 15:04"}} • {{.FileSize}} bytes • {{.ReadingTime}} min read
                 </div>

@@ -176,7 +176,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.list.Select(0)
 		var cmds []tea.Cmd
 		if len(s.plans) > 0 {
-			cmds = append(cmds, s.loadPlanDetail(s.plans[0].FileName))
+			cmds = append(cmds, s.loadPlanDetail(s.plans[0].FileName, s.plans[0].SyncSource))
 		}
 		if s.tagPanel != nil && !msg.IsFiltered {
 			cmds = append(cmds, func() tea.Msg { return messages.LoadAllTagsForPanelMsg{} })
@@ -213,7 +213,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			s.editor.Blur()
 			// Reload the plan.
 			if s.current != nil {
-				return s, s.loadPlanDetail(s.current.FileName)
+				return s, s.loadPlanDetail(s.current.FileName, s.current.SyncSource)
 			}
 		}
 		return s, nil
@@ -231,7 +231,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case messages.OpenTagModalMsg:
 		// Load all tags and current plan tags, then open modal.
 		return s, func() tea.Msg {
-			return messages.LoadTagsForModalMsg{FileName: msg.FileName}
+			return messages.LoadTagsForModalMsg{FileName: msg.FileName, SyncSource: msg.SyncSource}
 		}
 
 	case components.TagsLoadedMsg:
@@ -244,8 +244,9 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		// Save tags via service layer.
 		return s, func() tea.Msg {
 			return messages.SetPlanTagsMsg{
-				FileName: msg.FileName,
-				Tags:     msg.Tags,
+				FileName:   msg.FileName,
+				SyncSource: msg.SyncSource,
+				Tags:       msg.Tags,
 			}
 		}
 
@@ -355,7 +356,7 @@ func (s *PlansScreen) applyTagFilter(tag string) tea.Cmd {
 		s.updateListItems()
 		s.list.Select(0)
 		if len(s.plans) > 0 {
-			return s.loadPlanDetail(s.plans[0].FileName)
+			return s.loadPlanDetail(s.plans[0].FileName, s.plans[0].SyncSource)
 		}
 		return nil
 	}
@@ -374,7 +375,7 @@ func (s *PlansScreen) applyTagFilter(tag string) tea.Cmd {
 		s.updateListItems()
 		s.list.Select(0)
 		if len(s.plans) > 0 {
-			return s.loadPlanDetail(s.plans[0].FileName)
+			return s.loadPlanDetail(s.plans[0].FileName, s.plans[0].SyncSource)
 		}
 		return nil
 	}
@@ -402,7 +403,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 	case "m":
 		if s.current != nil {
 			return s, func() tea.Msg {
-				return messages.OpenTagModalMsg{FileName: s.current.FileName}
+				return messages.OpenTagModalMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
 			}
 		}
 		return s, nil
@@ -460,11 +461,11 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		if s.current != nil {
 			if s.showingTLDR {
 				return s, func() tea.Msg {
-					return messages.RegenerateTLDRMsg{FileName: s.current.FileName}
+					return messages.RegenerateTLDRMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
 				}
 			}
 			return s, func() tea.Msg {
-				return messages.GenerateTLDRMsg{FileName: s.current.FileName}
+				return messages.GenerateTLDRMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
 			}
 		}
 		return s, nil
@@ -486,7 +487,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		cmd := s.list.Update(msg)
 		if item := s.list.SelectedItem(); item != nil {
 			if plan, ok := item.Data().(claudeviewer.PlanSummary); ok {
-				return s, tea.Batch(cmd, s.loadPlanDetail(plan.FileName))
+				return s, tea.Batch(cmd, s.loadPlanDetail(plan.FileName, plan.SyncSource))
 			}
 		}
 		return s, cmd
@@ -505,7 +506,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 			cmd := s.list.Update(msg)
 			if item := s.list.SelectedItem(); item != nil {
 				if plan, ok := item.Data().(claudeviewer.PlanSummary); ok {
-					return s, tea.Batch(cmd, s.loadPlanDetail(plan.FileName))
+					return s, tea.Batch(cmd, s.loadPlanDetail(plan.FileName, plan.SyncSource))
 				}
 				return s, cmd
 			}
@@ -577,7 +578,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		// View versions - check if versions exist first.
 		if s.current != nil {
 			return s, func() tea.Msg {
-				return messages.RequestVersionsScreenMsg{PlanName: s.current.FileName}
+				return messages.RequestVersionsScreenMsg{PlanName: s.current.FileName, SyncSource: s.current.SyncSource}
 			}
 		}
 		return s, nil
@@ -586,7 +587,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		// Transmit to connector.
 		if s.current != nil {
 			return s, func() tea.Msg {
-				return messages.SendToConnectorMsg{PlanFileName: s.current.FileName}
+				return messages.SendToConnectorMsg{PlanFileName: s.current.FileName, SyncSource: s.current.SyncSource}
 			}
 		}
 		return s, nil
@@ -1201,6 +1202,9 @@ func (s *PlansScreen) updateListItems() {
 	for i, plan := range s.plans {
 		// Build description with tags.
 		desc := fmt.Sprintf("%s | %d min read", plan.ModifiedAt.Format("2006-01-02"), plan.ReadingTime)
+		if plan.SyncLabel != "" {
+			desc += fmt.Sprintf(" | %s", plan.SyncLabel)
+		}
 		if len(plan.Tags) > 0 {
 			tagNames := make([]string, len(plan.Tags))
 			for j, tag := range plan.Tags {
@@ -1219,18 +1223,19 @@ func (s *PlansScreen) updateListItems() {
 
 // Command helpers.
 
-func (s *PlansScreen) loadPlanDetail(fileName string) tea.Cmd {
+func (s *PlansScreen) loadPlanDetail(fileName, syncSource string) tea.Cmd {
 	return func() tea.Msg {
-		return messages.LoadPlanDetailMsg{FileName: fileName}
+		return messages.LoadPlanDetailMsg{FileName: fileName, SyncSource: syncSource}
 	}
 }
 
 func (s *PlansScreen) savePlan() tea.Cmd {
 	return func() tea.Msg {
 		return messages.SavePlanMsg{
-			FileName: s.current.FileName,
-			Content:  s.editor.Content(),
-			Modified: s.current.ModifiedAt,
+			FileName:   s.current.FileName,
+			SyncSource: s.current.SyncSource,
+			Content:    s.editor.Content(),
+			Modified:   s.current.ModifiedAt,
 		}
 	}
 }

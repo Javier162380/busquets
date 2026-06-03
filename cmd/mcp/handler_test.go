@@ -218,7 +218,7 @@ More testing details.`
 	t.Run("successful get plan", func(t *testing.T) {
 		args := GetPlanArgs{
 			FileName:   "test-plan.md",
-			SyncSource: sourcePlansDir,
+			SyncSource: "test",
 		}
 
 		result, plan, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
@@ -258,7 +258,7 @@ More testing details.`
 	t.Run("verify TOON format with content", func(t *testing.T) {
 		args := GetPlanArgs{
 			FileName:   "test-plan.md",
-			SyncSource: sourcePlansDir,
+			SyncSource: "test",
 		}
 
 		result, _, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)

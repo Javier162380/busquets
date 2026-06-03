@@ -484,7 +484,7 @@
             </div>
             <div class="action-buttons">
                 <button class="settings-icon" id="settingsButton" title="Settings">⚙️</button>
-                <button onclick="location.href='/plan/{{.PlanDetail.FileName}}/versions'" class="btn btn-secondary" title="View Version History">📜 History</button>
+                <button onclick="location.href='/plan/{{.PlanDetail.SyncLabel}}/{{.PlanDetail.FileName}}/versions'" class="btn btn-secondary" title="View Version History">📜 History</button>
                 <button id="syncOnlyBtn" class="btn btn-secondary" onclick="syncOnlyChanges()" title="Sync changes to Claude code directory">
                     Sync
                 </button>
@@ -570,6 +570,7 @@
         let easyMDE = null;
         let isEditMode = false;
         const fileName = "{{.PlanDetail.FileName}}";
+        const syncLabel = "{{.PlanDetail.SyncLabel}}";
         const lastModifiedTime = new Date("{{.PlanDetail.ModifiedAt}}");
 
         function enterEditMode() {
@@ -610,13 +611,14 @@
             syncBtn.textContent = 'Syncing...';
 
             try {
-                const response = await fetch(`/plan/${fileName}`, {
+                const response = await fetch(`/plan/${syncLabel}/${fileName}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
                         fileName: fileName,
+                        syncSource: syncLabel,
                         content: document.getElementById('view-container').textContent,
                         lastModifiedTime: lastModifiedTime.toISOString(),
                         force: false,
@@ -649,13 +651,14 @@
             saveBtn.textContent = 'Saving & Syncing...';
 
             try {
-                const response = await fetch(`/plan/${fileName}`, {
+                const response = await fetch(`/plan/${syncLabel}/${fileName}`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
                         fileName: fileName,
+                        syncSource: syncLabel,
                         content: content,
                         lastModifiedTime: lastModifiedTime.toISOString(),
                         force: force,

@@ -174,10 +174,28 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("postgres connection_string is required when backend is %q", BackendPostgres)
 	}
 
+	seenPaths := make(map[string]int, len(c.Paths.PlansDirs))
+	seenLabels := make(map[string]int, len(c.Paths.PlansDirs))
 	for i, d := range c.Paths.PlansDirs {
 		if d.Path == "" {
 			return fmt.Errorf("plans_dirs[%d] is missing a path", i)
 		}
+		if prev, dup := seenPaths[d.Path]; dup {
+			return fmt.Errorf("plans_dirs[%d] and plans_dirs[%d] share the same path %q", prev, i, d.Path)
+		}
+		seenPaths[d.Path] = i
+
+		effectiveLabel := d.Label
+		if effectiveLabel == "" {
+			effectiveLabel = filepath.Base(d.Path)
+		}
+		if prev, dup := seenLabels[effectiveLabel]; dup {
+			return fmt.Errorf(
+				"plans_dirs[%d] and plans_dirs[%d] resolve to the same label %q — set distinct labels to avoid viewer directory collisions",
+				prev, i, effectiveLabel,
+			)
+		}
+		seenLabels[effectiveLabel] = i
 	}
 
 	return nil

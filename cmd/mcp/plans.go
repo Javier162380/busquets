@@ -65,7 +65,8 @@ func (h *Handler) GetPlanHandler(ctx context.Context, req *mcp.CallToolRequest, 
 		return nil, nil, fmt.Errorf("fileName is required")
 	}
 
-	plan, err := h.service.GetPlanDetailByFileName(ctx, args.FileName, args.SyncSource)
+	syncSource := h.service.SourcePathForLabel(args.SyncSource)
+	plan, err := h.service.GetPlanDetailByFileName(ctx, args.FileName, syncSource)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get plan: %w", err)
 	}

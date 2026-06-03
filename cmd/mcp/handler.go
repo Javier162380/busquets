@@ -15,6 +15,7 @@ type planService interface {
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]claudeviewer.PlanSummary, error)
 	GetPlanDetailByFileName(ctx context.Context, fileName, syncSource string) (*claudeviewer.PlanDetail, error)
 	LabelForSource(syncSource string) string
+	SourcePathForLabel(label string) string
 }
 
 // Handler wraps the service and handles MCP protocol concerns.
