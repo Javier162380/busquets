@@ -100,34 +100,73 @@ And a list:
 Some ~~strikethrough~~ text.`
 )
 
+// newServiceFromRepo creates a Service from an existing repository.
+// It creates the viewer directory under tempDir and sets a deterministic clock.
+// Returns the service and the resolved viewerDir path.
+func newServiceFromRepo(t *testing.T, tempDir string, repo dto.Repository, syncDirs []config.SyncDir) (*Service, string) {
+	t.Helper()
+	viewerDir := filepath.Join(tempDir, "viewer")
+	require.NoError(t, os.MkdirAll(viewerDir, 0o755))
+
+	svc, err := New(repo, viewerDir, syncDirs, true)
+	require.NoError(t, err)
+
+	svc.nowProvider = newMockNowProvider(time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC))
+	return svc, viewerDir
+}
+
+// newPostgresRepo creates an isolated Postgres database and returns the repository
+// plus a cleanup function that drops the database and closes the pool.
+func newPostgresRepo(t *testing.T) (dto.Repository, func()) {
+	t.Helper()
+	ctx := context.Background()
+
+	dbName := fmt.Sprintf("testdb_%d", time.Now().UnixNano())
+	adminConnStr := pgDBConnStr(pgBaseConnStr, "postgres")
+
+	adminPool, err := pgxpool.New(ctx, adminConnStr)
+	require.NoError(t, err)
+	_, err = adminPool.Exec(ctx, "CREATE DATABASE "+dbName)
+	adminPool.Close()
+	require.NoError(t, err)
+
+	testConnStr := pgDBConnStr(pgBaseConnStr, dbName)
+	err = storage.RunPostgresMigrations(ctx, storage.PostgresConfig{ConnectionString: testConnStr}, nil)
+	require.NoError(t, err)
+
+	pool, err := storage.NewPostgresClient(ctx, storage.PostgresConfig{
+		ConnectionString: testConnStr,
+		MaxOpenConns:     5,
+		MaxIdleConns:     2,
+	})
+	require.NoError(t, err)
+
+	cleanup := func() {
+		pool.Close()
+		dropPool, dropErr := pgxpool.New(ctx, adminConnStr)
+		if dropErr == nil {
+			_, _ = dropPool.Exec(ctx, "DROP DATABASE "+dbName+" WITH (FORCE)")
+			dropPool.Close()
+		}
+	}
+	return postgresrepo.NewRepository(pool.Pool()), cleanup
+}
+
 func setupTestServiceBackendSQLite(t *testing.T) (*Service, string, string, func()) {
 	t.Helper()
 
 	tempDir, err := os.MkdirTemp(os.TempDir(), "claude-viewer-test-*")
 	require.NoError(t, err)
 
-	viewerDir := filepath.Join(tempDir, "viewer")
 	sourcePlansDir := filepath.Join(tempDir, "source")
-	dbPath := filepath.Join(tempDir, "test.db")
-
-	require.NoError(t, os.MkdirAll(viewerDir, 0o755))
 	require.NoError(t, os.MkdirAll(sourcePlansDir, 0o755))
 
 	ctx := context.Background()
-	db, err := newTestRepository(ctx, dbPath)
+	db, err := newTestRepository(ctx, filepath.Join(tempDir, "test.db"))
 	require.NoError(t, err)
 
-	service, err := New(db, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
-	require.NoError(t, err)
-
-	fixedTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
-	service.nowProvider = newMockNowProvider(fixedTime)
-
-	cleanup := func() {
-		os.RemoveAll(tempDir)
-	}
-
-	return service, sourcePlansDir, viewerDir, cleanup
+	svc, viewerDir := newServiceFromRepo(t, tempDir, db, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}})
+	return svc, sourcePlansDir, viewerDir, func() { os.RemoveAll(tempDir) }
 }
 
 func createTestPlanFile(t *testing.T, dir, filename, content string) {
@@ -139,55 +178,17 @@ func createTestPlanFile(t *testing.T, dir, filename, content string) {
 
 func setupTestServiceBackendPostgres(t *testing.T) (*Service, string, string, func()) {
 	t.Helper()
-	ctx := context.Background()
 
-	// Each call gets its own isolated database within the shared container.
-	dbName := fmt.Sprintf("testdb_%d", time.Now().UnixNano())
-	adminConnStr := pgDBConnStr(pgBaseConnStr, "postgres")
-
-	adminPool, err := pgxpool.New(ctx, adminConnStr)
-	require.NoError(t, err)
-	_, err = adminPool.Exec(ctx, "CREATE DATABASE "+dbName)
-	adminPool.Close()
-	require.NoError(t, err)
-
-	testConnStr := pgDBConnStr(pgBaseConnStr, dbName)
-
-	err = storage.RunPostgresMigrations(ctx, storage.PostgresConfig{ConnectionString: testConnStr}, nil)
-	require.NoError(t, err)
-
-	pool, err := storage.NewPostgresClient(ctx, storage.PostgresConfig{
-		ConnectionString: testConnStr,
-		MaxOpenConns:     5,
-		MaxIdleConns:     2,
-	})
-	require.NoError(t, err)
-
-	repo := postgresrepo.NewRepository(pool.Pool())
+	repo, dbCleanup := newPostgresRepo(t)
 
 	tempDir, err := os.MkdirTemp(os.TempDir(), "claude-viewer-pg-test-*")
 	require.NoError(t, err)
 
-	viewerDir := filepath.Join(tempDir, "viewer")
 	sourcePlansDir := filepath.Join(tempDir, "source")
-	require.NoError(t, os.MkdirAll(viewerDir, 0o755))
 	require.NoError(t, os.MkdirAll(sourcePlansDir, 0o755))
 
-	svc, err := New(repo, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
-	require.NoError(t, err)
-
-	fixedTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
-	svc.nowProvider = newMockNowProvider(fixedTime)
-
-	cleanup := func() {
-		pool.Close()
-		dropPool, err := pgxpool.New(ctx, adminConnStr)
-		if err == nil {
-			_, _ = dropPool.Exec(ctx, "DROP DATABASE "+dbName+" WITH (FORCE)")
-			dropPool.Close()
-		}
-		os.RemoveAll(tempDir)
-	}
+	svc, viewerDir := newServiceFromRepo(t, tempDir, repo, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}})
+	cleanup := func() { dbCleanup(); os.RemoveAll(tempDir) }
 	return svc, sourcePlansDir, viewerDir, cleanup
 }
 
@@ -205,9 +206,15 @@ func pgDBConnStr(base, dbName string) string {
 
 type serviceSetupFn func(t *testing.T) (*Service, string, string, func())
 
+// repoFn creates a repository backed by the given backend.
+// tempDir is available for backends (e.g. SQLite) that store state on disk
+// alongside the test's other files. cleanup is nil when the caller owns teardown.
+type repoFn func(t *testing.T, tempDir string) (dto.Repository, func())
+
 type backendSetup struct {
 	name    string
 	setupFn serviceSetupFn
+	repoFn  repoFn
 }
 
 var (
@@ -220,6 +227,12 @@ func TestMain(m *testing.M) {
 	registeredBackends = append(registeredBackends, backendSetup{
 		name:    "sqlite",
 		setupFn: setupTestServiceBackendSQLite,
+		repoFn: func(t *testing.T, tempDir string) (dto.Repository, func()) {
+			ctx := context.Background()
+			db, err := newTestRepository(ctx, filepath.Join(tempDir, "test.db"))
+			require.NoError(t, err)
+			return db, nil // tempDir cleanup is the caller's responsibility
+		},
 	})
 
 	if os.Getenv("INTEGRATION") != "" {
@@ -248,6 +261,9 @@ func TestMain(m *testing.M) {
 		registeredBackends = append(registeredBackends, backendSetup{
 			name:    "postgres",
 			setupFn: setupTestServiceBackendPostgres,
+			repoFn: func(t *testing.T, _ string) (dto.Repository, func()) {
+				return newPostgresRepo(t) // tempDir not needed; Postgres manages its own storage
+			},
 		})
 	}
 
@@ -2653,125 +2669,35 @@ type multiSourceSetup struct {
 	viewerDir  string
 }
 
-type multiSourceSetupFn func(t *testing.T) (*Service, multiSourceSetup, func())
-
-func setupMultiSourceSQLite(t *testing.T) (*Service, multiSourceSetup, func()) {
+// newMultiSourceTest builds a two-source-directory service for a given backend.
+// The source directories, viewer directory, and repository all live under a
+// single temp dir that is removed by the returned cleanup function.
+func newMultiSourceTest(t *testing.T, b backendSetup) (*Service, multiSourceSetup, func()) {
 	t.Helper()
 
 	tempDir, err := os.MkdirTemp(os.TempDir(), "claude-viewer-multi-*")
 	require.NoError(t, err)
 
-	viewerDir := filepath.Join(tempDir, "viewer")
 	sourceDir1 := filepath.Join(tempDir, "source-a")
 	sourceDir2 := filepath.Join(tempDir, "source-b")
-	dbPath := filepath.Join(tempDir, "test.db")
-
-	require.NoError(t, os.MkdirAll(viewerDir, 0o755))
 	require.NoError(t, os.MkdirAll(sourceDir1, 0o755))
 	require.NoError(t, os.MkdirAll(sourceDir2, 0o755))
 
-	ctx := context.Background()
-	db, err := newTestRepository(ctx, dbPath)
-	require.NoError(t, err)
+	repo, repoCleanup := b.repoFn(t, tempDir)
 
-	svc, err := New(db, viewerDir, []config.SyncDir{
+	svc, viewerDir := newServiceFromRepo(t, tempDir, repo, []config.SyncDir{
 		{Path: sourceDir1, Label: "dir-a"},
 		{Path: sourceDir2, Label: "dir-b"},
-	}, true)
-	require.NoError(t, err)
-
-	fixedTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
-	svc.nowProvider = newMockNowProvider(fixedTime)
-
-	return svc, multiSourceSetup{
-		sourceDir1: sourceDir1,
-		sourceDir2: sourceDir2,
-		viewerDir:  viewerDir,
-	}, func() { os.RemoveAll(tempDir) }
-}
-
-func setupMultiSourcePostgres(t *testing.T) (*Service, multiSourceSetup, func()) {
-	t.Helper()
-	ctx := context.Background()
-
-	dbName := fmt.Sprintf("testdb_multi_%d", time.Now().UnixNano())
-	adminConnStr := pgDBConnStr(pgBaseConnStr, "postgres")
-
-	adminPool, err := pgxpool.New(ctx, adminConnStr)
-	require.NoError(t, err)
-	_, err = adminPool.Exec(ctx, "CREATE DATABASE "+dbName)
-	adminPool.Close()
-	require.NoError(t, err)
-
-	testConnStr := pgDBConnStr(pgBaseConnStr, dbName)
-	err = storage.RunPostgresMigrations(ctx, storage.PostgresConfig{ConnectionString: testConnStr}, nil)
-	require.NoError(t, err)
-
-	pool, err := storage.NewPostgresClient(ctx, storage.PostgresConfig{
-		ConnectionString: testConnStr,
-		MaxOpenConns:     5,
-		MaxIdleConns:     2,
 	})
-	require.NoError(t, err)
-
-	repo := postgresrepo.NewRepository(pool.Pool())
-
-	tempDir, err := os.MkdirTemp(os.TempDir(), "claude-viewer-pg-multi-*")
-	require.NoError(t, err)
-
-	viewerDir := filepath.Join(tempDir, "viewer")
-	sourceDir1 := filepath.Join(tempDir, "source-a")
-	sourceDir2 := filepath.Join(tempDir, "source-b")
-
-	require.NoError(t, os.MkdirAll(viewerDir, 0o755))
-	require.NoError(t, os.MkdirAll(sourceDir1, 0o755))
-	require.NoError(t, os.MkdirAll(sourceDir2, 0o755))
-
-	svc, err := New(repo, viewerDir, []config.SyncDir{
-		{Path: sourceDir1, Label: "dir-a"},
-		{Path: sourceDir2, Label: "dir-b"},
-	}, true)
-	require.NoError(t, err)
-
-	fixedTime := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
-	svc.nowProvider = newMockNowProvider(fixedTime)
 
 	cleanup := func() {
-		pool.Close()
-		dropPool, err := pgxpool.New(ctx, adminConnStr)
-		if err == nil {
-			_, _ = dropPool.Exec(ctx, "DROP DATABASE "+dbName+" WITH (FORCE)")
-			dropPool.Close()
+		if repoCleanup != nil {
+			repoCleanup()
 		}
 		os.RemoveAll(tempDir)
 	}
-	return svc, multiSourceSetup{
-		sourceDir1: sourceDir1,
-		sourceDir2: sourceDir2,
-		viewerDir:  viewerDir,
-	}, cleanup
+	return svc, multiSourceSetup{sourceDir1: sourceDir1, sourceDir2: sourceDir2, viewerDir: viewerDir}, cleanup
 }
-
-func multiSourceTestBackends() []struct {
-	name    string
-	setupFn multiSourceSetupFn
-} {
-	backends := []struct {
-		name    string
-		setupFn multiSourceSetupFn
-	}{
-		{"sqlite", setupMultiSourceSQLite},
-	}
-	if os.Getenv("INTEGRATION") != "" {
-		backends = append(backends, struct {
-			name    string
-			setupFn multiSourceSetupFn
-		}{"postgres", setupMultiSourcePostgres})
-	}
-	return backends
-}
-
-// ---- Multi-source tests ----
 
 func TestSlugify(t *testing.T) {
 	tests := []struct {
@@ -2792,16 +2718,16 @@ func TestSlugify(t *testing.T) {
 }
 
 func TestLabelHelpers(t *testing.T) {
-	for _, b := range multiSourceTestBackends() {
+	for _, b := range registeredBackends {
 		t.Run(b.name, func(t *testing.T) {
-			testLabelHelpers(t, b.setupFn)
+			testLabelHelpers(t, b)
 		})
 	}
 }
 
-func testLabelHelpers(t *testing.T, setup multiSourceSetupFn) {
+func testLabelHelpers(t *testing.T, b backendSetup) {
 	t.Helper()
-	svc, dirs, cleanup := setup(t)
+	svc, dirs, cleanup := newMultiSourceTest(t, b)
 	defer cleanup()
 
 	t.Run("LabelForSource known path returns configured label", func(t *testing.T) {
@@ -2830,19 +2756,19 @@ func testLabelHelpers(t *testing.T, setup multiSourceSetupFn) {
 }
 
 func TestMultiDirSyncPlans(t *testing.T) {
-	for _, b := range multiSourceTestBackends() {
+	for _, b := range registeredBackends {
 		t.Run(b.name, func(t *testing.T) {
-			testMultiDirSyncPlans(t, b.setupFn)
+			testMultiDirSyncPlans(t, b)
 		})
 	}
 }
 
-func testMultiDirSyncPlans(t *testing.T, setup multiSourceSetupFn) {
+func testMultiDirSyncPlans(t *testing.T, b backendSetup) {
 	t.Helper()
 	ctx := context.Background()
 
 	t.Run("plans from both dirs are indexed", func(t *testing.T) {
-		svc, dirs, cleanup := setup(t)
+		svc, dirs, cleanup := newMultiSourceTest(t, b)
 		defer cleanup()
 
 		createTestPlanFile(t, dirs.sourceDir1, "plan-a.md", "# Plan A\n\nFrom dir a.")
@@ -2858,7 +2784,7 @@ func testMultiDirSyncPlans(t *testing.T, setup multiSourceSetupFn) {
 	})
 
 	t.Run("same filename in two dirs no collision", func(t *testing.T) {
-		svc, dirs, cleanup := setup(t)
+		svc, dirs, cleanup := newMultiSourceTest(t, b)
 		defer cleanup()
 
 		createTestPlanFile(t, dirs.sourceDir1, "plan.md", "# Plan from A\n\nContent A.")
@@ -2878,7 +2804,7 @@ func testMultiDirSyncPlans(t *testing.T, setup multiSourceSetupFn) {
 	})
 
 	t.Run("sync_source stored correctly on each plan", func(t *testing.T) {
-		svc, dirs, cleanup := setup(t)
+		svc, dirs, cleanup := newMultiSourceTest(t, b)
 		defer cleanup()
 
 		createTestPlanFile(t, dirs.sourceDir1, "mine.md", "# Mine\n\nContent.")
@@ -2896,7 +2822,7 @@ func testMultiDirSyncPlans(t *testing.T, setup multiSourceSetupFn) {
 	})
 
 	t.Run("sync_label resolved on plan detail", func(t *testing.T) {
-		svc, dirs, cleanup := setup(t)
+		svc, dirs, cleanup := newMultiSourceTest(t, b)
 		defer cleanup()
 
 		createTestPlanFile(t, dirs.sourceDir1, "label-test.md", "# Label Test\n\nContent.")
@@ -2909,7 +2835,7 @@ func testMultiDirSyncPlans(t *testing.T, setup multiSourceSetupFn) {
 	})
 
 	t.Run("viewer copies land in separate subdirs", func(t *testing.T) {
-		svc, dirs, cleanup := setup(t)
+		svc, dirs, cleanup := newMultiSourceTest(t, b)
 		defer cleanup()
 
 		createTestPlanFile(t, dirs.sourceDir1, "plan.md", "# Plan A\n\nContent.")
@@ -2925,7 +2851,7 @@ func testMultiDirSyncPlans(t *testing.T, setup multiSourceSetupFn) {
 	})
 
 	t.Run("second sync is idempotent across dirs", func(t *testing.T) {
-		svc, dirs, cleanup := setup(t)
+		svc, dirs, cleanup := newMultiSourceTest(t, b)
 		defer cleanup()
 
 		createTestPlanFile(t, dirs.sourceDir1, "idem.md", "# Idempotent\n\nContent.")
@@ -2939,7 +2865,7 @@ func testMultiDirSyncPlans(t *testing.T, setup multiSourceSetupFn) {
 	})
 
 	t.Run("one dir empty count reflects only non-empty dir", func(t *testing.T) {
-		svc, dirs, cleanup := setup(t)
+		svc, dirs, cleanup := newMultiSourceTest(t, b)
 		defer cleanup()
 
 		createTestPlanFile(t, dirs.sourceDir1, "only-a.md", "# Only A\n\nContent.")
@@ -2952,19 +2878,19 @@ func testMultiDirSyncPlans(t *testing.T, setup multiSourceSetupFn) {
 }
 
 func TestMultiDirRSyncPlans(t *testing.T) {
-	for _, b := range multiSourceTestBackends() {
+	for _, b := range registeredBackends {
 		t.Run(b.name, func(t *testing.T) {
-			testMultiDirRSyncPlans(t, b.setupFn)
+			testMultiDirRSyncPlans(t, b)
 		})
 	}
 }
 
-func testMultiDirRSyncPlans(t *testing.T, setup multiSourceSetupFn) {
+func testMultiDirRSyncPlans(t *testing.T, b backendSetup) {
 	t.Helper()
 	ctx := context.Background()
 
 	t.Run("restores plan to its original source dir", func(t *testing.T) {
-		svc, dirs, cleanup := setup(t)
+		svc, dirs, cleanup := newMultiSourceTest(t, b)
 		defer cleanup()
 
 		createTestPlanFile(t, dirs.sourceDir1, "restore-me.md", "# Restore Me\n\nContent.")
@@ -2983,7 +2909,7 @@ func testMultiDirRSyncPlans(t *testing.T, setup multiSourceSetupFn) {
 	})
 
 	t.Run("does not restore plan to wrong source dir", func(t *testing.T) {
-		svc, dirs, cleanup := setup(t)
+		svc, dirs, cleanup := newMultiSourceTest(t, b)
 		defer cleanup()
 
 		createTestPlanFile(t, dirs.sourceDir2, "only-b.md", "# Only B\n\nContent.")
@@ -3001,19 +2927,19 @@ func testMultiDirRSyncPlans(t *testing.T, setup multiSourceSetupFn) {
 }
 
 func TestMultiDirUpdatePlan(t *testing.T) {
-	for _, b := range multiSourceTestBackends() {
+	for _, b := range registeredBackends {
 		t.Run(b.name, func(t *testing.T) {
-			testMultiDirUpdatePlan(t, b.setupFn)
+			testMultiDirUpdatePlan(t, b)
 		})
 	}
 }
 
-func testMultiDirUpdatePlan(t *testing.T, setup multiSourceSetupFn) {
+func testMultiDirUpdatePlan(t *testing.T, b backendSetup) {
 	t.Helper()
 	ctx := context.Background()
 
 	t.Run("update writes to correct source path", func(t *testing.T) {
-		svc, dirs, cleanup := setup(t)
+		svc, dirs, cleanup := newMultiSourceTest(t, b)
 		defer cleanup()
 
 		createTestPlanFile(t, dirs.sourceDir1, "target.md", "# Original\n\nOriginal content.")
@@ -3039,7 +2965,7 @@ func testMultiDirUpdatePlan(t *testing.T, setup multiSourceSetupFn) {
 	})
 
 	t.Run("update in dir-a does not affect same filename in dir-b", func(t *testing.T) {
-		svc, dirs, cleanup := setup(t)
+		svc, dirs, cleanup := newMultiSourceTest(t, b)
 		defer cleanup()
 
 		createTestPlanFile(t, dirs.sourceDir1, "shared-name.md", "# A Version\n\nContent from A.")
