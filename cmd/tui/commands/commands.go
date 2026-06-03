@@ -524,9 +524,10 @@ func LoadTagsForModalCmd(ctx context.Context, svc claudeviewer.UnifiedService, f
 		}
 
 		return components.TagsLoadedMsg{
-			FileName: fileName,
-			PlanTags: planTags,
-			AllTags:  allTags,
+			FileName:   fileName,
+			SyncSource: syncSource,
+			PlanTags:   planTags,
+			AllTags:    allTags,
 		}
 	}
 }

@@ -143,12 +143,13 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			s.showingModal = false
 			return s, func() tea.Msg {
 				return messages.SavePlanTagsMsg{
-					FileName: msg.FileName,
-					Tags:     msg.Tags,
+					FileName:   msg.FileName,
+					SyncSource: msg.SyncSource,
+					Tags:       msg.Tags,
 				}
 			}
 		case components.TagsLoadedMsg:
-			s.tagModal.Open(msg.FileName, msg.PlanTags, msg.AllTags)
+			s.tagModal.Open(msg.FileName, msg.SyncSource, msg.PlanTags, msg.AllTags)
 			return s, nil
 		case components.RequestTagDeleteMsg:
 			s.confirmDialog.Open(
@@ -236,7 +237,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 
 	case components.TagsLoadedMsg:
 		// Open modal with loaded tags.
-		s.tagModal.Open(msg.FileName, msg.PlanTags, msg.AllTags)
+		s.tagModal.Open(msg.FileName, msg.SyncSource, msg.PlanTags, msg.AllTags)
 		s.showingModal = true
 		return s, nil
 

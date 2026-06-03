@@ -23,6 +23,7 @@ const (
 type TagModal struct {
 	isActive     bool
 	planFileName string
+	syncSource   string
 	allTags      []dto.Tag
 	planTags     []dto.Tag
 	selectedTags map[string]bool // Track which tags are selected
@@ -35,8 +36,9 @@ type TagModal struct {
 
 // SavePlanTagsMsg is sent when the modal is closed to save tags.
 type SavePlanTagsMsg struct {
-	FileName string
-	Tags     []string
+	FileName   string
+	SyncSource string
+	Tags       []string
 }
 
 // NewTagModal creates a new tag modal.
@@ -54,9 +56,10 @@ func NewTagModal() *TagModal {
 }
 
 // Open opens the modal with the given plan and tags.
-func (m *TagModal) Open(fileName string, planTags, allTags []dto.Tag) {
+func (m *TagModal) Open(fileName, syncSource string, planTags, allTags []dto.Tag) {
 	m.isActive = true
 	m.planFileName = fileName
+	m.syncSource = syncSource
 	m.planTags = planTags
 	m.allTags = allTags
 	m.selectedIdx = 0
@@ -114,8 +117,9 @@ func (m *TagModal) Update(msg tea.Msg) tea.Cmd {
 			tags := m.Close()
 			return func() tea.Msg {
 				return SavePlanTagsMsg{
-					FileName: m.planFileName,
-					Tags:     tags,
+					FileName:   m.planFileName,
+					SyncSource: m.syncSource,
+					Tags:       tags,
 				}
 			}
 		case "tab":
@@ -158,6 +162,7 @@ func (m *TagModal) Update(msg tea.Msg) tea.Cmd {
 				deleteCmd := func() tea.Msg {
 					return DeleteTagMsg{TagID: tag.ID, CurrentPlan: planFileName}
 				}
+				syncSource := m.syncSource
 				saveCmd := func() tea.Msg {
 					all := m.Close()
 					remaining := make([]string, 0, len(all))
@@ -166,7 +171,7 @@ func (m *TagModal) Update(msg tea.Msg) tea.Cmd {
 							remaining = append(remaining, t)
 						}
 					}
-					return SavePlanTagsMsg{FileName: planFileName, Tags: remaining}
+					return SavePlanTagsMsg{FileName: planFileName, SyncSource: syncSource, Tags: remaining}
 				}
 				return func() tea.Msg {
 					return RequestTagDeleteMsg{
@@ -312,7 +317,8 @@ type DeleteTagCmdMsg struct {
 }
 
 type TagsLoadedMsg struct {
-	FileName string
-	PlanTags []dto.Tag
-	AllTags  []dto.Tag
+	FileName   string
+	SyncSource string
+	PlanTags   []dto.Tag
+	AllTags    []dto.Tag
 }
