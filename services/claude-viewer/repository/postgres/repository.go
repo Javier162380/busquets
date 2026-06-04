@@ -497,6 +497,7 @@ func (r *Repository) searchPlansDynamic(ctx context.Context, pattern string, sea
 		"p.created_at", "p.modified_at", "p.file_size", "p.word_count",
 		"COALESCE(t.tag_ids, ARRAY[]::int4[]) AS tag_ids",
 		"COALESCE(t.tag_names, ARRAY[]::text[]) AS tag_names",
+		"COALESCE(cc.comment_count, 0) AS comment_count",
 	).From("plans p").
 		JoinWithOption(sqlbuilder.LeftJoin,
 			`(SELECT pt.plan_id,
@@ -506,7 +507,12 @@ func (r *Repository) searchPlansDynamic(ctx context.Context, pattern string, sea
 			  JOIN tags t ON pt.tag_id = t.id
 			  GROUP BY pt.plan_id) t`,
 			"t.plan_id = p.id",
-		).OrderByDesc("p.modified_at")
+		).
+		JoinWithOption(sqlbuilder.LeftJoin,
+			"(SELECT plan_id, COUNT(*) AS comment_count FROM plan_comments GROUP BY plan_id) cc",
+			"cc.plan_id = p.id",
+		).
+		OrderByDesc("p.modified_at")
 
 	switch searchOver {
 	case dto.SearchOverPlanName:
@@ -528,6 +534,7 @@ func (r *Repository) searchPlansPaginationDynamic(ctx context.Context, pattern s
 		"p.created_at", "p.modified_at", "p.file_size", "p.word_count",
 		"COALESCE(t.tag_ids, ARRAY[]::int4[]) AS tag_ids",
 		"COALESCE(t.tag_names, ARRAY[]::text[]) AS tag_names",
+		"COALESCE(cc.comment_count, 0) AS comment_count",
 	).From("plans p").
 		JoinWithOption(sqlbuilder.LeftJoin,
 			`(SELECT pt.plan_id,
@@ -537,7 +544,12 @@ func (r *Repository) searchPlansPaginationDynamic(ctx context.Context, pattern s
 			  JOIN tags t ON pt.tag_id = t.id
 			  GROUP BY pt.plan_id) t`,
 			"t.plan_id = p.id",
-		).OrderByDesc("p.modified_at").
+		).
+		JoinWithOption(sqlbuilder.LeftJoin,
+			"(SELECT plan_id, COUNT(*) AS comment_count FROM plan_comments GROUP BY plan_id) cc",
+			"cc.plan_id = p.id",
+		).
+		OrderByDesc("p.modified_at").
 		Limit(int(params.Limit)).Offset(int(params.Offset))
 
 	switch params.SearchOver {
@@ -1160,18 +1172,19 @@ func (r *Repository) queryPlanSummariesWithTags(ctx context.Context, q string, a
 	var result []dto.PlanSummary
 	for rows.Next() {
 		var (
-			id         int64
-			fileName   string
-			syncSource string
-			title      string
-			createdAt  time.Time
-			modifiedAt time.Time
-			fileSize   int64
-			wordCount  int64
-			tagIDs     []int32
-			tagNames   []string
+			id           int64
+			fileName     string
+			syncSource   string
+			title        string
+			createdAt    time.Time
+			modifiedAt   time.Time
+			fileSize     int64
+			wordCount    int64
+			tagIDs       []int32
+			tagNames     []string
+			commentCount int64
 		)
-		if err := rows.Scan(&id, &fileName, &syncSource, &title, &createdAt, &modifiedAt, &fileSize, &wordCount, &tagIDs, &tagNames); err != nil {
+		if err := rows.Scan(&id, &fileName, &syncSource, &title, &createdAt, &modifiedAt, &fileSize, &wordCount, &tagIDs, &tagNames, &commentCount); err != nil {
 			return nil, err
 		}
 		tags := make([]dto.Tag, len(tagIDs))
@@ -1182,15 +1195,16 @@ func (r *Repository) queryPlanSummariesWithTags(ctx context.Context, q string, a
 			}
 		}
 		result = append(result, dto.PlanSummary{
-			ID:         id,
-			FileName:   fileName,
-			SyncSource: syncSource,
-			Title:      title,
-			CreatedAt:  createdAt,
-			ModifiedAt: modifiedAt,
-			FileSize:   fileSize,
-			WordCount:  wordCount,
-			Tags:       tags,
+			ID:           id,
+			FileName:     fileName,
+			SyncSource:   syncSource,
+			Title:        title,
+			CreatedAt:    createdAt,
+			ModifiedAt:   modifiedAt,
+			FileSize:     fileSize,
+			WordCount:    wordCount,
+			Tags:         tags,
+			CommentCount: commentCount,
 		})
 	}
 	return result, rows.Err()
