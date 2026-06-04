@@ -51,10 +51,10 @@ func (m *CommentModal) Open(fileName, syncSource string, comments []claudeviewer
 	m.syncSource = syncSource
 	m.comments = comments
 	m.selected = 0
-	m.focus = types.FocusCommentList
+	m.focus = types.FocusCommentInput
 	m.active = true
 	m.input.Reset()
-	m.input.Blur()
+	m.input.Focus()
 	m.confirm.Close()
 	m.refreshViewport()
 }

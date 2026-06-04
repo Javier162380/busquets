@@ -174,7 +174,11 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			}
 			return s, cmd
 		case messages.CommentsLoadedMsg:
-			s.commentModal.SetComments(msg.Comments)
+			if s.commentModal.IsActive() {
+				s.commentModal.SetComments(msg.Comments)
+			} else {
+				s.commentModal.Open(msg.FileName, msg.SyncSource, msg.Comments)
+			}
 			return s, nil
 		case messages.AddCommentMsg, messages.DeleteCommentMsg:
 			return s, func() tea.Msg { return msg }
@@ -621,6 +625,16 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		if s.current != nil {
 			return s, func() tea.Msg {
 				return messages.SendToConnectorMsg{PlanFileName: s.current.FileName, SyncSource: s.current.SyncSource}
+			}
+		}
+		return s, nil
+
+	case "n":
+		if s.current != nil {
+			s.showingCommentModal = true
+			s.commentModal.SetSize(s.width*3/4, s.height*3/4)
+			return s, func() tea.Msg {
+				return messages.OpenCommentModalMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
 			}
 		}
 		return s, nil
