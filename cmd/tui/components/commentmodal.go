@@ -303,4 +303,3 @@ func overlayCenter(overlay string, width, height int) string {
 		lipgloss.WithWhitespaceForeground(styles.MutedColor),
 	)
 }
-

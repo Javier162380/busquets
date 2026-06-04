@@ -8,7 +8,6 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
-// Tag is an alias for dto.Tag to expose in the service layer.
 type Tag = dto.Tag
 
 // Comment is an alias for dto.Comment to expose in the service layer.

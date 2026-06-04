@@ -38,6 +38,21 @@ func NewRepository(db DBTX) *Repository {
 // Verify interface compliance at compile time.
 var _ dto.Repository = (*Repository)(nil)
 
+func (r *Repository) withTx(ctx context.Context, fn func(*Queries) error) error {
+	if r.db == nil {
+		return errors.New("transaction support not available")
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if err := fn(r.q.WithTx(tx)); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
 // Type conversion helpers: sql.Null* -> Go pointers
 
 func nullStringToPtr(ns sql.NullString) *string {
@@ -267,193 +282,102 @@ func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams
 }
 
 func (r *Repository) InsertPlanWithTags(ctx context.Context, params dto.InsertPlanWithTagsParams) error {
-	if r.db == nil {
-		return errors.New("transaction support not available")
-	}
-
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	qtx := r.q.WithTx(tx)
-
-	if err := qtx.InsertPlan(ctx, InsertPlanParams{
-		FileName:   params.Plan.FileName,
-		SyncSource: params.Plan.SyncSource,
-		FilePath:   params.Plan.FilePath,
-		Title:      params.Plan.Title,
-		Content:    params.Plan.Content,
-		CreatedAt:  params.Plan.CreatedAt,
-		ModifiedAt: params.Plan.ModifiedAt,
-		IndexedAt:  params.Plan.IndexedAt,
-		FileSize:   params.Plan.FileSize,
-		WordCount:  params.Plan.WordCount,
-	}); err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-		}
-		return fmt.Errorf("failed to insert plan: %w", err)
-	}
-
-	plan, err := qtx.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
-		FileName:   params.Plan.FileName,
-		SyncSource: params.Plan.SyncSource,
-	})
-	if err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-		}
-		return fmt.Errorf("failed to get inserted plan: %w", err)
-	}
-
-	for _, tagID := range params.TagIDs {
-		if err := qtx.AddTagToPlan(ctx, AddTagToPlanParams{
-			PlanID:     plan.ID,
-			TagID:      tagID,
-			AssignedAt: params.AssignedAt,
+	return r.withTx(ctx, func(q *Queries) error {
+		if err := q.InsertPlan(ctx, InsertPlanParams{
+			FileName:   params.Plan.FileName,
+			SyncSource: params.Plan.SyncSource,
+			FilePath:   params.Plan.FilePath,
+			Title:      params.Plan.Title,
+			Content:    params.Plan.Content,
+			CreatedAt:  params.Plan.CreatedAt,
+			ModifiedAt: params.Plan.ModifiedAt,
+			IndexedAt:  params.Plan.IndexedAt,
+			FileSize:   params.Plan.FileSize,
+			WordCount:  params.Plan.WordCount,
 		}); err != nil {
-			rollbackErr := tx.Rollback()
-			if rollbackErr != nil {
-				return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-			}
-			return fmt.Errorf("failed to add tag to plan: %w", err)
+			return fmt.Errorf("failed to insert plan: %w", err)
 		}
-	}
 
-	err = tx.Commit()
-	if err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		plan, err := q.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
+			FileName:   params.Plan.FileName,
+			SyncSource: params.Plan.SyncSource,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get inserted plan: %w", err)
 		}
-	}
-	return err
+
+		for _, tagID := range params.TagIDs {
+			if err := q.AddTagToPlan(ctx, AddTagToPlanParams{
+				PlanID:     plan.ID,
+				TagID:      tagID,
+				AssignedAt: params.AssignedAt,
+			}); err != nil {
+				return fmt.Errorf("failed to add tag to plan: %w", err)
+			}
+		}
+		return nil
+	})
 }
 
 func (r *Repository) UpdatePlanWithTags(ctx context.Context, params dto.UpdatePlanWithTagsParams) error {
-	if r.db == nil {
-		return errors.New("transaction support not available")
-	}
-
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	qtx := r.q.WithTx(tx)
-
-	if err := qtx.UpdatePlan(ctx, UpdatePlanParams{
-		FileName:   params.Plan.FileName,
-		SyncSource: params.Plan.SyncSource,
-		Title:      params.Plan.Title,
-		Content:    params.Plan.Content,
-		ModifiedAt: params.Plan.ModifiedAt,
-		IndexedAt:  params.Plan.IndexedAt,
-		FileSize:   params.Plan.FileSize,
-		WordCount:  params.Plan.WordCount,
-	}); err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-		}
-		return fmt.Errorf("failed to update plan: %w", err)
-	}
-
-	plan, err := qtx.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
-		FileName:   params.Plan.FileName,
-		SyncSource: params.Plan.SyncSource,
-	})
-	if err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-		}
-		return fmt.Errorf("failed to get plan: %w", err)
-	}
-
-	if err := qtx.RemoveAllTagsFromPlan(ctx, plan.ID); err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-		}
-		return fmt.Errorf("failed to clear plan tags: %w", err)
-	}
-
-	for _, tagID := range params.TagIDs {
-		if err := qtx.AddTagToPlan(ctx, AddTagToPlanParams{
-			PlanID:     plan.ID,
-			TagID:      tagID,
-			AssignedAt: params.AssignedAt,
+	return r.withTx(ctx, func(q *Queries) error {
+		if err := q.UpdatePlan(ctx, UpdatePlanParams{
+			FileName:   params.Plan.FileName,
+			SyncSource: params.Plan.SyncSource,
+			Title:      params.Plan.Title,
+			Content:    params.Plan.Content,
+			ModifiedAt: params.Plan.ModifiedAt,
+			IndexedAt:  params.Plan.IndexedAt,
+			FileSize:   params.Plan.FileSize,
+			WordCount:  params.Plan.WordCount,
 		}); err != nil {
-			rollbackErr := tx.Rollback()
-			if rollbackErr != nil {
-				return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-			}
-			return fmt.Errorf("failed to add tag to plan: %w", err)
+			return fmt.Errorf("failed to update plan: %w", err)
 		}
-	}
 
-	err = tx.Commit()
-	if err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		plan, err := q.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
+			FileName:   params.Plan.FileName,
+			SyncSource: params.Plan.SyncSource,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get plan: %w", err)
 		}
-	}
-	return err
+
+		if err := q.RemoveAllTagsFromPlan(ctx, plan.ID); err != nil {
+			return fmt.Errorf("failed to clear plan tags: %w", err)
+		}
+
+		for _, tagID := range params.TagIDs {
+			if err := q.AddTagToPlan(ctx, AddTagToPlanParams{
+				PlanID:     plan.ID,
+				TagID:      tagID,
+				AssignedAt: params.AssignedAt,
+			}); err != nil {
+				return fmt.Errorf("failed to add tag to plan: %w", err)
+			}
+		}
+		return nil
+	})
 }
 
 func (r *Repository) DeletePlan(ctx context.Context, fileName, syncSource string) error {
-	if r.db == nil {
-		return errors.New("transaction support not available")
-	}
+	return r.withTx(ctx, func(q *Queries) error {
+		plan, err := q.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
+			FileName:   fileName,
+			SyncSource: syncSource,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get plan: %w", err)
+		}
 
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
+		if err := q.RemoveAllTagsFromPlan(ctx, plan.ID); err != nil {
+			return fmt.Errorf("failed to delete plan_tags associations: %w", err)
+		}
 
-	qtx := r.q.WithTx(tx)
-
-	plan, err := qtx.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
-		FileName:   fileName,
-		SyncSource: syncSource,
+		if err := q.DeletePlan(ctx, DeletePlanParams{FileName: fileName, SyncSource: syncSource}); err != nil {
+			return fmt.Errorf("failed to delete plan: %w", err)
+		}
+		return nil
 	})
-	if err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-		}
-		return fmt.Errorf("failed to get plan: %w", err)
-	}
-
-	if err := qtx.RemoveAllTagsFromPlan(ctx, plan.ID); err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-		}
-		return fmt.Errorf("failed to delete plan_tags associations: %w", err)
-	}
-
-	if err := qtx.DeletePlan(ctx, DeletePlanParams{FileName: fileName, SyncSource: syncSource}); err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-		}
-		return fmt.Errorf("failed to delete plan: %w", err)
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-		}
-	}
-	return err
 }
 
 func (r *Repository) ListAllPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]dto.PlanSummary, error) {
@@ -653,57 +577,32 @@ func (r *Repository) matchesTagFilter(planTags []dto.Tag, filterTags []string, m
 // Plan version operations
 
 func (r *Repository) RestorePlanVersion(ctx context.Context, params dto.RestorePlanVersionParams) error {
-	if r.db == nil {
-		return errors.New("transaction support not available")
-	}
-
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	qtx := r.q.WithTx(tx)
-
-	if err := qtx.UpdatePlan(ctx, UpdatePlanParams{
-		FileName:   params.Plan.FileName,
-		SyncSource: params.Plan.SyncSource,
-		Title:      params.Plan.Title,
-		Content:    params.Plan.Content,
-		ModifiedAt: params.Plan.ModifiedAt,
-		IndexedAt:  params.Plan.IndexedAt,
-		FileSize:   params.Plan.FileSize,
-		WordCount:  params.Plan.WordCount,
-	}); err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+	return r.withTx(ctx, func(q *Queries) error {
+		if err := q.UpdatePlan(ctx, UpdatePlanParams{
+			FileName:   params.Plan.FileName,
+			SyncSource: params.Plan.SyncSource,
+			Title:      params.Plan.Title,
+			Content:    params.Plan.Content,
+			ModifiedAt: params.Plan.ModifiedAt,
+			IndexedAt:  params.Plan.IndexedAt,
+			FileSize:   params.Plan.FileSize,
+			WordCount:  params.Plan.WordCount,
+		}); err != nil {
+			return fmt.Errorf("failed to update plan: %w", err)
 		}
-		return fmt.Errorf("failed to update plan: %w", err)
-	}
 
-	if err := qtx.InsertPlanVersion(ctx, InsertPlanVersionParams{
-		PlanID:        params.Version.PlanID,
-		VersionNumber: params.Version.VersionNumber,
-		FilePath:      params.Version.FilePath,
-		Content:       params.Version.Content,
-		WordCount:     params.Version.WordCount,
-		CreatedAt:     params.Version.CreatedAt,
-	}); err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		if err := q.InsertPlanVersion(ctx, InsertPlanVersionParams{
+			PlanID:        params.Version.PlanID,
+			VersionNumber: params.Version.VersionNumber,
+			FilePath:      params.Version.FilePath,
+			Content:       params.Version.Content,
+			WordCount:     params.Version.WordCount,
+			CreatedAt:     params.Version.CreatedAt,
+		}); err != nil {
+			return fmt.Errorf("failed to insert plan version: %w", err)
 		}
-		return fmt.Errorf("failed to insert plan version: %w", err)
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-		}
-	}
-	return err
+		return nil
+	})
 }
 
 func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPlanVersionParams) error {
@@ -1054,43 +953,15 @@ func (r *Repository) UpdateTag(ctx context.Context, params dto.UpdateTagParams) 
 }
 
 func (r *Repository) DeleteTag(ctx context.Context, id int64) error {
-	if r.db == nil {
-		return errors.New("transaction support not available")
-	}
-
-	// Begin transaction
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	// Create queries with transaction
-	qtx := r.q.WithTx(tx)
-
-	if err := qtx.RemoveAllPlansFromTag(ctx, id); err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+	return r.withTx(ctx, func(q *Queries) error {
+		if err := q.RemoveAllPlansFromTag(ctx, id); err != nil {
+			return fmt.Errorf("failed to delete plan_tags associations: %w", err)
 		}
-		return fmt.Errorf("failed to delete plan_tags associations: %w", err)
-	}
-
-	if err := qtx.DeleteTag(ctx, id); err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		if err := q.DeleteTag(ctx, id); err != nil {
+			return fmt.Errorf("failed to delete tag: %w", err)
 		}
-		return fmt.Errorf("failed to delete tag: %w", err)
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-		}
-	}
-	return err
+		return nil
+	})
 }
 
 // Plan-Tag associations
@@ -1127,47 +998,21 @@ func (r *Repository) GetPlanTags(ctx context.Context, planID int64) ([]dto.Tag, 
 }
 
 func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int64, assignedAt time.Time) error {
-	if r.db == nil {
-		return errors.New("transaction support not available")
-	}
-
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-
-	qtx := r.q.WithTx(tx)
-
-	if err := qtx.RemoveAllTagsFromPlan(ctx, planID); err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-		}
-		return err
-	}
-
-	for _, tagID := range tagIDs {
-		if err := qtx.AddTagToPlan(ctx, AddTagToPlanParams{
-			PlanID:     planID,
-			TagID:      tagID,
-			AssignedAt: assignedAt,
-		}); err != nil {
-			rollbackErr := tx.Rollback()
-			if rollbackErr != nil {
-				return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
-			}
+	return r.withTx(ctx, func(q *Queries) error {
+		if err := q.RemoveAllTagsFromPlan(ctx, planID); err != nil {
 			return err
 		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		rollbackErr := tx.Rollback()
-		if rollbackErr != nil {
-			return fmt.Errorf("failed to rollback: %w original error %w", rollbackErr, err)
+		for _, tagID := range tagIDs {
+			if err := q.AddTagToPlan(ctx, AddTagToPlanParams{
+				PlanID:     planID,
+				TagID:      tagID,
+				AssignedAt: assignedAt,
+			}); err != nil {
+				return err
+			}
 		}
-	}
-	return err
+		return nil
+	})
 }
 
 func applyOrder(sb *sqlbuilder.SelectBuilder, col, dir string) {
