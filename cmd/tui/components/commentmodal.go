@@ -261,9 +261,10 @@ func (m *CommentModal) refreshViewport() {
 	metaStyle := lipgloss.NewStyle().Foreground(styles.MutedColor)
 	maxWidth := m.width - 8
 
+	wrapStyle := lipgloss.NewStyle().Width(maxWidth)
 	for i, c := range m.comments {
 		ts := metaStyle.Render("[" + c.CreatedAt.Format(time.DateTime) + "]")
-		content := wrapText(c.Content, maxWidth)
+		wrapped := strings.Split(wrapStyle.Render(c.Content), "\n")
 
 		var prefix string
 		if i == m.selected && m.focus == types.FocusCommentList {
@@ -272,11 +273,8 @@ func (m *CommentModal) refreshViewport() {
 			prefix = "  "
 		}
 
-		firstLine := prefix + ts + " " + normalStyle.Render(firstLineOf(content))
-		lines = append(lines, firstLine)
-
-		rest := restLinesOf(content)
-		for _, l := range rest {
+		lines = append(lines, prefix+ts+" "+normalStyle.Render(wrapped[0]))
+		for _, l := range wrapped[1:] {
 			lines = append(lines, "    "+normalStyle.Render(l))
 		}
 		lines = append(lines, "")
@@ -306,30 +304,3 @@ func overlayCenter(overlay string, width, height int) string {
 	)
 }
 
-func wrapText(text string, maxWidth int) string {
-	if maxWidth <= 0 || len(text) <= maxWidth {
-		return text
-	}
-	var sb strings.Builder
-	for len(text) > maxWidth {
-		sb.WriteString(text[:maxWidth])
-		sb.WriteString("\n")
-		text = text[maxWidth:]
-	}
-	sb.WriteString(text)
-	return sb.String()
-}
-
-func firstLineOf(s string) string {
-	if idx := strings.Index(s, "\n"); idx >= 0 {
-		return s[:idx]
-	}
-	return s
-}
-
-func restLinesOf(s string) []string {
-	if idx := strings.Index(s, "\n"); idx >= 0 {
-		return strings.Split(s[idx+1:], "\n")
-	}
-	return nil
-}
