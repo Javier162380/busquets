@@ -23,6 +23,7 @@ type PlanService interface {
 	SearchPlansWithPaginationAndReadingTime(ctx context.Context, query string, limit, offset int64) ([]PlanSummary, error)
 	LabelForSource(syncSource string) string
 	SourcePathForLabel(label string) string
+	MigratePlanTagsToFrontmatter(ctx context.Context) (int, error)
 }
 
 // VersionService defines version control operations.

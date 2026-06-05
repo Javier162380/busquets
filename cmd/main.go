@@ -100,6 +100,11 @@ func main() {
 			logger.Error("migration failed", "error", err)
 			os.Exit(1)
 		}
+	case "migrate-tags":
+		if err := runMigrateTagsToFrontmatter(cfg, logger); err != nil {
+			logger.Error("tag migration failed", "error", err)
+			os.Exit(1)
+		}
 	case "mcp":
 		if err := runMCP(cfg, logger); err != nil {
 			logger.Error("MCP server failed", "error", err)
@@ -375,6 +380,32 @@ func runMCP(cfg *config.Config, logger *slog.Logger) error {
 	return mcpServer.Run(ctx, transport)
 }
 
+func runMigrateTagsToFrontmatter(cfg *config.Config, logger *slog.Logger) error {
+	ctx := context.Background()
+
+	repo, cleanup, err := initRepository(ctx, cfg, logger)
+	if err != nil {
+		return fmt.Errorf("failed to initialize repository: %w", err)
+	}
+	defer cleanup()
+
+	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
+	if err != nil {
+		return fmt.Errorf("failed to initialize service: %w", err)
+	}
+	defer service.Close()
+	service.SetLogger(logger)
+
+	count, err := service.MigratePlanTagsToFrontmatter(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to migrate tags: %w", err)
+	}
+
+	fmt.Printf("✓ Injected frontmatter tags into %d plans (backend: %s)\n",
+		count, cfg.Database.Backend)
+	return nil
+}
+
 func printUsage() {
 	fmt.Println(`Usage: plan-viewer <command>
 
@@ -385,6 +416,7 @@ Commands:
   tui                 Start terminal user interface
   mcp                 Start MCP server for Claude integration
   migrate             Run database migrations
+  migrate-tags        Backfill YAML frontmatter tags into plans that have DB tags but no frontmatter
 
 Configuration:
   Place a plan-viewer.toml file in the current directory to configure:

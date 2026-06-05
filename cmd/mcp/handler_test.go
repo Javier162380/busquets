@@ -57,10 +57,10 @@ func TestSearchPlansHandler(t *testing.T) {
 	service, sourcePlansDir, cleanup := setupTestService(t)
 	defer cleanup()
 
-	// Create test plan files with different content and tags
-	createTestPlanFile(t, sourcePlansDir, "test-plan-1.md", "# Test Plan 1\n\nTags: api, backend\n\nThis is a test plan about authentication.")
-	createTestPlanFile(t, sourcePlansDir, "test-plan-2.md", "# Test Plan 2\n\nTags: frontend, ui\n\nThis is a UI components plan.")
-	createTestPlanFile(t, sourcePlansDir, "backend-auth.md", "# Backend Auth\n\nTags: api, auth, backend\n\nAuthentication system design.")
+	// Create test plan files with different content and tags (YAML frontmatter format)
+	createTestPlanFile(t, sourcePlansDir, "test-plan-1.md", "---\ntags: api, backend\n---\n\n# Test Plan 1\n\nThis is a test plan about authentication.")
+	createTestPlanFile(t, sourcePlansDir, "test-plan-2.md", "---\ntags: frontend, ui\n---\n\n# Test Plan 2\n\nThis is a UI components plan.")
+	createTestPlanFile(t, sourcePlansDir, "backend-auth.md", "---\ntags: api, auth, backend\n---\n\n# Backend Auth\n\nAuthentication system design.")
 
 	// Create many plans for limit testing (need more than 50 to test clamping)
 	for i := 0; i < 60; i++ {
