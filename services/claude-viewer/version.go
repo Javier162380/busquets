@@ -104,7 +104,7 @@ func (s *Service) GetPlanVersionHistory(ctx context.Context, planName, syncSourc
 			PlanVersion:  planVersion,
 			RenderedHTML: renderedHTML,
 			ReadingTime:  s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM),
-			Tags:         tags,
+			Tags:         toTags(tags),
 		}
 	}
 
@@ -150,7 +150,7 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName, syncSource strin
 		PlanVersion:  planVersion,
 		RenderedHTML: renderedHTML,
 		ReadingTime:  readingTime,
-		Tags:         tags,
+		Tags:         toTags(tags),
 	}, nil
 }
 
@@ -360,7 +360,7 @@ func (s *Service) SearchVersions(ctx context.Context, planName, syncSource, quer
 			PlanVersion:  planVersion,
 			RenderedHTML: renderedHTML,
 			ReadingTime:  s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM),
-			Tags:         tags,
+			Tags:         toTags(tags),
 		}
 	}
 

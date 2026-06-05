@@ -201,25 +201,27 @@ func (s *Service) UpdateWatchInterval(intervalSeconds float64) {
 // Tag management methods
 
 // CreateTag creates a new tag with the given name, description, and color.
-func (s *Service) CreateTag(ctx context.Context, name string, description, color *string) (dto.Tag, error) {
+func (s *Service) CreateTag(ctx context.Context, name string, description, color *string) (Tag, error) {
 	normalized := NormalizeTags([]string{name})
 	if len(normalized) == 0 {
-		return dto.Tag{}, fmt.Errorf("invalid tag name: %s", name)
+		return Tag{}, fmt.Errorf("invalid tag name: %s", name)
 	}
 
 	now := s.nowProvider.Now()
-	return s.db.InsertTag(ctx, dto.InsertTagParams{
+	t, err := s.db.InsertTag(ctx, dto.InsertTagParams{
 		Name:        normalized[0],
 		Description: description,
 		Color:       color,
 		CreatedAt:   now,
 		ModifiedAt:  now,
 	})
+	return toTag(t), err
 }
 
 // GetAllTags returns all tags sorted by name.
-func (s *Service) GetAllTags(ctx context.Context) ([]dto.Tag, error) {
-	return s.db.ListAllTags(ctx)
+func (s *Service) GetAllTags(ctx context.Context) ([]Tag, error) {
+	ts, err := s.db.ListAllTags(ctx)
+	return toTags(ts), err
 }
 
 // GetTagPlanCounts returns a map of tag name → number of plans tagged with it.
@@ -365,11 +367,12 @@ func (s *Service) SetPlanTags(ctx context.Context, fileName, syncSource string, 
 }
 
 // GetPlanTags returns all tags associated with a plan.
-func (s *Service) GetPlanTags(ctx context.Context, fileName, syncSource string) ([]dto.Tag, error) {
+func (s *Service) GetPlanTags(ctx context.Context, fileName, syncSource string) ([]Tag, error) {
 	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plan: %w", err)
 	}
 
-	return s.db.GetPlanTags(ctx, plan.ID)
+	ts, err := s.db.GetPlanTags(ctx, plan.ID)
+	return toTags(ts), err
 }

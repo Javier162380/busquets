@@ -58,7 +58,7 @@ func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName, syncSou
 			ModifiedAt:  plan.ModifiedAt,
 			FileSize:    plan.FileSize,
 			ReadingTime: readingTime,
-			Tags:        plan.Tags,
+			Tags:        toTags(plan.Tags),
 		},
 		Content:      plan.Content,
 		RenderedHTML: renderedHTML,

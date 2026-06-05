@@ -4,14 +4,26 @@ import (
 	"math"
 	"time"
 	"unicode"
-
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
-type Tag = dto.Tag
+// Tag represents a tag that can be associated with plans.
+type Tag struct {
+	ID          int64
+	Name        string
+	Description *string
+	Color       *string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
 
-// Comment is an alias for dto.Comment to expose in the service layer.
-type Comment = dto.Comment
+// Comment represents a user-written annotation on a plan.
+type Comment struct {
+	ID        int64
+	PlanID    int64
+	Content   string
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
 
 const (
 	AverageReadingSpeed    = 200
@@ -29,7 +41,7 @@ type PlanSummary struct {
 	ModifiedAt   time.Time
 	FileSize     int64
 	ReadingTime  int
-	Tags         []dto.Tag
+	Tags         []Tag
 	CommentCount int
 }
 
@@ -62,7 +74,7 @@ type PlanVersionDetail struct {
 	PlanVersion
 	ReadingTime  int
 	RenderedHTML string
-	Tags         []dto.Tag
+	Tags         []Tag
 }
 
 func CalculateReadingTime(wordCount int) int {

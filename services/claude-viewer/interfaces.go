@@ -1,10 +1,6 @@
 package claudeviewer
 
-import (
-	"context"
-
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
-)
+import "context"
 
 // PlanService defines plan CRUD operations.
 type PlanService interface {
@@ -15,17 +11,16 @@ type PlanService interface {
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]PlanSummary, error)
 	DeleteTag(ctx context.Context, id int64) error
 	SetPlanTags(ctx context.Context, fileName, syncSource string, tagNames []string) error
-	GetAllTags(ctx context.Context) ([]dto.Tag, error)
-	GetPlanTags(ctx context.Context, fileName, syncSource string) ([]dto.Tag, error)
+	GetAllTags(ctx context.Context) ([]Tag, error)
+	GetPlanTags(ctx context.Context, fileName, syncSource string) ([]Tag, error)
 	ListUntaggedPlansWithReadingTime(ctx context.Context) ([]PlanSummary, error)
 	GetTagPlanCounts(ctx context.Context) (map[string]int, error)
 	GetUntaggedPlanCount(ctx context.Context) (int64, error)
-	CreateTag(ctx context.Context, name string, description, color *string) (dto.Tag, error)
+	CreateTag(ctx context.Context, name string, description, color *string) (Tag, error)
 	SearchVersions(ctx context.Context, planName, syncSource, query string) ([]PlanVersionDetail, error)
 	BuildTagPlanMap(ctx context.Context) (map[string][]PlanSummary, error)
 	SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*UpdatePlanResult, error)
 	SearchPlansWithPaginationAndReadingTime(ctx context.Context, query string, limit, offset int64) ([]PlanSummary, error)
-	GetPlanByFileName(ctx context.Context, fileName, syncSource string) (*dto.Plan, error)
 	LabelForSource(syncSource string) string
 	SourcePathForLabel(label string) string
 }
@@ -69,8 +64,8 @@ type ConnectorService interface {
 
 // CommentService defines comment operations.
 type CommentService interface {
-	AddComment(ctx context.Context, planFileName, syncSource, content string) (dto.Comment, error)
-	GetPlanComments(ctx context.Context, planFileName, syncSource string) ([]dto.Comment, error)
+	AddComment(ctx context.Context, planFileName, syncSource, content string) (Comment, error)
+	GetPlanComments(ctx context.Context, planFileName, syncSource string) ([]Comment, error)
 	DeleteComment(ctx context.Context, commentID int64) error
 }
 
@@ -81,34 +76,6 @@ type WatchService interface {
 	GetWatchResultChannel() <-chan WatchResult
 	IsWatchModeRunning() bool
 	UpdateWatchInterval(intervalSeconds float64)
-}
-
-// ConnectorInfo represents connector status.
-type ConnectorInfo struct {
-	Name        string
-	DisplayName string
-	Role        *dto.ConnectorRole
-	Configured  bool
-}
-
-// IsTransmit reports whether this connector is assigned to the transmit slot.
-func (c ConnectorInfo) IsTransmit() bool {
-	return c.Role != nil && *c.Role == dto.ConnectorRoleTransmit
-}
-
-// IsSummarizer reports whether this connector is assigned to the summary slot.
-func (c ConnectorInfo) IsSummarizer() bool {
-	return c.Role != nil && *c.Role == dto.ConnectorRoleSummary
-}
-
-// ConnectorSettingInfo represents a connector setting with its current value.
-type ConnectorSettingInfo struct {
-	Key         string
-	DisplayName string
-	Description string
-	Value       string
-	Required    bool
-	Sensitive   bool
 }
 
 // UnifiedService combines all service interfaces for use by HTTP and TUI.

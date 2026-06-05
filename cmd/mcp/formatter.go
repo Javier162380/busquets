@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 
 	"github.com/toon-format/toon-go"
 )
@@ -142,8 +141,8 @@ func FormatToolsList() (string, error) {
 	return string(encoded), nil
 }
 
-// formatTagNames extracts tag names from dto.Tag slice and joins them.
-func formatTagNames(tags []dto.Tag) string {
+// formatTagNames extracts tag names from a Tag slice and joins them.
+func formatTagNames(tags []claudeviewer.Tag) string {
 	if len(tags) == 0 {
 		return ""
 	}

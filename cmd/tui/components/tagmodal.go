@@ -4,7 +4,7 @@ import (
 	"strings"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -24,8 +24,8 @@ type TagModal struct {
 	isActive     bool
 	planFileName string
 	syncSource   string
-	allTags      []dto.Tag
-	planTags     []dto.Tag
+	allTags      []claudeviewer.Tag
+	planTags     []claudeviewer.Tag
 	selectedTags map[string]bool // Track which tags are selected
 	input        textinput.Model
 	selectedIdx  int
@@ -56,7 +56,7 @@ func NewTagModal() *TagModal {
 }
 
 // Open opens the modal with the given plan and tags.
-func (m *TagModal) Open(fileName, syncSource string, planTags, allTags []dto.Tag) {
+func (m *TagModal) Open(fileName, syncSource string, planTags, allTags []claudeviewer.Tag) {
 	m.isActive = true
 	m.planFileName = fileName
 	m.syncSource = syncSource
@@ -319,6 +319,6 @@ type DeleteTagCmdMsg struct {
 type TagsLoadedMsg struct {
 	FileName   string
 	SyncSource string
-	PlanTags   []dto.Tag
-	AllTags    []dto.Tag
+	PlanTags   []claudeviewer.Tag
+	AllTags    []claudeviewer.Tag
 }

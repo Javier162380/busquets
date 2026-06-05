@@ -24,7 +24,7 @@ func (s *Service) toSummaries(ctx context.Context, plans []dto.PlanSummary) []Pl
 			ModifiedAt:   plan.ModifiedAt,
 			FileSize:     plan.FileSize,
 			ReadingTime:  rt,
-			Tags:         plan.Tags,
+			Tags:         toTags(plan.Tags),
 			CommentCount: int(plan.CommentCount),
 		}
 	}
