@@ -6,6 +6,34 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
+// ConnectorInfo represents connector status.
+type ConnectorInfo struct {
+	Name        string
+	DisplayName string
+	Role        *dto.ConnectorRole
+	Configured  bool
+}
+
+// IsTransmit reports whether this connector is assigned to the transmit slot.
+func (c ConnectorInfo) IsTransmit() bool {
+	return c.Role != nil && *c.Role == dto.ConnectorRoleTransmit
+}
+
+// IsSummarizer reports whether this connector is assigned to the summary slot.
+func (c ConnectorInfo) IsSummarizer() bool {
+	return c.Role != nil && *c.Role == dto.ConnectorRoleSummary
+}
+
+// ConnectorSettingInfo represents a connector setting with its current value.
+type ConnectorSettingInfo struct {
+	Key         string
+	DisplayName string
+	Description string
+	Value       string
+	Required    bool
+	Sensitive   bool
+}
+
 // SendToConnector sends a plan to the enabled connector.
 func (s *Service) SendToConnector(ctx context.Context, planFileName, syncSource string) error {
 	if s.connectorManager == nil {

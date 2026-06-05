@@ -1,10 +1,6 @@
 package claudeviewer
 
-import (
-	"context"
-
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
-)
+import "context"
 
 // PlanService defines plan CRUD operations.
 type PlanService interface {
@@ -73,9 +69,6 @@ type CommentService interface {
 	DeleteComment(ctx context.Context, commentID int64) error
 }
 
-// IsNotFound reports whether err is a not-found error.
-func IsNotFound(err error) bool { return dto.IsNotFound(err) }
-
 // WatchService defines watcher operations.
 type WatchService interface {
 	StartWatchMode(ctx context.Context, intervalSeconds float64) error
@@ -83,34 +76,6 @@ type WatchService interface {
 	GetWatchResultChannel() <-chan WatchResult
 	IsWatchModeRunning() bool
 	UpdateWatchInterval(intervalSeconds float64)
-}
-
-// ConnectorInfo represents connector status.
-type ConnectorInfo struct {
-	Name        string
-	DisplayName string
-	Role        *dto.ConnectorRole
-	Configured  bool
-}
-
-// IsTransmit reports whether this connector is assigned to the transmit slot.
-func (c ConnectorInfo) IsTransmit() bool {
-	return c.Role != nil && *c.Role == dto.ConnectorRoleTransmit
-}
-
-// IsSummarizer reports whether this connector is assigned to the summary slot.
-func (c ConnectorInfo) IsSummarizer() bool {
-	return c.Role != nil && *c.Role == dto.ConnectorRoleSummary
-}
-
-// ConnectorSettingInfo represents a connector setting with its current value.
-type ConnectorSettingInfo struct {
-	Key         string
-	DisplayName string
-	Description string
-	Value       string
-	Required    bool
-	Sensitive   bool
 }
 
 // UnifiedService combines all service interfaces for use by HTTP and TUI.
