@@ -15,17 +15,16 @@ type PlanService interface {
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]PlanSummary, error)
 	DeleteTag(ctx context.Context, id int64) error
 	SetPlanTags(ctx context.Context, fileName, syncSource string, tagNames []string) error
-	GetAllTags(ctx context.Context) ([]dto.Tag, error)
-	GetPlanTags(ctx context.Context, fileName, syncSource string) ([]dto.Tag, error)
+	GetAllTags(ctx context.Context) ([]Tag, error)
+	GetPlanTags(ctx context.Context, fileName, syncSource string) ([]Tag, error)
 	ListUntaggedPlansWithReadingTime(ctx context.Context) ([]PlanSummary, error)
 	GetTagPlanCounts(ctx context.Context) (map[string]int, error)
 	GetUntaggedPlanCount(ctx context.Context) (int64, error)
-	CreateTag(ctx context.Context, name string, description, color *string) (dto.Tag, error)
+	CreateTag(ctx context.Context, name string, description, color *string) (Tag, error)
 	SearchVersions(ctx context.Context, planName, syncSource, query string) ([]PlanVersionDetail, error)
 	BuildTagPlanMap(ctx context.Context) (map[string][]PlanSummary, error)
 	SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*UpdatePlanResult, error)
 	SearchPlansWithPaginationAndReadingTime(ctx context.Context, query string, limit, offset int64) ([]PlanSummary, error)
-	GetPlanByFileName(ctx context.Context, fileName, syncSource string) (*dto.Plan, error)
 	LabelForSource(syncSource string) string
 	SourcePathForLabel(label string) string
 }
@@ -69,10 +68,13 @@ type ConnectorService interface {
 
 // CommentService defines comment operations.
 type CommentService interface {
-	AddComment(ctx context.Context, planFileName, syncSource, content string) (dto.Comment, error)
-	GetPlanComments(ctx context.Context, planFileName, syncSource string) ([]dto.Comment, error)
+	AddComment(ctx context.Context, planFileName, syncSource, content string) (Comment, error)
+	GetPlanComments(ctx context.Context, planFileName, syncSource string) ([]Comment, error)
 	DeleteComment(ctx context.Context, commentID int64) error
 }
+
+// IsNotFound reports whether err is a not-found error.
+func IsNotFound(err error) bool { return dto.IsNotFound(err) }
 
 // WatchService defines watcher operations.
 type WatchService interface {

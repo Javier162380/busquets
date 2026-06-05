@@ -8,29 +8,31 @@ import (
 )
 
 // AddComment attaches a new comment to a plan.
-func (s *Service) AddComment(ctx context.Context, planFileName, syncSource, content string) (dto.Comment, error) {
+func (s *Service) AddComment(ctx context.Context, planFileName, syncSource, content string) (Comment, error) {
 	plan, err := s.db.GetPlanByFileName(ctx, planFileName, syncSource)
 	if err != nil {
-		return dto.Comment{}, fmt.Errorf("failed to get plan: %w", err)
+		return Comment{}, fmt.Errorf("failed to get plan: %w", err)
 	}
 
 	now := s.nowProvider.Now()
-	return s.db.InsertComment(ctx, dto.InsertCommentParams{
+	c, err := s.db.InsertComment(ctx, dto.InsertCommentParams{
 		PlanID:    plan.ID,
 		Content:   content,
 		CreatedAt: now,
 		UpdatedAt: now,
 	})
+	return toComment(c), err
 }
 
 // GetPlanComments returns all comments for a plan, ordered by created_at ASC.
-func (s *Service) GetPlanComments(ctx context.Context, planFileName, syncSource string) ([]dto.Comment, error) {
+func (s *Service) GetPlanComments(ctx context.Context, planFileName, syncSource string) ([]Comment, error) {
 	plan, err := s.db.GetPlanByFileName(ctx, planFileName, syncSource)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plan: %w", err)
 	}
 
-	return s.db.GetPlanComments(ctx, plan.ID)
+	cs, err := s.db.GetPlanComments(ctx, plan.ID)
+	return toComments(cs), err
 }
 
 // DeleteComment removes a comment by ID.
