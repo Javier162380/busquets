@@ -10,6 +10,8 @@ Go application that syncs Claude AI plans from `~/.claude/plans/` to a searchabl
 
 **Main Commands**: `sync`, `dump`, `tui`, `serve`, `mcp`, `migrate`
 
+**Tag model**: Tags are DB-only — created/assigned via `SetPlanTags`/`CreateTag`, never read from or written to plan file content. Sync (`SyncPlans`) does not extract or overwrite tags.
+
 ## Essential Workflow
 
 ```bash
@@ -197,3 +199,4 @@ version = "1.0.0"
 5. **Tests are comprehensive** - ~2000 lines with subtests pattern
 6. **Time is injectable** - Use `nowProvider` for testability
 7. **WatchManager locking** - In `Stop()`, read `wm.running` directly under the write lock; never call `IsRunning()` from within a method that already holds `wm.mu` (deadlock)
+8. **Tags are DB-only** - Tags live exclusively in the database. `SyncPlans` uses `InsertPlan`/`UpdatePlan` (no tag params). Never add tag extraction to sync, and never write tags back to markdown files. `DeleteTag` only deletes the DB row — no file I/O.

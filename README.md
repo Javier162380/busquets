@@ -39,6 +39,7 @@ Claude Plan Viewer provides a centralized solution for managing Claude Code plan
 - **Full-Text Search**: Fast content search with SQLite FTS5 or PostgreSQL text search
 - **Version Control**: Track multiple versions of plans with diff viewing
 - **File Watching**: Automatic background synchronization at configurable intervals
+- **Tag Management**: Organize plans with custom tags — created and assigned via the UI or API, stored entirely in the database (not embedded in plan files)
 
 ### User Interfaces
 - **Web Interface**: Clean, responsive UI with markdown rendering and syntax highlighting
@@ -285,7 +286,19 @@ Enable Claude Code to directly search and retrieve your plans during coding sess
 **Use Cases:**
 - "Search my plans for authentication patterns"
 - "Show me the backend-api plan from last week"
-- "Find all plans tagged with #refactoring"
+- "Find all plans tagged with refactoring"
+
+### Tags
+
+Tags are managed exclusively through the database — they are never read from or written to plan file content.
+
+Create tags and assign them to plans using the web UI, TUI, or via the `SetPlanTags` service API. Tags persist independently of plan files, so syncing a plan never overwrites its tags.
+
+To search plans by tag via MCP:
+```
+"Find all plans tagged with refactoring"
+"Show me plans tagged with both api and backend"
+```
 
 ### Database Migrations
 

@@ -200,8 +200,6 @@ func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileNa
 
 	title := extractTitle(string(content))
 	wordCount := CountWords(string(content))
-	tags := ExtractTagsFromContent(string(content))
-	normalizedTags := NormalizeTags(tags)
 
 	contentToStore := string(content)
 	if !s.indexFullContent {
@@ -215,50 +213,37 @@ func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileNa
 
 	now := s.nowProvider.Now()
 
-	tagIDs, err := s.resolveTagIDs(ctx, normalizedTags, now)
-	if err != nil {
-		return false, fmt.Errorf("failed to resolve tag IDs: %w", err)
-	}
-
 	if planExists {
-		err = s.db.UpdatePlanWithTags(ctx, dto.UpdatePlanWithTagsParams{
-			Plan: dto.UpdatePlanParams{
-				FileName:   fileName,
-				SyncSource: dir.Path,
-				Title:      title,
-				Content:    contentToStore,
-				ModifiedAt: info.ModTime(),
-				IndexedAt:  now,
-				FileSize:   info.Size(),
-				WordCount:  int64(wordCount),
-			},
-			TagIDs:     tagIDs,
-			AssignedAt: now,
-		})
-		if err != nil {
-			return false, fmt.Errorf("failed to update plan with tags: %w", err)
-		}
-		return true, nil
-	}
-
-	err = s.db.InsertPlanWithTags(ctx, dto.InsertPlanWithTagsParams{
-		Plan: dto.InsertPlanParams{
+		err = s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
 			FileName:   fileName,
 			SyncSource: dir.Path,
-			FilePath:   destPath,
 			Title:      title,
 			Content:    contentToStore,
-			CreatedAt:  info.ModTime(),
 			ModifiedAt: info.ModTime(),
 			IndexedAt:  now,
 			FileSize:   info.Size(),
 			WordCount:  int64(wordCount),
-		},
-		TagIDs:     tagIDs,
-		AssignedAt: now,
+		})
+		if err != nil {
+			return false, fmt.Errorf("failed to update plan: %w", err)
+		}
+		return true, nil
+	}
+
+	err = s.db.InsertPlan(ctx, dto.InsertPlanParams{
+		FileName:   fileName,
+		SyncSource: dir.Path,
+		FilePath:   destPath,
+		Title:      title,
+		Content:    contentToStore,
+		CreatedAt:  info.ModTime(),
+		ModifiedAt: info.ModTime(),
+		IndexedAt:  now,
+		FileSize:   info.Size(),
+		WordCount:  int64(wordCount),
 	})
 	if err != nil {
-		return false, fmt.Errorf("failed to insert plan with tags: %w", err)
+		return false, fmt.Errorf("failed to insert plan: %w", err)
 	}
 
 	return true, nil
