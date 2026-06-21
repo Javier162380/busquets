@@ -309,9 +309,11 @@ func sortPlanSummaries(plans []PlanSummary, key, dir string) {
 	})
 }
 
-// DeleteTag deletes a tag by ID. This will also remove all plan-tag associations
-// within a transaction (first removes associations, then the tag).
+// DeleteTag deletes a tag by ID and removes all plan-tag associations.
 func (s *Service) DeleteTag(ctx context.Context, id int64) error {
+	if _, err := s.db.GetTagByID(ctx, id); err != nil {
+		return fmt.Errorf("failed to get tag: %w", err)
+	}
 	return s.db.DeleteTag(ctx, id)
 }
 
