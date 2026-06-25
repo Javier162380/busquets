@@ -1197,9 +1197,6 @@ func (s *PlansScreen) ShortHelp() string {
 	if s.confirmDialog.IsActive() {
 		return "←/→: select  y: yes  n/esc: cancel  enter: confirm"
 	}
-	if s.activeModal == types.ModalTLDR {
-		return "down/up: scroll | g/G: top/bottom | s: save as comment | q/esc: close"
-	}
 	switch s.focus {
 	case types.FocusTagPanel:
 		if s.tagPanel != nil && s.tagPanel.IsCreating() {
