@@ -107,6 +107,13 @@ func (s *PlansScreen) Init() tea.Cmd {
 
 // Update handles messages.
 func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
+	// Confirm dialog intercepts keys in all states — it can layer on top of any modal.
+	if s.confirmDialog.IsActive() {
+		if _, ok := msg.(tea.KeyMsg); ok {
+			return s, s.confirmDialog.Update(msg)
+		}
+	}
+
 	switch s.activeModal {
 	case types.ModalNone:
 		// no modal active, handle normally below
@@ -770,13 +777,6 @@ func (s *PlansScreen) handleTLDRUpdate(msg tea.Msg) (Screen, tea.Cmd) {
 
 // handleTagModalUpdate routes messages while the tag modal is active.
 func (s *PlansScreen) handleTagModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
-	// Confirm dialog layers on top of the tag modal — route keys to it first.
-	if s.confirmDialog.IsActive() {
-		if _, ok := msg.(tea.KeyMsg); ok {
-			return s, s.confirmDialog.Update(msg)
-		}
-	}
-
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return s, s.tagModal.Update(msg)
