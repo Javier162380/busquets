@@ -130,6 +130,14 @@ func (v *Viewer) updateViewportContent() {
 		metaLine += fmt.Sprintf(" | Tags: %s+%d", strings.Join(meta.TagNames[:2], ","), len(meta.TagNames)-2)
 	}
 	lines = append(lines, styles.MetaStyle.Render(metaLine))
+
+	if meta.SourcePath != "" {
+		lines = append(lines, styles.MetaStyle.Render("Source Path: "+meta.SourcePath))
+	}
+	if meta.DestinationPath != "" {
+		lines = append(lines, styles.MetaStyle.Render("Destination Path: "+meta.DestinationPath))
+	}
+
 	lines = append(lines, "")
 
 	// Add content based on render mode.

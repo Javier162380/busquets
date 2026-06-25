@@ -901,6 +901,17 @@ func (s *PlansScreen) View() string {
 		return s.overlayContent(mainContent, overlay)
 	}
 
+	if s.confirmDialog.IsActive() {
+		overlay := lipgloss.Place(
+			s.width,
+			s.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			s.confirmDialog.View(),
+		)
+		return s.overlayContent(mainContent, overlay)
+	}
+
 	return mainContent
 }
 
@@ -1198,7 +1209,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.displayMode == claudeviewer.DisplayModeTagPlanContent {
 			tagNav = "shift+tab: tags | "
 		}
-		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | r: rsync | d: dump | D: delete | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
+		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | n: comments | r: rsync | d: dump | D: delete | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
 	case types.FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeGlamour {
