@@ -44,6 +44,7 @@ type SyncService interface {
 	SyncPlans(ctx context.Context) (int, error)
 	RSyncPlans(ctx context.Context) (int, error)
 	DumpPlans(ctx context.Context) (int, error)
+	DeletePlan(ctx context.Context, fileName, syncSource, filePath string) error
 }
 
 // ConnectorService defines connector operations.

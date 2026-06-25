@@ -48,6 +48,10 @@ type PlanSummary struct {
 // PlanDetail represents detailed plan information with rendered HTML.
 type PlanDetail struct {
 	PlanSummary
+	// FilePath is the absolute path of the plan's mirror copy in the viewer
+	// directory (as stored in the DB). Used by delete so the caller sends the
+	// authoritative path rather than the service re-deriving it.
+	FilePath     string
 	Content      string
 	RenderedHTML string
 }

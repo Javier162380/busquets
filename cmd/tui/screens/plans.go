@@ -484,6 +484,22 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 	case "d":
 		return s, s.dumpPlans()
 
+	case "D":
+		// Guard: s.current is the loaded *PlanDetail and is nil when the list is empty
+		// or before the first PlanDetailLoadedMsg. Without it, D would nil-panic.
+		if s.current != nil {
+			fileName, syncSource := s.current.FileName, s.current.SyncSource
+			filePath := s.current.FilePath
+			title := s.current.Title
+			s.confirmDialog.Open(
+				fmt.Sprintf("Are you sure you want to delete the plan %q? This cannot be undone.", title),
+				func() tea.Msg {
+					return messages.DeletePlanMsg{FileName: fileName, SyncSource: syncSource, FilePath: filePath}
+				},
+			)
+		}
+		return s, nil
+
 	case "S":
 		return s, func() tea.Msg {
 			return messages.OpenSettingsMsg{}
@@ -885,6 +901,17 @@ func (s *PlansScreen) View() string {
 		return s.overlayContent(mainContent, overlay)
 	}
 
+	if s.confirmDialog.IsActive() {
+		overlay := lipgloss.Place(
+			s.width,
+			s.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			s.confirmDialog.View(),
+		)
+		return s.overlayContent(mainContent, overlay)
+	}
+
 	return mainContent
 }
 
@@ -1182,7 +1209,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.displayMode == claudeviewer.DisplayModeTagPlanContent {
 			tagNav = "shift+tab: tags | "
 		}
-		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | r: rsync | d: dump | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
+		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | n: comments | r: rsync | d: dump | D: delete | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
 	case types.FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeGlamour {

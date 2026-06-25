@@ -3,6 +3,7 @@ package content
 
 import (
 	"fmt"
+	"path/filepath"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
@@ -29,10 +30,12 @@ type Displayable interface {
 
 // Metadata contains display metadata for content.
 type Metadata struct {
-	PrimaryLabel  string
-	PrimaryTime   time.Time
-	SecondaryInfo string
-	TagNames      []string
+	PrimaryLabel    string
+	PrimaryTime     time.Time
+	SecondaryInfo   string
+	TagNames        []string
+	SourcePath      string
+	DestinationPath string
 }
 
 // PlanContent wraps PlanDetail to implement Displayable.
@@ -70,10 +73,12 @@ func (p *PlanContent) GetMetadata() Metadata {
 		tagNames[i] = tag.Name
 	}
 	return Metadata{
-		PrimaryLabel:  "Modified",
-		PrimaryTime:   p.ModifiedAt,
-		SecondaryInfo: fmt.Sprintf("Size: %d bytes", p.FileSize),
-		TagNames:      tagNames,
+		PrimaryLabel:    "Modified",
+		PrimaryTime:     p.ModifiedAt,
+		SecondaryInfo:   fmt.Sprintf("Size: %d bytes", p.FileSize),
+		TagNames:        tagNames,
+		SourcePath:      filepath.Join(p.SyncSource, p.FileName),
+		DestinationPath: p.FilePath,
 	}
 }
 

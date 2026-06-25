@@ -48,6 +48,12 @@ LIMIT $1 OFFSET $2;
 -- name: DeletePlan :exec
 DELETE FROM plans WHERE file_name = $1 AND sync_source = $2;
 
+-- name: DeletePlanVersions :exec
+DELETE FROM plan_versions WHERE plan_id = $1;
+
+-- name: DeletePlanComments :exec
+DELETE FROM plan_comments WHERE plan_id = $1;
+
 -- name: CountPlans :one
 SELECT COUNT(*) FROM plans;
 

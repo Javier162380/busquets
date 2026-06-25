@@ -48,6 +48,12 @@ LIMIT ? OFFSET ?;
 -- name: DeletePlan :exec
 DELETE FROM plans WHERE file_name = ? AND sync_source = ?;
 
+-- name: DeletePlanVersions :exec
+DELETE FROM plan_versions WHERE plan_id = ?;
+
+-- name: DeletePlanComments :exec
+DELETE FROM plan_comments WHERE plan_id = ?;
+
 -- name: CountPlans :one
 SELECT COUNT(*) FROM plans;
 

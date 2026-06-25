@@ -7,6 +7,7 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
 )
 
@@ -119,4 +120,21 @@ func TestRebuildTagPanelEntries(t *testing.T) {
 		s.rebuildTagPanelEntries()
 		require.Equal(t, "", s.tagPanel.SelectedTag())
 	})
+}
+
+func TestDeleteConfirmDialogVisibleFromList(t *testing.T) {
+	s := NewPlansScreen(100, 40, false, false, false, "plan_content")
+	s.focus = types.FocusList
+	s.plans = []claudeviewer.PlanSummary{{FileName: "p.md", SyncSource: "/src", Title: "My Plan"}}
+	s.current = &claudeviewer.PlanDetail{
+		PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "My Plan"},
+		FilePath:    "/mirror/p.md",
+	}
+	s.updateListItems()
+
+	screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'D'}})
+	ps, ok := screen.(*PlansScreen)
+	require.True(t, ok)
+	require.True(t, ps.confirmDialog.IsActive())
+	require.Contains(t, ps.View(), "delete the plan")
 }

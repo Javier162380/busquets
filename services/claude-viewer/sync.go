@@ -165,6 +165,38 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 	return int(rsyncPlans.Load()), nil
 }
 
+// DeletePlan removes a plan everywhere it lives. Filesystem artifacts are removed
+// first so a delete failure aborts before any DB mutation (and so a surviving source
+// file can never resurrect the plan on the next sync). The DB row, its tag/comment
+// associations, and all version rows are then removed in a single transaction.
+//
+// filePath is the plan's mirror path as stored on the DB row (caller-supplied),
+// used verbatim rather than re-derived so the delete cannot diverge from where
+// sync actually wrote the file.
+func (s *Service) DeletePlan(ctx context.Context, fileName, syncSource, filePath string) error {
+	paths := []string{
+		filepath.Join(syncSource, fileName), // source
+		filePath,                            // mirror (stored path, caller-supplied)
+	}
+	for _, p := range paths {
+		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("failed to delete %s: %w", p, err)
+		}
+	}
+	// os.RemoveAll is a no-op if the dir is absent; only a real failure returns err.
+	versionsDir := filepath.Join(s.viewerDir, "versions", fileName)
+	if err := os.RemoveAll(versionsDir); err != nil {
+		return fmt.Errorf("failed to delete version files %s: %w", versionsDir, err)
+	}
+
+	if err := s.db.DeletePlan(ctx, fileName, syncSource); err != nil {
+		return err
+	}
+
+	s.summaryCache.Delete(fileName)
+	return nil
+}
+
 // syncSinglePlan copies and indexes a single plan file from the given source directory.
 // Returns true if the file was updated, false if skipped (no changes).
 func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileName string) (bool, error) {
