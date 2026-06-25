@@ -46,6 +46,7 @@ type PlansScreen struct {
 	tagFilters    []string // Active tag filters.
 	activeModal   types.ModalState
 	tldrTitle     string // Title of the plan being summarized.
+	tldrSummary   string // Raw summary text, used when saving as a comment.
 	tldrViewport  viewport.Model
 	lastKey       string    // Last key pressed in editor (for double-key detection).
 	lastKeyTime   time.Time // Time of last key press in editor.
@@ -187,6 +188,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		popupWidth := s.width * 2 / 3
 		popupHeight := s.height / 2
 		s.tldrTitle = msg.PlanTitle
+		s.tldrSummary = msg.Summary
 		s.tldrViewport = viewport.New(popupWidth-4, popupHeight-4)
 		rendered := content.RenderMarkdown(msg.Summary, s.isDarkModeEnabled, popupWidth-4)
 		s.tldrViewport.SetContent(rendered)
@@ -762,11 +764,17 @@ func (s *PlansScreen) handleTLDRUpdate(msg tea.Msg) (Screen, tea.Cmd) {
 		case "esc", "q":
 			s.activeModal = types.ModalNone
 			return s, nil
-		case "g":
-			s.tldrViewport.GotoTop()
-			return s, nil
-		case "G":
-			s.tldrViewport.GotoBottom()
+		case "s":
+			if s.current != nil {
+				fileName, syncSource, summary := s.current.FileName, s.current.SyncSource, s.tldrSummary
+				return s, func() tea.Msg {
+					return messages.AddCommentMsg{
+						FileName:   fileName,
+						SyncSource: syncSource,
+						Content:    summary,
+					}
+				}
+			}
 			return s, nil
 		}
 	}
@@ -857,7 +865,8 @@ func (s *PlansScreen) View() string {
 			Height(popupHeight - 2).
 			Render(s.tldrViewport.View())
 
-		popup := lipgloss.JoinVertical(lipgloss.Left, title, panel)
+		help := styles.MutedStyle.Render("s: save as comment  q/esc: close")
+		popup := lipgloss.JoinVertical(lipgloss.Left, title, panel, help)
 
 		overlay := lipgloss.Place(
 			s.width,
@@ -1187,6 +1196,9 @@ func (s *PlansScreen) SetDisplayMode(mode string) {
 func (s *PlansScreen) ShortHelp() string {
 	if s.confirmDialog.IsActive() {
 		return "←/→: select  y: yes  n/esc: cancel  enter: confirm"
+	}
+	if s.activeModal == types.ModalTLDR {
+		return "down/up: scroll | g/G: top/bottom | s: save as comment | q/esc: close"
 	}
 	switch s.focus {
 	case types.FocusTagPanel:
