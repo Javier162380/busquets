@@ -3158,8 +3158,10 @@ func testDeletePlan(t *testing.T, service *Service, sourcePlansDir, viewerDir st
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		// Seed a version (DB row + on-disk version file).
+		// Seed a version (DB row + on-disk version file) and a comment.
 		require.NoError(t, service.SavePlanVersion(ctx, "delete-me.md", sourcePlansDir, sampleMarkdown))
+		_, err = service.AddComment(ctx, "delete-me.md", sourcePlansDir, "a comment")
+		require.NoError(t, err)
 
 		mirrorPath := filepath.Join(viewerDir, "test", "delete-me.md")
 		versionDir := filepath.Join(viewerDir, "versions", "delete-me.md")
@@ -3172,6 +3174,10 @@ func testDeletePlan(t *testing.T, service *Service, sourcePlansDir, viewerDir st
 		require.FileExists(t, mirrorPath)
 		require.DirExists(t, versionDir)
 
+		commentCounts, err := service.DB().GetPlanCommentCounts(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 1, commentCounts[plan.ID])
+
 		// Caller supplies the stored mirror path (as the TUI does).
 		require.NoError(t, service.DeletePlan(ctx, "delete-me.md", sourcePlansDir, plan.FilePath))
 
@@ -3183,6 +3189,12 @@ func testDeletePlan(t *testing.T, service *Service, sourcePlansDir, viewerDir st
 		require.NoFileExists(t, testFile)
 		require.NoFileExists(t, mirrorPath)
 		require.NoDirExists(t, versionDir)
+
+		// Comments gone (would orphan on SQLite without the explicit delete,
+		// since FK cascade is not enforced at runtime).
+		commentCounts, err = service.DB().GetPlanCommentCounts(ctx)
+		require.NoError(t, err)
+		require.NotContains(t, commentCounts, plan.ID)
 	})
 
 	t.Run("file delete failure aborts before DB mutation (files-first ordering)", func(t *testing.T) {

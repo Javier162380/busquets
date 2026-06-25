@@ -104,6 +104,15 @@ func (q *Queries) DeletePlan(ctx context.Context, arg DeletePlanParams) error {
 	return err
 }
 
+const deletePlanComments = `-- name: DeletePlanComments :exec
+DELETE FROM plan_comments WHERE plan_id = $1
+`
+
+func (q *Queries) DeletePlanComments(ctx context.Context, planID int64) error {
+	_, err := q.db.Exec(ctx, deletePlanComments, planID)
+	return err
+}
+
 const deletePlanVersions = `-- name: DeletePlanVersions :exec
 DELETE FROM plan_versions WHERE plan_id = $1
 `

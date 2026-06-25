@@ -366,6 +366,10 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName, syncSource string
 			return fmt.Errorf("failed to delete plan_versions: %w", err)
 		}
 
+		if err := q.DeletePlanComments(ctx, int64(plan.ID)); err != nil {
+			return fmt.Errorf("failed to delete plan_comments: %w", err)
+		}
+
 		if err := q.DeletePlan(ctx, DeletePlanParams{FileName: fileName, SyncSource: syncSource}); err != nil {
 			return fmt.Errorf("failed to delete plan: %w", err)
 		}
