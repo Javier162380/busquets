@@ -104,6 +104,15 @@ func (q *Queries) DeletePlan(ctx context.Context, arg DeletePlanParams) error {
 	return err
 }
 
+const deletePlanVersions = `-- name: DeletePlanVersions :exec
+DELETE FROM plan_versions WHERE plan_id = ?
+`
+
+func (q *Queries) DeletePlanVersions(ctx context.Context, planID int64) error {
+	_, err := q.db.ExecContext(ctx, deletePlanVersions, planID)
+	return err
+}
+
 const deleteSetting = `-- name: DeleteSetting :exec
 DELETE FROM settings WHERE variable_name = ?
 `

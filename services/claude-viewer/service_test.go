@@ -3136,3 +3136,82 @@ func testCommentOperations(t *testing.T, service *Service, sourcePlansDir string
 		require.Equal(t, "survives re-sync", comments[0].Content)
 	})
 }
+
+func TestDeletePlanOperations(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			service, sourcePlansDir, viewerDir, cleanup := b.setupFn(t)
+			defer cleanup()
+			testDeletePlan(t, service, sourcePlansDir, viewerDir)
+		})
+	}
+}
+
+func testDeletePlan(t *testing.T, service *Service, sourcePlansDir, viewerDir string) {
+	t.Helper()
+	ctx := context.Background()
+
+	t.Run("DeletePlan removes DB row, files, and versions", func(t *testing.T) {
+		testFile := filepath.Join(sourcePlansDir, "delete-me.md")
+		require.NoError(t, os.WriteFile(testFile, []byte(sampleMarkdown), 0o600))
+
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		// Seed a version (DB row + on-disk version file).
+		require.NoError(t, service.SavePlanVersion(ctx, "delete-me.md", sourcePlansDir, sampleMarkdown))
+
+		mirrorPath := filepath.Join(viewerDir, "test", "delete-me.md")
+		versionDir := filepath.Join(viewerDir, "versions", "delete-me.md")
+
+		// Pre-conditions: everything present.
+		plan, err := service.GetPlanByFileName(ctx, "delete-me.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, mirrorPath, plan.FilePath)
+		require.FileExists(t, testFile)
+		require.FileExists(t, mirrorPath)
+		require.DirExists(t, versionDir)
+
+		// Caller supplies the stored mirror path (as the TUI does).
+		require.NoError(t, service.DeletePlan(ctx, "delete-me.md", sourcePlansDir, plan.FilePath))
+
+		// DB row gone.
+		_, err = service.GetPlanByFileName(ctx, "delete-me.md", sourcePlansDir)
+		require.Error(t, err)
+
+		// Source, mirror, and version files gone.
+		require.NoFileExists(t, testFile)
+		require.NoFileExists(t, mirrorPath)
+		require.NoDirExists(t, versionDir)
+	})
+
+	t.Run("file delete failure aborts before DB mutation (files-first ordering)", func(t *testing.T) {
+		// A non-empty directory at the source path makes os.Remove fail with a
+		// non-IsNotExist error, exercising the files-first abort path.
+		const fileName = "stubborn.md"
+		badPath := filepath.Join(sourcePlansDir, fileName)
+		require.NoError(t, os.MkdirAll(badPath, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(badPath, "child"), []byte("x"), 0o600))
+
+		now := service.nowProvider.Now()
+		require.NoError(t, service.db.InsertPlan(ctx, dto.InsertPlanParams{
+			FileName:   fileName,
+			SyncSource: sourcePlansDir,
+			FilePath:   badPath,
+			Title:      "Stubborn",
+			Content:    sampleMarkdown,
+			CreatedAt:  now,
+			ModifiedAt: now,
+			IndexedAt:  now,
+			FileSize:   1,
+			WordCount:  1,
+		}))
+
+		err := service.DeletePlan(ctx, fileName, sourcePlansDir, filepath.Join(viewerDir, "test", fileName))
+		require.Error(t, err)
+
+		// DB row must survive the failed delete (files-first ordering).
+		_, err = service.GetPlanByFileName(ctx, fileName, sourcePlansDir)
+		require.NoError(t, err)
+	})
+}

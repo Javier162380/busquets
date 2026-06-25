@@ -63,3 +63,24 @@ func (a *App) handleDumpResult(msg messages.DumpResultMsg) (tea.Model, tea.Cmd) 
 	a.statusBar.SetSuccess(fmt.Sprintf("Dumped %d plans to source directory", msg.Count))
 	return a, commands.ClearStatusCmdWithDefaultDuration()
 }
+
+func (a *App) handleDeletePlan(msg messages.DeletePlanMsg) (tea.Model, tea.Cmd) {
+	a.statusBar.SetLoading("Deleting plan...")
+	return a, tea.Batch(
+		commands.DeletePlanCmd(a.ctx, a.service, msg.FileName, msg.SyncSource, msg.FilePath),
+		commands.ClearStatusCmdWithDefaultDuration(),
+	)
+}
+
+func (a *App) handleDeletePlanResult(msg messages.DeletePlanResultMsg) (tea.Model, tea.Cmd) {
+	if msg.Error != nil {
+		a.statusBar.SetError("Failed to delete plan: " + msg.Error.Error())
+		return a, commands.ClearStatusCmdWithDefaultDuration()
+	}
+	a.statusBar.SetSuccess("Deleted plan")
+	return a, tea.Batch(
+		commands.LoadPlansCmd(a.ctx, a.service),
+		commands.LoadAllTagsForPanelCmd(a.ctx, a.service),
+		commands.ClearStatusCmd(1*time.Second),
+	)
+}

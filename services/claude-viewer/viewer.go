@@ -60,6 +60,7 @@ func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName, syncSou
 			ReadingTime: readingTime,
 			Tags:        toTags(plan.Tags),
 		},
+		FilePath:     plan.FilePath,
 		Content:      plan.Content,
 		RenderedHTML: renderedHTML,
 	}, nil

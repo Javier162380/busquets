@@ -193,6 +193,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleDumpPlans(msg)
 	case messages.DumpResultMsg:
 		return a.handleDumpResult(msg)
+	case messages.DeletePlanMsg:
+		return a.handleDeletePlan(msg)
+	case messages.DeletePlanResultMsg:
+		return a.handleDeletePlanResult(msg)
 	case messages.WatchResultMsg:
 		return a.handleWatchResult(msg)
 	case messages.WatchModeApplyMsg:

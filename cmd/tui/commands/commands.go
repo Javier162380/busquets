@@ -164,6 +164,17 @@ func DumpPlansCmd(ctx context.Context, svc claudeviewer.UnifiedService) tea.Cmd 
 	}
 }
 
+// DeletePlanCmd deletes a single plan everywhere it lives (DB row, files, versions).
+func DeletePlanCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, syncSource, filePath string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		err := svc.DeletePlan(ctx, fileName, syncSource, filePath)
+		return messages.DeletePlanResultMsg{FileName: fileName, SyncSource: syncSource, Error: err}
+	}
+}
+
 // SearchVersionsCmd searches a plan over its different versions.
 func SearchVersionsCmd(ctx context.Context, svc claudeviewer.UnifiedService, currentPlanName, syncSource, query string) tea.Cmd {
 	return func() tea.Msg {

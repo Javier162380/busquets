@@ -79,6 +79,17 @@ type DumpResultMsg struct {
 	Error error
 }
 
+// DeletePlanMsg requests deleting a single plan (DB row, files, and versions).
+// FilePath is the plan's stored mirror path, sent so the service deletes the
+// exact file rather than re-deriving the path.
+type DeletePlanMsg struct{ FileName, SyncSource, FilePath string }
+
+// DeletePlanResultMsg is sent when a plan delete completes.
+type DeletePlanResultMsg struct {
+	FileName, SyncSource string
+	Error                error
+}
+
 // ErrorMsg is sent on error.
 type ErrorMsg struct {
 	Error error
