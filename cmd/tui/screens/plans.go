@@ -32,25 +32,23 @@ type PlansScreen struct {
 	commentModal  *components.CommentModal
 
 	// State.
-	layout              types.Layout
-	focus               types.Focus
-	plans               []claudeviewer.PlanSummary            // filtered view shown in list
-	allPlans            []claudeviewer.PlanSummary            // full unfiltered source of truth
-	allTags             []claudeviewer.Tag                    // all tags in the system (including unassigned)
-	tagPlanCounts       map[string]int                        // authoritative plan count per tag from DB
-	tagPlanMap          map[string][]claudeviewer.PlanSummary // map tags to a planSummary
-	untaggedCount       int                                   // number of plans with no tags assigned
-	displayMode         string                                // one of DisplayModePlanContent, DisplayModeTagPlanContent
-	current             *claudeviewer.PlanDetail
-	searchQuery         string   // Current active search query (empty = show all).
-	tagFilters          []string // Active tag filters.
-	showingModal        bool     // Whether tag modal is shown.
-	showingCommentModal bool     // Whether comment modal is shown.
-	showingTLDR         bool     // Whether TLDR popup is shown.
-	tldrTitle           string   // Title of the plan being summarized.
-	tldrViewport        viewport.Model
-	lastKey             string    // Last key pressed in editor (for double-key detection).
-	lastKeyTime         time.Time // Time of last key press in editor.
+	layout        types.Layout
+	focus         types.Focus
+	plans         []claudeviewer.PlanSummary            // filtered view shown in list
+	allPlans      []claudeviewer.PlanSummary            // full unfiltered source of truth
+	allTags       []claudeviewer.Tag                    // all tags in the system (including unassigned)
+	tagPlanCounts map[string]int                        // authoritative plan count per tag from DB
+	tagPlanMap    map[string][]claudeviewer.PlanSummary // map tags to a planSummary
+	untaggedCount int                                   // number of plans with no tags assigned
+	displayMode   string                                // one of DisplayModePlanContent, DisplayModeTagPlanContent
+	current       *claudeviewer.PlanDetail
+	searchQuery   string   // Current active search query (empty = show all).
+	tagFilters    []string // Active tag filters.
+	activeModal   types.ModalState
+	tldrTitle     string // Title of the plan being summarized.
+	tldrViewport  viewport.Model
+	lastKey       string    // Last key pressed in editor (for double-key detection).
+	lastKeyTime   time.Time // Time of last key press in editor.
 
 	// Dimensions.
 	width  int
@@ -109,81 +107,15 @@ func (s *PlansScreen) Init() tea.Cmd {
 
 // Update handles messages.
 func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
-	// Handle TLDR popup if showing.
-	if s.showingTLDR {
-		if key, ok := msg.(tea.KeyMsg); ok {
-			switch key.String() {
-			case "esc", "q":
-				s.showingTLDR = false
-				return s, nil
-			case "g":
-				s.tldrViewport.GotoTop()
-				return s, nil
-			case "G":
-				s.tldrViewport.GotoBottom()
-				return s, nil
-			}
-		}
-		var cmd tea.Cmd
-		s.tldrViewport, cmd = s.tldrViewport.Update(msg)
-		return s, cmd
-	}
-
-	// When confirm dialog is active, route keys to it before the tag modal.
-	if s.confirmDialog.IsActive() {
-		if _, ok := msg.(tea.KeyMsg); ok {
-			return s, s.confirmDialog.Update(msg)
-		}
-	}
-
-	// Handle tag modal if showing.
-	if s.showingModal {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			cmd := s.tagModal.Update(msg)
-			return s, cmd
-		case components.SavePlanTagsMsg:
-			s.showingModal = false
-			return s, func() tea.Msg {
-				return messages.SavePlanTagsMsg{
-					FileName:   msg.FileName,
-					SyncSource: msg.SyncSource,
-					Tags:       msg.Tags,
-				}
-			}
-		case components.TagsLoadedMsg:
-			s.tagModal.Open(msg.FileName, msg.SyncSource, msg.PlanTags, msg.AllTags)
-			return s, nil
-		case components.RequestTagDeleteMsg:
-			s.confirmDialog.Open(
-				fmt.Sprintf("Delete tag %q? This will remove it from all plans.", msg.TagName),
-				msg.OnConfirmFunc,
-			)
-			return s, nil
-		}
-		return s, nil
-	}
-
-	// Handle comment modal if showing.
-	if s.showingCommentModal {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			cmd := s.commentModal.Update(msg)
-			if !s.commentModal.IsActive() {
-				s.showingCommentModal = false
-			}
-			return s, cmd
-		case messages.CommentsLoadedMsg:
-			if s.commentModal.IsActive() {
-				s.commentModal.SetComments(msg.Comments)
-			} else {
-				s.commentModal.Open(msg.FileName, msg.SyncSource, msg.Comments)
-			}
-			return s, nil
-		case messages.AddCommentMsg, messages.DeleteCommentMsg:
-			return s, func() tea.Msg { return msg }
-		}
-		return s, nil
+	switch s.activeModal {
+	case types.ModalNone:
+		// no modal active, handle normally below
+	case types.ModalTLDR:
+		return s.handleTLDRUpdate(msg)
+	case types.ModalTagManager:
+		return s.handleTagModalUpdate(msg)
+	case types.ModalComment:
+		return s.handleCommentModalUpdate(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -251,7 +183,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.tldrViewport = viewport.New(popupWidth-4, popupHeight-4)
 		rendered := content.RenderMarkdown(msg.Summary, s.isDarkModeEnabled, popupWidth-4)
 		s.tldrViewport.SetContent(rendered)
-		s.showingTLDR = true
+		s.activeModal = types.ModalTLDR
 		return s, nil
 
 	case messages.OpenTagModalMsg:
@@ -263,7 +195,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case components.TagsLoadedMsg:
 		// Open modal with loaded tags.
 		s.tagModal.Open(msg.FileName, msg.SyncSource, msg.PlanTags, msg.AllTags)
-		s.showingModal = true
+		s.activeModal = types.ModalTagManager
 		return s, nil
 
 	case messages.SavePlanTagsMsg:
@@ -437,7 +369,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 
 	case "n":
 		if s.current != nil {
-			s.showingCommentModal = true
+			s.activeModal = types.ModalComment
 			s.commentModal.SetSize(s.width*3/4, s.height*3/4)
 			return s, func() tea.Msg {
 				return messages.OpenCommentModalMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
@@ -512,7 +444,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 
 	case "X":
 		if s.current != nil {
-			if s.showingTLDR {
+			if s.activeModal == types.ModalTLDR {
 				return s, func() tea.Msg {
 					return messages.RegenerateTLDRMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
 				}
@@ -647,7 +579,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 
 	case "n":
 		if s.current != nil {
-			s.showingCommentModal = true
+			s.activeModal = types.ModalComment
 			s.commentModal.SetSize(s.width*3/4, s.height*3/4)
 			return s, func() tea.Msg {
 				return messages.OpenCommentModalMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
@@ -816,6 +748,82 @@ func (s *PlansScreen) handleTagFilterKey(key string, msg tea.KeyMsg) (Screen, te
 	return s, s.tagFilter.Update(msg)
 }
 
+// handleTLDRUpdate routes messages while the TLDR popup is active.
+func (s *PlansScreen) handleTLDRUpdate(msg tea.Msg) (Screen, tea.Cmd) {
+	if key, ok := msg.(tea.KeyMsg); ok {
+		switch key.String() {
+		case "esc", "q":
+			s.activeModal = types.ModalNone
+			return s, nil
+		case "g":
+			s.tldrViewport.GotoTop()
+			return s, nil
+		case "G":
+			s.tldrViewport.GotoBottom()
+			return s, nil
+		}
+	}
+	var cmd tea.Cmd
+	s.tldrViewport, cmd = s.tldrViewport.Update(msg)
+	return s, cmd
+}
+
+// handleTagModalUpdate routes messages while the tag modal is active.
+func (s *PlansScreen) handleTagModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
+	// Confirm dialog layers on top of the tag modal — route keys to it first.
+	if s.confirmDialog.IsActive() {
+		if _, ok := msg.(tea.KeyMsg); ok {
+			return s, s.confirmDialog.Update(msg)
+		}
+	}
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		return s, s.tagModal.Update(msg)
+	case components.SavePlanTagsMsg:
+		s.activeModal = types.ModalNone
+		return s, func() tea.Msg {
+			return messages.SavePlanTagsMsg{
+				FileName:   msg.FileName,
+				SyncSource: msg.SyncSource,
+				Tags:       msg.Tags,
+			}
+		}
+	case components.TagsLoadedMsg:
+		s.tagModal.Open(msg.FileName, msg.SyncSource, msg.PlanTags, msg.AllTags)
+		return s, nil
+	case components.RequestTagDeleteMsg:
+		s.confirmDialog.Open(
+			fmt.Sprintf("Delete tag %q? This will remove it from all plans.", msg.TagName),
+			msg.OnConfirmFunc,
+		)
+		return s, nil
+	}
+	return s, nil
+}
+
+// handleCommentModalUpdate routes messages while the comment modal is active.
+func (s *PlansScreen) handleCommentModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		cmd := s.commentModal.Update(msg)
+		if !s.commentModal.IsActive() {
+			s.activeModal = types.ModalNone
+		}
+		return s, cmd
+	case messages.CommentsLoadedMsg:
+		if s.commentModal.IsActive() {
+			s.commentModal.SetComments(msg.Comments)
+		} else {
+			s.commentModal.Open(msg.FileName, msg.SyncSource, msg.Comments)
+		}
+		return s, nil
+	case messages.AddCommentMsg, messages.DeleteCommentMsg:
+		return s, func() tea.Msg { return msg }
+	}
+	return s, nil
+}
+
 // View renders the screen.
 func (s *PlansScreen) View() string {
 	var mainContent string
@@ -835,8 +843,10 @@ func (s *PlansScreen) View() string {
 		}
 	}
 
-	// Overlay TLDR popup if showing.
-	if s.showingTLDR {
+	switch s.activeModal {
+	case types.ModalNone:
+		// no overlay, fall through to confirmDialog check below
+	case types.ModalTLDR:
 		popupWidth := s.width * 2 / 3
 		popupHeight := s.height / 2
 
@@ -858,10 +868,8 @@ func (s *PlansScreen) View() string {
 		)
 
 		return s.overlayContent(mainContent, overlay)
-	}
 
-	// Overlay tag modal if showing.
-	if s.showingModal {
+	case types.ModalTagManager:
 		modal := s.tagModal.View()
 
 		overlay := lipgloss.Place(
@@ -887,10 +895,8 @@ func (s *PlansScreen) View() string {
 		}
 
 		return mainContent
-	}
 
-	// Overlay comment modal if showing.
-	if s.showingCommentModal {
+	case types.ModalComment:
 		overlay := lipgloss.Place(
 			s.width,
 			s.height,
@@ -1246,7 +1252,7 @@ func (s *PlansScreen) IsInputMode() bool {
 	if s.confirmDialog.IsActive() {
 		return true
 	}
-	return s.focus == types.FocusEditor || s.focus == types.FocusSearch || s.focus == types.FocusTagFilter || s.showingModal || s.showingCommentModal
+	return s.focus == types.FocusEditor || s.focus == types.FocusSearch || s.focus == types.FocusTagFilter || s.activeModal != types.ModalNone
 }
 
 // EditorMode returns true when the screen is in editor focus.

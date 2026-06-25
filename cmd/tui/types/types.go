@@ -22,3 +22,13 @@ const (
 	FocusCommentList               // Navigating the comment list in the comment modal.
 	FocusCommentInput              // Composing a new comment in the comment modal.
 )
+
+// ModalState tracks which overlay is currently active on PlansScreen.
+type ModalState int
+
+const (
+	ModalNone       ModalState = iota
+	ModalTagManager            // tag management modal
+	ModalComment               // comment modal
+	ModalTLDR                  // TLDR/summary popup
+)
