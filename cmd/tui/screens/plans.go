@@ -380,6 +380,8 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		if s.current != nil {
 			s.activeModal = types.ModalComment
 			s.commentModal.SetSize(s.width*3/4, s.height*3/4)
+			s.commentModal.SetDarkMode(s.isDarkModeEnabled)
+			s.commentModal.SetRenderMarkdown(s.viewer.RenderMode() == components.RenderModeGlamour)
 			return s, func() tea.Msg {
 				return messages.OpenCommentModalMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
 			}
@@ -590,6 +592,8 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		if s.current != nil {
 			s.activeModal = types.ModalComment
 			s.commentModal.SetSize(s.width*3/4, s.height*3/4)
+			s.commentModal.SetDarkMode(s.isDarkModeEnabled)
+			s.commentModal.SetRenderMarkdown(s.viewer.RenderMode() == components.RenderModeGlamour)
 			return s, func() tea.Msg {
 				return messages.OpenCommentModalMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
 			}
@@ -1088,7 +1092,7 @@ func (s *PlansScreen) SetSize(width, height int) {
 // UpdateDarkMode updates the dark mode setting and regenerates content.
 func (s *PlansScreen) UpdateDarkMode(enabled bool) {
 	s.isDarkModeEnabled = enabled
-	// Regenerate current content with new theme
+	s.commentModal.SetDarkMode(enabled)
 	if s.current != nil {
 		viewerWidth := s.getViewerWidth()
 		s.viewer.SetContent(content.NewPlanContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
@@ -1101,6 +1105,8 @@ func (s *PlansScreen) RenderedMarkdownByDefault(enabled bool) {
 	if enabled {
 		renderMode = components.RenderModeGlamour
 	}
+
+	s.commentModal.SetRenderMarkdown(enabled)
 
 	if s.viewer.RenderMode() != renderMode {
 		viewerWidth := s.getViewerWidth()
