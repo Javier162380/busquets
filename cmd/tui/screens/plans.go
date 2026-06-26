@@ -46,6 +46,7 @@ type PlansScreen struct {
 	tagFilters    []string // Active tag filters.
 	activeModal   types.ModalState
 	tldrTitle     string // Title of the plan being summarized.
+	tldrSummary   string // Raw summary text, used when saving as a comment.
 	tldrViewport  viewport.Model
 	lastKey       string    // Last key pressed in editor (for double-key detection).
 	lastKeyTime   time.Time // Time of last key press in editor.
@@ -187,6 +188,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		popupWidth := s.width * 2 / 3
 		popupHeight := s.height / 2
 		s.tldrTitle = msg.PlanTitle
+		s.tldrSummary = msg.Summary
 		s.tldrViewport = viewport.New(popupWidth-4, popupHeight-4)
 		rendered := content.RenderMarkdown(msg.Summary, s.isDarkModeEnabled, popupWidth-4)
 		s.tldrViewport.SetContent(rendered)
@@ -378,6 +380,8 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		if s.current != nil {
 			s.activeModal = types.ModalComment
 			s.commentModal.SetSize(s.width*3/4, s.height*3/4)
+			s.commentModal.SetDarkMode(s.isDarkModeEnabled)
+			s.commentModal.SetRenderMarkdown(s.viewer.RenderMode() == components.RenderModeGlamour)
 			return s, func() tea.Msg {
 				return messages.OpenCommentModalMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
 			}
@@ -588,6 +592,8 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		if s.current != nil {
 			s.activeModal = types.ModalComment
 			s.commentModal.SetSize(s.width*3/4, s.height*3/4)
+			s.commentModal.SetDarkMode(s.isDarkModeEnabled)
+			s.commentModal.SetRenderMarkdown(s.viewer.RenderMode() == components.RenderModeGlamour)
 			return s, func() tea.Msg {
 				return messages.OpenCommentModalMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
 			}
@@ -762,11 +768,17 @@ func (s *PlansScreen) handleTLDRUpdate(msg tea.Msg) (Screen, tea.Cmd) {
 		case "esc", "q":
 			s.activeModal = types.ModalNone
 			return s, nil
-		case "g":
-			s.tldrViewport.GotoTop()
-			return s, nil
-		case "G":
-			s.tldrViewport.GotoBottom()
+		case "s":
+			if s.current != nil {
+				fileName, syncSource, summary := s.current.FileName, s.current.SyncSource, s.tldrSummary
+				return s, func() tea.Msg {
+					return messages.AddCommentMsg{
+						FileName:   fileName,
+						SyncSource: syncSource,
+						Content:    summary,
+					}
+				}
+			}
 			return s, nil
 		}
 	}
@@ -857,7 +869,8 @@ func (s *PlansScreen) View() string {
 			Height(popupHeight - 2).
 			Render(s.tldrViewport.View())
 
-		popup := lipgloss.JoinVertical(lipgloss.Left, title, panel)
+		help := styles.MutedStyle.Render("s: save as comment  q/esc: close")
+		popup := lipgloss.JoinVertical(lipgloss.Left, title, panel, help)
 
 		overlay := lipgloss.Place(
 			s.width,
@@ -1079,7 +1092,7 @@ func (s *PlansScreen) SetSize(width, height int) {
 // UpdateDarkMode updates the dark mode setting and regenerates content.
 func (s *PlansScreen) UpdateDarkMode(enabled bool) {
 	s.isDarkModeEnabled = enabled
-	// Regenerate current content with new theme
+	s.commentModal.SetDarkMode(enabled)
 	if s.current != nil {
 		viewerWidth := s.getViewerWidth()
 		s.viewer.SetContent(content.NewPlanContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
@@ -1092,6 +1105,8 @@ func (s *PlansScreen) RenderedMarkdownByDefault(enabled bool) {
 	if enabled {
 		renderMode = components.RenderModeGlamour
 	}
+
+	s.commentModal.SetRenderMarkdown(enabled)
 
 	if s.viewer.RenderMode() != renderMode {
 		viewerWidth := s.getViewerWidth()

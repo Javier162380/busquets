@@ -30,7 +30,7 @@ func (a *App) handleAddCommentResult(msg messages.AddCommentResultMsg) (tea.Mode
 	}
 	a.statusBar.SetSuccess("Comment added")
 	return a, tea.Batch(
-		commands.ClearStatusCmd(1*time.Second),
+		commands.ClearStatusCmdWithDefaultDuration(),
 		commands.LoadCommentsCmd(a.ctx, a.service, msg.FileName, msg.SyncSource),
 		commands.LoadPlansCmd(a.ctx, a.service),
 	)

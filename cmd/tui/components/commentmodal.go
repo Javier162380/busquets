@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
@@ -18,17 +19,19 @@ import (
 
 // CommentModal is the overlay for viewing and adding comments on a plan.
 type CommentModal struct {
-	fileName   string
-	syncSource string
-	comments   []claudeviewer.Comment
-	selected   int
-	focus      types.Focus
-	input      textarea.Model
-	viewport   viewport.Model
-	confirm    *ConfirmModal
-	width      int
-	height     int
-	active     bool
+	fileName        string
+	syncSource      string
+	comments        []claudeviewer.Comment
+	selected        int
+	focus           types.Focus
+	input           textarea.Model
+	viewport        viewport.Model
+	confirm         *ConfirmModal
+	width           int
+	height          int
+	active          bool
+	darkModeEnabled bool
+	renderMarkdown  bool
 }
 
 // NewCommentModal creates an inactive comment modal ready to be opened.
@@ -76,6 +79,18 @@ func (m *CommentModal) SetComments(comments []claudeviewer.Comment) {
 	if m.selected >= len(m.comments) && len(m.comments) > 0 {
 		m.selected = len(m.comments) - 1
 	}
+	m.refreshViewport()
+}
+
+// SetDarkMode updates the theme and re-renders comment content.
+func (m *CommentModal) SetDarkMode(enabled bool) {
+	m.darkModeEnabled = enabled
+	m.refreshViewport()
+}
+
+// SetRenderMarkdown updates whether comment content is rendered as markdown.
+func (m *CommentModal) SetRenderMarkdown(enabled bool) {
+	m.renderMarkdown = enabled
 	m.refreshViewport()
 }
 
@@ -233,9 +248,9 @@ func (m *CommentModal) View() string {
 
 	var hints []string
 	if m.focus == types.FocusCommentList && len(m.comments) > 0 {
-		hints = append(hints, "d: delete  tab: add new")
+		hints = append(hints, "down/up: navigate | tab: add new | d: delete")
 	} else {
-		hints = append(hints, "ctrl+s: save  tab: list  esc: cancel")
+		hints = append(hints, "ctrl+s: save | tab: list | esc: cancel")
 	}
 	body.WriteString(helpStyle.Render(strings.Join(hints, "  ")))
 
@@ -248,24 +263,27 @@ func (m *CommentModal) View() string {
 	return rendered
 }
 
-// refreshViewport rebuilds the viewport content from the current comment list.
+// refreshViewport rebuilds the viewport content from the current comment list and
+// scrolls to keep the selected comment visible.
 func (m *CommentModal) refreshViewport() {
 	if m.height == 0 {
 		return
 	}
 
-	var lines []string
-
 	selectedStyle := lipgloss.NewStyle().Foreground(styles.AccentColor).Bold(true)
-	normalStyle := lipgloss.NewStyle().Foreground(styles.ForegroundColor)
 	metaStyle := lipgloss.NewStyle().Foreground(styles.MutedColor)
 	maxWidth := m.width - 8
 
-	wrapStyle := lipgloss.NewStyle().Width(maxWidth)
-	for i, c := range m.comments {
-		ts := metaStyle.Render("[" + c.CreatedAt.Format(time.DateTime) + "]")
-		wrapped := strings.Split(wrapStyle.Render(c.Content), "\n")
+	var buf strings.Builder
+	currentLine := 0
+	selectedLineStart := 0
 
+	for i, c := range m.comments {
+		if i == m.selected && m.focus == types.FocusCommentList {
+			selectedLineStart = currentLine
+		}
+
+		ts := metaStyle.Render("[" + c.CreatedAt.Format(time.DateTime) + "]")
 		var prefix string
 		if i == m.selected && m.focus == types.FocusCommentList {
 			prefix = selectedStyle.Render("> ")
@@ -273,18 +291,28 @@ func (m *CommentModal) refreshViewport() {
 			prefix = "  "
 		}
 
-		lines = append(lines, prefix+ts+" "+normalStyle.Render(wrapped[0]))
-		for _, l := range wrapped[1:] {
-			lines = append(lines, "    "+normalStyle.Render(l))
+		buf.WriteString(prefix + ts + "\n")
+		currentLine++
+
+		var body string
+		if m.renderMarkdown {
+			body = strings.TrimSpace(content.RenderMarkdown(c.Content, m.darkModeEnabled, maxWidth))
+		} else {
+			body = lipgloss.NewStyle().Width(maxWidth).Render(c.Content)
 		}
-		lines = append(lines, "")
+		buf.WriteString(body + "\n\n")
+		currentLine += strings.Count(body, "\n") + 2
 	}
 
 	if len(m.comments) == 0 {
-		lines = append(lines, metaStyle.Render("  No comments yet. Press tab to add one."))
+		buf.WriteString(metaStyle.Render("  No comments yet. Press tab to add one."))
 	}
 
-	m.viewport.SetContent(strings.Join(lines, "\n"))
+	m.viewport.SetContent(buf.String())
+
+	if m.focus == types.FocusCommentList && len(m.comments) > 0 {
+		m.viewport.SetYOffset(selectedLineStart)
+	}
 }
 
 func (m *CommentModal) listHeight() int {
