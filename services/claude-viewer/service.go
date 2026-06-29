@@ -148,6 +148,9 @@ func (s *Service) Close() {
 	if s.summaryCache != nil {
 		s.summaryCache.Stop()
 	}
+	if s.connectorManager != nil {
+		s.connectorManager.Close()
+	}
 }
 
 // StartWatchMode enables background syncing at the specified interval.

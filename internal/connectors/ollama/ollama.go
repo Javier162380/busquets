@@ -25,6 +25,9 @@ const (
 		"**Goal**: Here the plan goal.\n" +
 		"**Approach**: Here the plan approach.\n" +
 		"**Outcome**: Here the plan outcome."
+
+	diffSystemPrompt = "You are a technical change analyst. " +
+		"Compare the two plan versions and output: what changed, why it likely changed, and impact."
 )
 
 // Connector implements the Ollama local LLM connector.
@@ -137,50 +140,83 @@ func truncateAtSentence(content string, maxRunes int) string {
 	return string(runes[:maxRunes])
 }
 
-// Send generates a summary of the plan content using the Ollama API.
-func (c *Connector) Send(ctx context.Context, title, content string) (*connectors.SendResult, error) {
-	content = truncateAtSentence(content, maxContentRunes)
+// SupportedRoles returns the roles this connector can handle.
+func (c *Connector) SupportedRoles() []connectors.ConnectorRole {
+	return []connectors.ConnectorRole{
+		connectors.ConnectorRoleSummary,
+		connectors.ConnectorRoleDiff,
+	}
+}
 
+// Execute dispatches the request to the appropriate Ollama handler by role.
+func (c *Connector) Execute(ctx context.Context, req connectors.ConnectorRequest) (*connectors.ConnectorResult, error) {
+	switch req.Role {
+	case connectors.ConnectorRoleSummary:
+		content := truncateAtSentence(req.Summary.Content, maxContentRunes)
+		prompt := fmt.Sprintf("Summarize this plan:\n\nTitle: %s\n\n%s", req.Summary.Title, content)
+		text, err := c.generate(ctx, systemPrompt, prompt)
+		if err != nil {
+			return nil, err
+		}
+		return &connectors.ConnectorResult{Role: connectors.ConnectorRoleSummary, Text: &text}, nil
+
+	case connectors.ConnectorRoleDiff:
+		prompt := fmt.Sprintf(
+			"Plan: %s\n\n--- Version %d ---\n%s\n\n--- Version %d ---\n%s",
+			req.Diff.PlanName,
+			req.Diff.From.VersionNumber, truncateAtSentence(req.Diff.From.Content, maxContentRunes/2),
+			req.Diff.To.VersionNumber, truncateAtSentence(req.Diff.To.Content, maxContentRunes/2),
+		)
+		text, err := c.generate(ctx, diffSystemPrompt, prompt)
+		if err != nil {
+			return nil, err
+		}
+		return &connectors.ConnectorResult{Role: connectors.ConnectorRoleDiff, Text: &text}, nil
+
+	default:
+		return nil, fmt.Errorf("ollama: unsupported role %q", req.Role)
+	}
+}
+
+// generate calls the Ollama API with the given system prompt and user prompt.
+func (c *Connector) generate(ctx context.Context, system, prompt string) (string, error) {
 	reqBody := OllamaGenerateRequest{
 		Model:  c.model,
-		Prompt: fmt.Sprintf("Summarize this plan:\n\nTitle: %s\n\n%s", title, content),
-		System: systemPrompt,
+		Prompt: prompt,
+		System: system,
 		Stream: false,
 	}
 
 	body, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal request: %w", err)
+		return "", fmt.Errorf("failed to marshal request: %w", err)
 	}
 
 	url := fmt.Sprintf("%s/api/generate", c.host)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to call ollama: %w", err)
+		return "", fmt.Errorf("failed to call ollama: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("ollama returned status %d", resp.StatusCode)
+		return "", fmt.Errorf("ollama returned status %d", resp.StatusCode)
 	}
 
 	var result OllamaGenerateResponse
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode ollama response: %w", err)
+		return "", fmt.Errorf("failed to decode ollama response: %w", err)
 	}
 
 	if result.Response == "" {
-		return nil, fmt.Errorf("ollama returned empty response")
+		return "", fmt.Errorf("ollama returned empty response")
 	}
 
-	return &connectors.SendResult{
-		Success:  true,
-		Response: &result.Response,
-	}, nil
+	return result.Response, nil
 }

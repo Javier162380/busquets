@@ -753,23 +753,20 @@ func (r *Repository) ListConnectors(ctx context.Context) ([]dto.Connector, error
 }
 
 func (r *Repository) GetConnectorForRole(ctx context.Context, role dto.ConnectorRole) (string, bool, error) {
-	c, err := r.q.GetConnectorByRole(ctx, string(role))
+	name, err := r.q.GetConnectorByRole(ctx, string(role))
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", false, nil
 	}
 	if err != nil {
 		return "", false, err
 	}
-	return c.Name, true, nil
+	return name, true, nil
 }
 
 func (r *Repository) SetConnectorForRole(ctx context.Context, name string, role dto.ConnectorRole) error {
-	if err := r.q.ClearConnectorRole(ctx, string(role)); err != nil {
-		return err
-	}
 	return r.q.SetConnectorRole(ctx, SetConnectorRoleParams{
-		Role: string(role),
-		Name: name,
+		ConnectorName: name,
+		Role:          string(role),
 	})
 }
 

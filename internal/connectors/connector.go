@@ -3,16 +3,53 @@ package connectors
 
 import (
 	"context"
+	"time"
 
 	planviewer "github.com/Javier162380/claude-plan-viewer"
 )
 
-// SendResult contains the result of a send/generate operation.
-type SendResult struct {
-	Success   bool
-	MessageID *string // non-nil for messaging connectors (e.g. Telegram)
-	Error     error
-	Response  *string // non-nil for generative connectors (e.g. Ollama, LM Studio)
+// TransmitPayload carries content to push to an external channel (e.g. Telegram).
+type TransmitPayload struct {
+	Title   string
+	Content string
+}
+
+// SummaryPayload carries content to summarise via an LLM.
+type SummaryPayload struct {
+	Title   string
+	Content string
+}
+
+// DiffVersion is a minimal version snapshot for diff analysis.
+// Avoids importing the service layer into this package.
+type DiffVersion struct {
+	VersionNumber int64
+	Content       string
+	CreatedAt     time.Time
+}
+
+// DiffPayload carries two version snapshots for change analysis.
+type DiffPayload struct {
+	PlanName string
+	From     DiffVersion
+	To       DiffVersion
+}
+
+// ConnectorRequest is the single input for Execute.
+// Exactly one payload field is non-nil, selected by Role.
+type ConnectorRequest struct {
+	Role     planviewer.ConnectorRole
+	Transmit *TransmitPayload
+	Summary  *SummaryPayload
+	Diff     *DiffPayload
+}
+
+// ConnectorResult carries the role that produced it alongside the output,
+// since result fields differ by role.
+type ConnectorResult struct {
+	Role      planviewer.ConnectorRole
+	Text      *string // set by generative connectors (Ollama)
+	MessageID *string // set by messaging connectors (Telegram)
 }
 
 // Connector defines the interface for external channel connectors.
@@ -25,8 +62,11 @@ type Connector interface {
 	// DisplayName returns a human-readable name for UI display.
 	DisplayName() string
 
-	// Send transmits content to the external channel.
-	Send(ctx context.Context, title, content string) (*SendResult, error)
+	// SupportedRoles returns the roles this connector can handle.
+	SupportedRoles() []planviewer.ConnectorRole
+
+	// Execute dispatches the request to the connector.
+	Execute(ctx context.Context, req ConnectorRequest) (*ConnectorResult, error)
 
 	// Validate checks if the connector is properly configured.
 	Validate() error
@@ -62,3 +102,13 @@ type ConnectorStatus struct {
 	Role        *planviewer.ConnectorRole // nil if not assigned to any slot
 	Configured  bool
 }
+
+// ConnectorRole re-exports the root package type so connector implementations
+// don't need to import the root package directly.
+type ConnectorRole = planviewer.ConnectorRole
+
+const (
+	ConnectorRoleTransmit = planviewer.ConnectorRoleTransmit
+	ConnectorRoleSummary  = planviewer.ConnectorRoleSummary
+	ConnectorRoleDiff     = planviewer.ConnectorRoleDiff
+)

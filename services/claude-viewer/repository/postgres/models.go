@@ -12,9 +12,13 @@ type Connector struct {
 	Name        string             `json:"name"`
 	DisplayName string             `json:"display_name"`
 	Enabled     bool               `json:"enabled"`
-	Role        pgtype.Text        `json:"role"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ConnectorRole struct {
+	ConnectorName string `json:"connector_name"`
+	Role          string `json:"role"`
 }
 
 type ConnectorSetting struct {

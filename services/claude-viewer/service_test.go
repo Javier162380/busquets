@@ -1872,8 +1872,11 @@ func testConnectorManager(t *testing.T, setup serviceSetupFn) {
 
 		mockConn.EXPECT().Validate().Return(nil).Times(1)
 		msgID := "msg-123"
-		mockConn.EXPECT().Send(gomock.Any(), "Test Title", "Test Content").Return(
-			&connectors.SendResult{Success: true, MessageID: &msgID},
+		mockConn.EXPECT().Execute(gomock.Any(), connectors.ConnectorRequest{
+			Role:     connectors.ConnectorRoleTransmit,
+			Transmit: &connectors.TransmitPayload{Title: "Test Title", Content: "Test Content"},
+		}).Return(
+			&connectors.ConnectorResult{Role: connectors.ConnectorRoleTransmit, MessageID: &msgID},
 			nil,
 		).Times(1)
 
@@ -1886,7 +1889,6 @@ func testConnectorManager(t *testing.T, setup serviceSetupFn) {
 
 		result, err := manager.Send(ctx, "Test Title", "Test Content")
 		require.NoError(t, err)
-		require.True(t, result.Success)
 		require.Equal(t, "msg-123", *result.MessageID)
 	})
 
@@ -1926,7 +1928,7 @@ func testConnectorManager(t *testing.T, setup serviceSetupFn) {
 		mockConn := setupMockConnector(ctrl, "mock-connector", "Mock Connector")
 
 		mockConn.EXPECT().Validate().Return(nil).Times(1)
-		mockConn.EXPECT().Send(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+		mockConn.EXPECT().Execute(gomock.Any(), gomock.Any()).Return(
 			nil,
 			fmt.Errorf("network timeout"),
 		).Times(1)
@@ -2009,8 +2011,11 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 
 		mockConn.EXPECT().Validate().Return(nil).Times(1)
 		sentID := "sent-123"
-		mockConn.EXPECT().Send(gomock.Any(), "Test Plan", "# Test Plan\n\nContent to send").Return(
-			&connectors.SendResult{Success: true, MessageID: &sentID},
+		mockConn.EXPECT().Execute(gomock.Any(), connectors.ConnectorRequest{
+			Role:     connectors.ConnectorRoleTransmit,
+			Transmit: &connectors.TransmitPayload{Title: "Test Plan", Content: "# Test Plan\n\nContent to send"},
+		}).Return(
+			&connectors.ConnectorResult{Role: connectors.ConnectorRoleTransmit, MessageID: &sentID},
 			nil,
 		).Times(1)
 
@@ -2171,8 +2176,11 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 
 		summary := "**Goal**: ship the feature\n**Approach**: TDD\n**Outcome**: done"
 		mockConn.EXPECT().Validate().Return(nil).Times(1)
-		mockConn.EXPECT().Send(gomock.Any(), "Summary Plan", "# Summary Plan\n\nSome content").Return(
-			&connectors.SendResult{Success: true, Response: &summary},
+		mockConn.EXPECT().Execute(gomock.Any(), connectors.ConnectorRequest{
+			Role:    connectors.ConnectorRoleSummary,
+			Summary: &connectors.SummaryPayload{Title: "Summary Plan", Content: "# Summary Plan\n\nSome content"},
+		}).Return(
+			&connectors.ConnectorResult{Role: connectors.ConnectorRoleSummary, Text: &summary},
 			nil,
 		).Times(1)
 

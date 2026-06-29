@@ -42,9 +42,15 @@ CREATE TABLE IF NOT EXISTS connectors (
     name TEXT PRIMARY KEY,
     display_name TEXT NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT FALSE,
-    role TEXT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS connector_roles (
+    connector_name TEXT NOT NULL REFERENCES connectors(name) ON DELETE CASCADE,
+    role           TEXT NOT NULL,
+    PRIMARY KEY (connector_name, role),
+    UNIQUE (role)
 );
 
 CREATE TABLE IF NOT EXISTS connector_settings (

@@ -125,13 +125,15 @@ ON CONFLICT(name) DO UPDATE SET
 DELETE FROM connectors WHERE name = ?;
 
 -- name: GetConnectorByRole :one
-SELECT * FROM connectors WHERE role = ? LIMIT 1;
+SELECT connector_name FROM connector_roles WHERE role = ? LIMIT 1;
 
 -- name: SetConnectorRole :exec
-UPDATE connectors SET role = ?, updated_at = CURRENT_TIMESTAMP WHERE name = ?;
+INSERT INTO connector_roles (connector_name, role)
+VALUES (?, ?)
+ON CONFLICT(role) DO UPDATE SET connector_name = excluded.connector_name;
 
 -- name: ClearConnectorRole :exec
-UPDATE connectors SET role = NULL, updated_at = CURRENT_TIMESTAMP WHERE role = ?;
+DELETE FROM connector_roles WHERE role = ?;
 
 -- Connector settings queries
 

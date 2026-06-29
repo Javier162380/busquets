@@ -3,22 +3,72 @@ package connectors
 import (
 	"context"
 	"fmt"
+	"time"
 
 	planviewer "github.com/Javier162380/claude-plan-viewer"
+	"github.com/Javier162380/claude-plan-viewer/internal/cache"
+)
+
+const (
+	validationCacheTTL = 5 * time.Minute
+	validationCacheGC  = 10 * time.Minute
 )
 
 // Manager orchestrates connector operations.
 type Manager struct {
-	registry *Registry
-	db       planviewer.Store
+	registry        *Registry
+	db              planviewer.Store
+	validationCache *cache.MuxCache[bool]
 }
 
 // NewManager creates a new connector manager.
 func NewManager(registry *Registry, db planviewer.Store) *Manager {
 	return &Manager{
-		registry: registry,
-		db:       db,
+		registry:        registry,
+		db:              db,
+		validationCache: cache.New[bool](validationCacheTTL, validationCacheGC),
 	}
+}
+
+// Close stops the background cache GC goroutine.
+func (m *Manager) Close() {
+	m.validationCache.Stop()
+}
+
+// Execute dispatches a request to the connector assigned to req.Role.
+func (m *Manager) Execute(ctx context.Context, req ConnectorRequest) (*ConnectorResult, error) {
+	name, found, err := m.db.GetConnectorForRole(ctx, req.Role)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get connector for role %q: %w", req.Role, err)
+	}
+	if !found || name == "" {
+		return nil, planviewer.ErrNoConnectorEnabled
+	}
+	connector, ok := m.registry.Get(name)
+	if !ok {
+		return nil, fmt.Errorf("connector %q not found in registry", name)
+	}
+	if err := m.ensureValid(ctx, connector); err != nil {
+		return nil, err
+	}
+	return connector.Execute(ctx, req)
+}
+
+// ensureValid loads config and validates on cache miss; skips both on a warm hit.
+func (m *Manager) ensureValid(ctx context.Context, c Connector) error {
+	if _, err := m.validationCache.Get(c.Name()); err == nil {
+		return nil
+	}
+	if cfg, ok := c.(ConfigurableConnector); ok {
+		if err := cfg.LoadConfig(ctx, m); err != nil {
+			return fmt.Errorf("failed to load config for %q: %w", c.Name(), err)
+		}
+	}
+	if err := c.Validate(); err != nil {
+		return fmt.Errorf("connector %q validation failed: %w", c.Name(), err)
+	}
+	m.validationCache.Set(c.Name(), true)
+	return nil
 }
 
 // GetEnabledConnector returns the transmit connector, if any.
@@ -86,9 +136,14 @@ func (m *Manager) SetSummaryConnector(ctx context.Context, name string) error {
 	return nil
 }
 
-// SetConnectorSetting saves a setting for a specific connector.
+// SetConnectorSetting saves a setting and invalidates the validation cache so the
+// next Execute reloads config from the DB.
 func (m *Manager) SetConnectorSetting(ctx context.Context, connectorName, key, value string, isSecret bool) error {
-	return m.db.UpsertConnectorSetting(ctx, connectorName, key, value, isSecret)
+	if err := m.db.UpsertConnectorSetting(ctx, connectorName, key, value, isSecret); err != nil {
+		return err
+	}
+	m.validationCache.Delete(connectorName)
+	return nil
 }
 
 // GetConnectorSetting retrieves a setting for a specific connector.
@@ -96,21 +151,27 @@ func (m *Manager) GetConnectorSetting(ctx context.Context, connectorName, key st
 	return m.db.GetConnectorSetting(ctx, connectorName, key)
 }
 
-// Send sends content through the enabled connector.
-func (m *Manager) Send(ctx context.Context, title, content string) (*SendResult, error) {
-	connector, err := m.GetEnabledConnector(ctx)
+// Send sends content through the transmit connector (kept for backward compatibility with service layer).
+func (m *Manager) Send(ctx context.Context, title, content string) (*ConnectorResult, error) {
+	return m.Execute(ctx, ConnectorRequest{
+		Role:     planviewer.ConnectorRoleTransmit,
+		Transmit: &TransmitPayload{Title: title, Content: content},
+	})
+}
+
+// GenerateSummary invokes the summary connector and returns its generated text response.
+func (m *Manager) GenerateSummary(ctx context.Context, title, content string) (string, error) {
+	result, err := m.Execute(ctx, ConnectorRequest{
+		Role:    planviewer.ConnectorRoleSummary,
+		Summary: &SummaryPayload{Title: title, Content: content},
+	})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	if connector == nil {
-		return nil, planviewer.ErrNoConnectorEnabled
+	if result.Text == nil {
+		return "", planviewer.ErrConnectorResponseEmpty
 	}
-
-	if err := connector.Validate(); err != nil {
-		return nil, fmt.Errorf("connector validation failed: %w", err)
-	}
-
-	return connector.Send(ctx, title, content)
+	return *result.Text, nil
 }
 
 // ListAvailable returns all registered connectors with their status.
@@ -170,40 +231,6 @@ func (m *Manager) EnsureConnectorExists(ctx context.Context, name string) error 
 	return m.db.UpsertConnector(ctx, name, connector.DisplayName(), false)
 }
 
-// GenerateSummary invokes the summary connector and returns its generated text response.
-func (m *Manager) GenerateSummary(ctx context.Context, title, content string) (string, error) {
-	name, found, err := m.db.GetConnectorForRole(ctx, planviewer.ConnectorRoleSummary)
-	if err != nil {
-		return "", fmt.Errorf("failed to read summarizer setting: %w", err)
-	}
-	if !found || name == "" {
-		return "", planviewer.ErrNoSummarizerConfigured
-	}
-	connector, ok := m.registry.Get(name)
-	if !ok {
-		return "", fmt.Errorf("summarizer connector %q not registered", name)
-	}
-
-	if cfg, ok := connector.(ConfigurableConnector); ok {
-		if err := cfg.LoadConfig(ctx, m); err != nil {
-			return "", fmt.Errorf("failed to load summarizer config: %w", err)
-		}
-	}
-
-	if err := connector.Validate(); err != nil {
-		return "", fmt.Errorf("summarizer not configured: %w", err)
-	}
-
-	result, err := connector.Send(ctx, title, content)
-	if err != nil {
-		return "", err
-	}
-	if result.Response == nil {
-		return "", planviewer.ErrConnectorResponseEmpty
-	}
-	return *result.Response, nil
-}
-
 // GetConnectorRequiredSettings returns the required settings for a connector.
 func (m *Manager) GetConnectorRequiredSettings(connectorName string) ([]SettingDefinition, error) {
 	connector, ok := m.registry.Get(connectorName)
@@ -219,13 +246,5 @@ func (m *Manager) ValidateConnector(ctx context.Context, connectorName string) e
 	if !ok {
 		return planviewer.ErrConnectorNotFound
 	}
-
-	// Load config if configurable
-	if cfg, ok := connector.(ConfigurableConnector); ok {
-		if err := cfg.LoadConfig(ctx, m); err != nil {
-			return fmt.Errorf("failed to load config: %w", err)
-		}
-	}
-
-	return connector.Validate()
+	return m.ensureValid(ctx, connector)
 }
