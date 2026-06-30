@@ -19,6 +19,7 @@ type Connector struct {
 type ConnectorRole struct {
 	ConnectorName string `json:"connector_name"`
 	Role          string `json:"role"`
+	Active        bool   `json:"active"`
 }
 
 type ConnectorSetting struct {

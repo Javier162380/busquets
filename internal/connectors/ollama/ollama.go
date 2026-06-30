@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
@@ -27,7 +28,11 @@ const (
 		"**Outcome**: Here the plan outcome."
 
 	diffSystemPrompt = "You are a technical change analyst. " +
-		"Compare the two plan versions and output: what changed, why it likely changed, and impact."
+		"Compare the provided plan versions and produce a structured analysis. " +
+		"You must always match the following template:\n\n" +
+		"**Changed**: What changed across the versions.\n" +
+		"**Why**: Why it likely changed.\n" +
+		"**Impact**: The impact of the change."
 )
 
 // Connector implements the Ollama local LLM connector.
@@ -161,13 +166,13 @@ func (c *Connector) Execute(ctx context.Context, req connectors.ConnectorRequest
 		return &connectors.ConnectorResult{Role: connectors.ConnectorRoleSummary, Text: &text}, nil
 
 	case connectors.ConnectorRoleDiff:
-		prompt := fmt.Sprintf(
-			"Plan: %s\n\n--- Version %d ---\n%s\n\n--- Version %d ---\n%s",
-			req.Diff.PlanName,
-			req.Diff.From.VersionNumber, truncateAtSentence(req.Diff.From.Content, maxContentRunes/2),
-			req.Diff.To.VersionNumber, truncateAtSentence(req.Diff.To.Content, maxContentRunes/2),
-		)
-		text, err := c.generate(ctx, diffSystemPrompt, prompt)
+		perVersion := maxContentRunes / max(1, len(req.Diff.Versions))
+		var sb strings.Builder
+		fmt.Fprintf(&sb, "Plan: %s\n", req.Diff.PlanName)
+		for _, v := range req.Diff.Versions {
+			fmt.Fprintf(&sb, "\n--- Version %d ---\n%s\n", v.VersionNumber, truncateAtSentence(v.Content, perVersion))
+		}
+		text, err := c.generate(ctx, diffSystemPrompt, sb.String())
 		if err != nil {
 			return nil, err
 		}

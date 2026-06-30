@@ -49,8 +49,8 @@ CREATE TABLE IF NOT EXISTS connectors (
 CREATE TABLE IF NOT EXISTS connector_roles (
     connector_name TEXT NOT NULL REFERENCES connectors(name) ON DELETE CASCADE,
     role           TEXT NOT NULL,
-    PRIMARY KEY (connector_name, role),
-    UNIQUE (role)
+    active         INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (connector_name, role)
 );
 
 CREATE TABLE IF NOT EXISTS connector_settings (

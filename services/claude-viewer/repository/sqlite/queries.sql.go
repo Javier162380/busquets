@@ -11,6 +11,22 @@ import (
 	"time"
 )
 
+const activateConnectorRole = `-- name: ActivateConnectorRole :exec
+INSERT INTO connector_roles (connector_name, role, active)
+VALUES (?, ?, 1)
+ON CONFLICT(connector_name, role) DO UPDATE SET active = 1
+`
+
+type ActivateConnectorRoleParams struct {
+	ConnectorName string `json:"connector_name"`
+	Role          string `json:"role"`
+}
+
+func (q *Queries) ActivateConnectorRole(ctx context.Context, arg ActivateConnectorRoleParams) error {
+	_, err := q.db.ExecContext(ctx, activateConnectorRole, arg.ConnectorName, arg.Role)
+	return err
+}
+
 const addTagToPlan = `-- name: AddTagToPlan :exec
 
 INSERT INTO plan_tags (plan_id, tag_id, assigned_at)
@@ -30,7 +46,7 @@ func (q *Queries) AddTagToPlan(ctx context.Context, arg AddTagToPlanParams) erro
 }
 
 const clearConnectorRole = `-- name: ClearConnectorRole :exec
-DELETE FROM connector_roles WHERE role = ?
+UPDATE connector_roles SET active = 0 WHERE role = ?
 `
 
 func (q *Queries) ClearConnectorRole(ctx context.Context, role string) error {
@@ -47,6 +63,15 @@ func (q *Queries) CountPlans(ctx context.Context) (int64, error) {
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const deactivateConnectorRole = `-- name: DeactivateConnectorRole :exec
+UPDATE connector_roles SET active = 0 WHERE role = ?
+`
+
+func (q *Queries) DeactivateConnectorRole(ctx context.Context, role string) error {
+	_, err := q.db.ExecContext(ctx, deactivateConnectorRole, role)
+	return err
 }
 
 const deleteAllConnectorSettings = `-- name: DeleteAllConnectorSettings :exec
@@ -175,7 +200,7 @@ func (q *Queries) GetConnectorByName(ctx context.Context, name string) (Connecto
 }
 
 const getConnectorByRole = `-- name: GetConnectorByRole :one
-SELECT connector_name FROM connector_roles WHERE role = ? LIMIT 1
+SELECT connector_name FROM connector_roles WHERE role = ? AND active = 1 LIMIT 1
 `
 
 func (q *Queries) GetConnectorByRole(ctx context.Context, role string) (string, error) {
@@ -1113,22 +1138,6 @@ func (q *Queries) SearchVersionsByContent(ctx context.Context, arg SearchVersion
 		return nil, err
 	}
 	return items, nil
-}
-
-const setConnectorRole = `-- name: SetConnectorRole :exec
-INSERT INTO connector_roles (connector_name, role)
-VALUES (?, ?)
-ON CONFLICT(role) DO UPDATE SET connector_name = excluded.connector_name
-`
-
-type SetConnectorRoleParams struct {
-	ConnectorName string `json:"connector_name"`
-	Role          string `json:"role"`
-}
-
-func (q *Queries) SetConnectorRole(ctx context.Context, arg SetConnectorRoleParams) error {
-	_, err := q.db.ExecContext(ctx, setConnectorRole, arg.ConnectorName, arg.Role)
-	return err
 }
 
 const updatePlan = `-- name: UpdatePlan :exec

@@ -745,9 +745,14 @@ func (r *Repository) GetConnectorForRole(ctx context.Context, role dto.Connector
 }
 
 func (r *Repository) SetConnectorForRole(ctx context.Context, name string, role dto.ConnectorRole) error {
-	return r.q.SetConnectorRole(ctx, SetConnectorRoleParams{
-		ConnectorName: name,
-		Role:          string(role),
+	return r.withTx(ctx, func(q *Queries) error {
+		if err := q.DeactivateConnectorRole(ctx, string(role)); err != nil {
+			return err
+		}
+		return q.ActivateConnectorRole(ctx, ActivateConnectorRoleParams{
+			ConnectorName: name,
+			Role:          string(role),
+		})
 	})
 }
 

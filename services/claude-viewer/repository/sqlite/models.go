@@ -20,6 +20,7 @@ type Connector struct {
 type ConnectorRole struct {
 	ConnectorName string `json:"connector_name"`
 	Role          string `json:"role"`
+	Active        int64  `json:"active"`
 }
 
 type ConnectorSetting struct {

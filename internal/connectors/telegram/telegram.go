@@ -147,7 +147,7 @@ func (c *Connector) Execute(ctx context.Context, req connectors.ConnectorRequest
 	}
 
 	if !result.OK {
-		return nil, fmt.Errorf("telegram API error: %s", result.Description)
+		return &connectors.ConnectorResult{Role: connectors.ConnectorRoleTransmit}, fmt.Errorf("telegram API error: %s", result.Description)
 	}
 
 	msgID := fmt.Sprintf("%d", result.Result.MessageID)

@@ -56,7 +56,7 @@ func (m *Manager) Execute(ctx context.Context, req ConnectorRequest) (*Connector
 
 // ensureValid loads config and validates on cache miss; skips both on a warm hit.
 func (m *Manager) ensureValid(ctx context.Context, c Connector) error {
-	if _, err := m.validationCache.Get(c.Name()); err == nil {
+	if valid, err := m.validationCache.Get(c.Name()); err == nil && valid {
 		return nil
 	}
 	if cfg, ok := c.(ConfigurableConnector); ok {

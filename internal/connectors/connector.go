@@ -28,11 +28,10 @@ type DiffVersion struct {
 	CreatedAt     time.Time
 }
 
-// DiffPayload carries two version snapshots for change analysis.
+// DiffPayload carries all version snapshots in a range for change analysis.
 type DiffPayload struct {
 	PlanName string
-	From     DiffVersion
-	To       DiffVersion
+	Versions []DiffVersion
 }
 
 // ConnectorRequest is the single input for Execute.
