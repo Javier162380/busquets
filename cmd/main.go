@@ -2,14 +2,12 @@ package main
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
 
-	httpserver "github.com/Javier162380/claude-plan-viewer/cmd/http"
 	mcphandler "github.com/Javier162380/claude-plan-viewer/cmd/mcp"
 	tuiapp "github.com/Javier162380/claude-plan-viewer/cmd/tui"
 	"github.com/Javier162380/claude-plan-viewer/internal/config"
@@ -83,11 +81,6 @@ func main() {
 	case "dump":
 		if err := runDump(cfg, logger); err != nil {
 			logger.Error("dump failed", "error", err)
-			os.Exit(1)
-		}
-	case "serve":
-		if err := runServe(cfg, logger); err != nil {
-			logger.Error("server failed", "error", err)
 			os.Exit(1)
 		}
 	case "tui":
@@ -236,37 +229,6 @@ func runDump(cfg *config.Config, logger *slog.Logger) error {
 	return nil
 }
 
-func runServe(cfg *config.Config, logger *slog.Logger) error {
-	ctx := context.Background()
-
-	// Parse flags
-	addr := flag.String("addr", ":8081", "HTTP server address")
-	if err := flag.CommandLine.Parse(os.Args[2:]); err != nil {
-		return fmt.Errorf("failed to parse flags: %w", err)
-	}
-
-	repo, cleanup, err := initRepository(ctx, cfg, logger)
-	if err != nil {
-		return fmt.Errorf("failed to initialize repository: %w", err)
-	}
-	defer cleanup()
-
-	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
-	if err != nil {
-		return fmt.Errorf("failed to initialize service: %w", err)
-	}
-	defer service.Close()
-	service.SetLogger(logger)
-
-	server, err := httpserver.NewServer(service, *addr)
-	if err != nil {
-		return fmt.Errorf("failed to create server: %w", err)
-	}
-
-	fmt.Printf("Server running on http://localhost%s (backend: %s)\n", *addr, cfg.Database.Backend)
-	return server.Server().Start(*addr)
-}
-
 func runTUI(cfg *config.Config, logger *slog.Logger) error {
 	ctx := context.Background()
 
@@ -381,7 +343,6 @@ func printUsage() {
 Commands:
   sync                Copy and index plans from source directory
   dump                Write all plans from the database back to the source plans directory
-  serve [-addr :port] Start web server (default: :8081)
   tui                 Start terminal user interface
   mcp                 Start MCP server for Claude integration
   migrate             Run database migrations
@@ -401,8 +362,6 @@ Environment:
 
 Examples:
   plan-viewer sync
-  plan-viewer serve
-  plan-viewer serve -addr :3000
   plan-viewer tui
   plan-viewer mcp
   plan-viewer migrate

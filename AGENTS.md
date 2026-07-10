@@ -4,11 +4,11 @@ Quick reference for understanding the codebase architecture and development work
 
 ## Project Overview
 
-Go application that syncs Claude AI plans from `~/.claude/plans/` to a searchable database, providing TUI, Web UI, and CLI interfaces.
+Go application that syncs Claude AI plans from `~/.claude/plans/` to a searchable database, providing TUI, CLI, and MCP interfaces.
 
 **Core Features**: Plan sync/search, version tracking, multi-database support (SQLite/PostgreSQL), connector system, markdown rendering, MCP integration
 
-**Main Commands**: `sync`, `dump`, `tui`, `serve`, `mcp`, `migrate`
+**Main Commands**: `sync`, `dump`, `tui`, `mcp`, `migrate`
 
 **Tag model**: Tags are DB-only — created/assigned via `SetPlanTags`/`CreateTag`, never read from or written to plan file content. Sync (`SyncPlans`) does not extract or overwrite tags.
 
@@ -21,7 +21,6 @@ make lint        # Lint the project according to GolangCI lint best practices.
 make test        # Run tests
 make sync        # Sync plans
 make tui         # Launch terminal UI
-make serve       # Start web server (:8081)
 ```
 
 **Development Cycle**:
@@ -37,7 +36,7 @@ make serve       # Start web server (:8081)
 Two conversion boundaries are enforced. Repository implementations convert SQLC types to `dto.*` internally. The service layer then converts `dto.*` to its own public types (`Tag`, `Comment`, etc.) in `convert.go` before returning them through `UnifiedService`. `cmd/*` adapters never import `dto` directly.
 
 ```
-cmd/{http,tui,mcp}   (claudeviewer.Tag, claudeviewer.Comment, …)
+cmd/{tui,mcp}        (claudeviewer.Tag, claudeviewer.Comment, …)
     ↑
 Service Layer        (convert.go: dto.* → service types)
     ↑
@@ -99,7 +98,6 @@ Central orchestrator with injected dependencies:
 ```
 cmd/                        # Entry points
   ├── main.go               # Command routing
-  ├── http/                 # Web server (Echo)
   ├── mcp/                  # MCP server (Claude integration)
   └── tui/                  # Terminal UI (Bubble Tea)
 

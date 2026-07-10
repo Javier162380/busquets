@@ -1,4 +1,4 @@
-.PHONY: help build run sync serve tui tui-debug test generate clean migrate
+.PHONY: help build run sync tui tui-debug test generate clean migrate
 
 help: ## Show this help
 	@echo 'Usage: make [target]'
@@ -20,9 +20,6 @@ sync: build ## Build and run sync command
 
 rsync: build
 	./bin/plan-viewer rsync
-
-serve: build ## Build and run web server
-	./bin/plan-viewer serve
 
 tui: build ## Build and run TUI
 	./bin/plan-viewer tui
