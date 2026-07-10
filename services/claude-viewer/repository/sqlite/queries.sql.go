@@ -1081,6 +1081,46 @@ func (q *Queries) RemoveTagFromPlan(ctx context.Context, arg RemoveTagFromPlanPa
 	return err
 }
 
+const renamePlanRow = `-- name: RenamePlanRow :exec
+UPDATE plans
+SET file_name = ?, file_path = ?
+WHERE file_name = ? AND sync_source = ?
+`
+
+type RenamePlanRowParams struct {
+	FileName   string `json:"file_name"`
+	FilePath   string `json:"file_path"`
+	FileName_2 string `json:"file_name_2"`
+	SyncSource string `json:"sync_source"`
+}
+
+func (q *Queries) RenamePlanRow(ctx context.Context, arg RenamePlanRowParams) error {
+	_, err := q.db.ExecContext(ctx, renamePlanRow,
+		arg.FileName,
+		arg.FilePath,
+		arg.FileName_2,
+		arg.SyncSource,
+	)
+	return err
+}
+
+const renamePlanVersionPaths = `-- name: RenamePlanVersionPaths :exec
+UPDATE plan_versions
+SET file_path = REPLACE(file_path, ?, ?)
+WHERE plan_id = ?
+`
+
+type RenamePlanVersionPathsParams struct {
+	REPLACE   string `json:"REPLACE"`
+	REPLACE_2 string `json:"REPLACE_2"`
+	PlanID    int64  `json:"plan_id"`
+}
+
+func (q *Queries) RenamePlanVersionPaths(ctx context.Context, arg RenamePlanVersionPathsParams) error {
+	_, err := q.db.ExecContext(ctx, renamePlanVersionPaths, arg.REPLACE, arg.REPLACE_2, arg.PlanID)
+	return err
+}
+
 const searchVersionsByContent = `-- name: SearchVersionsByContent :many
 SELECT id, plan_id, version_number, file_path, content, word_count, created_at
 FROM plan_versions

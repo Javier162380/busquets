@@ -16,6 +16,7 @@ type Repository interface {
 	InsertPlanWithTags(ctx context.Context, params InsertPlanWithTagsParams) error
 	UpdatePlanWithTags(ctx context.Context, params UpdatePlanWithTagsParams) error
 	DeletePlan(ctx context.Context, fileName, syncSource string) error
+	RenamePlanFile(ctx context.Context, params RenamePlanFileParams, renameFiles func() error) error
 	ListAllPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]PlanSummary, error)
 	ListAllPlansWithPagination(ctx context.Context, params PaginationParams) ([]PlanSummary, error)
 	SearchPlans(ctx context.Context, params SearchParams) ([]PlanSummary, error)

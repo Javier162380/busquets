@@ -90,6 +90,16 @@ type DeletePlanResultMsg struct {
 	Error                error
 }
 
+// RenamePlanFileMsg requests renaming a plan's file (source, mirror, versions, DB row).
+// FilePath is the plan's stored mirror path; NewFileName is the requested new name.
+type RenamePlanFileMsg struct{ FileName, SyncSource, FilePath, NewFileName string }
+
+// RenamePlanFileResultMsg is sent when a plan file rename completes.
+type RenamePlanFileResultMsg struct {
+	FileName, SyncSource, NewFileName string
+	Error                             error
+}
+
 // ErrorMsg is sent on error.
 type ErrorMsg struct {
 	Error error

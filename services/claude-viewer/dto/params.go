@@ -28,6 +28,17 @@ type UpdatePlanParams struct {
 	WordCount  int64
 }
 
+// RenamePlanFileParams holds the writes for an atomic file rename: the plan row's
+// file_name/file_path, plus the versions dir path prefix rewrite on plan_versions.
+type RenamePlanFileParams struct {
+	OldFileName       string // WHERE clause
+	SyncSource        string // WHERE clause
+	NewFileName       string
+	NewFilePath       string
+	OldVersionsPrefix string // e.g. <viewerDir>/versions/<old>/
+	NewVersionsPrefix string // e.g. <viewerDir>/versions/<new>/
+}
+
 // InsertPlanVersionParams contains parameters for inserting a plan version.
 type InsertPlanVersionParams struct {
 	PlanID        int64

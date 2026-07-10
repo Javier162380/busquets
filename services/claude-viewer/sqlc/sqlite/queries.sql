@@ -7,6 +7,16 @@ UPDATE plans
 SET title = ?, content = ?, modified_at = ?, indexed_at = ?, file_size = ?, word_count = ?
 WHERE file_name = ? AND sync_source = ?;
 
+-- name: RenamePlanRow :exec
+UPDATE plans
+SET file_name = ?, file_path = ?
+WHERE file_name = ? AND sync_source = ?;
+
+-- name: RenamePlanVersionPaths :exec
+UPDATE plan_versions
+SET file_path = REPLACE(file_path, ?, ?)
+WHERE plan_id = ?;
+
 -- name: GetPlanByFileNameAndSource :one
 SELECT * FROM plans WHERE file_name = ? AND sync_source = ? LIMIT 1;
 

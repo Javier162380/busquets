@@ -84,3 +84,24 @@ func (a *App) handleDeletePlanResult(msg messages.DeletePlanResultMsg) (tea.Mode
 		commands.ClearStatusCmd(1*time.Second),
 	)
 }
+
+func (a *App) handleRenamePlanFile(msg messages.RenamePlanFileMsg) (tea.Model, tea.Cmd) {
+	a.statusBar.SetLoading("Renaming plan...")
+	return a, tea.Batch(
+		commands.RenamePlanFileCmd(a.ctx, a.service, msg.FileName, msg.SyncSource, msg.FilePath, msg.NewFileName),
+		commands.ClearStatusCmdWithDefaultDuration(),
+	)
+}
+
+func (a *App) handleRenamePlanFileResult(msg messages.RenamePlanFileResultMsg) (tea.Model, tea.Cmd) {
+	if msg.Error != nil {
+		a.statusBar.SetError("Failed to rename plan: " + msg.Error.Error())
+		return a, commands.ClearStatusCmdWithDefaultDuration()
+	}
+	a.statusBar.SetSuccess("Renamed plan")
+	return a, tea.Batch(
+		commands.LoadPlansCmd(a.ctx, a.service),
+		commands.LoadAllTagsForPanelCmd(a.ctx, a.service),
+		commands.ClearStatusCmdWithDefaultDuration(),
+	)
+}

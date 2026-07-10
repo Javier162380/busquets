@@ -175,6 +175,17 @@ func DeletePlanCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileNam
 	}
 }
 
+// RenamePlanFileCmd renames a plan's file everywhere it lives (source, mirror, versions, DB row).
+func RenamePlanFileCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, syncSource, filePath, newFileName string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		err := svc.RenamePlanFile(ctx, fileName, syncSource, filePath, newFileName)
+		return messages.RenamePlanFileResultMsg{FileName: fileName, SyncSource: syncSource, NewFileName: newFileName, Error: err}
+	}
+}
+
 // SearchVersionsCmd searches a plan over its different versions.
 func SearchVersionsCmd(ctx context.Context, svc claudeviewer.UnifiedService, currentPlanName, syncSource, query string) tea.Cmd {
 	return func() tea.Msg {

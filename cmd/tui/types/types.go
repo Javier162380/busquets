@@ -31,4 +31,5 @@ const (
 	ModalTagManager            // tag management modal
 	ModalComment               // comment modal
 	ModalTLDR                  // TLDR/summary popup
+	ModalRenameFile            // rename-plan-file modal
 )
