@@ -9,13 +9,13 @@ WHERE file_name = $7 AND sync_source = $8;
 
 -- name: RenamePlanRow :exec
 UPDATE plans
-SET file_name = $1, file_path = $2
-WHERE file_name = $3 AND sync_source = $4;
+SET file_name = sqlc.arg(new_file_name), file_path = sqlc.arg(new_file_path)
+WHERE file_name = sqlc.arg(old_file_name) AND sync_source = sqlc.arg(sync_source);
 
 -- name: RenamePlanVersionPaths :exec
 UPDATE plan_versions
-SET file_path = REPLACE(file_path, $1, $2)
-WHERE plan_id = $3;
+SET file_path = REPLACE(file_path, sqlc.arg(old_versions_prefix), sqlc.arg(new_versions_prefix))
+WHERE plan_id = sqlc.arg(plan_id);
 
 -- name: GetPlanByFileNameAndSource :one
 SELECT * FROM plans WHERE file_name = $1 AND sync_source = $2 LIMIT 1;

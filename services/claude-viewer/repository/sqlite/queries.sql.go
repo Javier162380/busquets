@@ -1083,22 +1083,22 @@ func (q *Queries) RemoveTagFromPlan(ctx context.Context, arg RemoveTagFromPlanPa
 
 const renamePlanRow = `-- name: RenamePlanRow :exec
 UPDATE plans
-SET file_name = ?, file_path = ?
-WHERE file_name = ? AND sync_source = ?
+SET file_name = ?1, file_path = ?2
+WHERE file_name = ?3 AND sync_source = ?4
 `
 
 type RenamePlanRowParams struct {
-	FileName   string `json:"file_name"`
-	FilePath   string `json:"file_path"`
-	FileName_2 string `json:"file_name_2"`
-	SyncSource string `json:"sync_source"`
+	NewFileName string `json:"new_file_name"`
+	NewFilePath string `json:"new_file_path"`
+	OldFileName string `json:"old_file_name"`
+	SyncSource  string `json:"sync_source"`
 }
 
 func (q *Queries) RenamePlanRow(ctx context.Context, arg RenamePlanRowParams) error {
 	_, err := q.db.ExecContext(ctx, renamePlanRow,
-		arg.FileName,
-		arg.FilePath,
-		arg.FileName_2,
+		arg.NewFileName,
+		arg.NewFilePath,
+		arg.OldFileName,
 		arg.SyncSource,
 	)
 	return err
@@ -1106,18 +1106,18 @@ func (q *Queries) RenamePlanRow(ctx context.Context, arg RenamePlanRowParams) er
 
 const renamePlanVersionPaths = `-- name: RenamePlanVersionPaths :exec
 UPDATE plan_versions
-SET file_path = REPLACE(file_path, ?, ?)
-WHERE plan_id = ?
+SET file_path = REPLACE(file_path, ?1, ?2)
+WHERE plan_id = ?3
 `
 
 type RenamePlanVersionPathsParams struct {
-	REPLACE   string `json:"REPLACE"`
-	REPLACE_2 string `json:"REPLACE_2"`
-	PlanID    int64  `json:"plan_id"`
+	OldVersionsPrefix string `json:"old_versions_prefix"`
+	NewVersionsPrefix string `json:"new_versions_prefix"`
+	PlanID            int64  `json:"plan_id"`
 }
 
 func (q *Queries) RenamePlanVersionPaths(ctx context.Context, arg RenamePlanVersionPathsParams) error {
-	_, err := q.db.ExecContext(ctx, renamePlanVersionPaths, arg.REPLACE, arg.REPLACE_2, arg.PlanID)
+	_, err := q.db.ExecContext(ctx, renamePlanVersionPaths, arg.OldVersionsPrefix, arg.NewVersionsPrefix, arg.PlanID)
 	return err
 }
 

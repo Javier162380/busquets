@@ -390,18 +390,18 @@ func (r *Repository) RenamePlanFile(ctx context.Context, params dto.RenamePlanFi
 		// Rewrite version file paths first — the subquery keys off plan_id, which is
 		// unchanged by the rename, so order relative to the plans update doesn't matter.
 		if err := q.RenamePlanVersionPaths(ctx, RenamePlanVersionPathsParams{
-			Replace:   params.OldVersionsPrefix,
-			Replace_2: params.NewVersionsPrefix,
-			PlanID:    int64(plan.ID),
+			OldVersionsPrefix: params.OldVersionsPrefix,
+			NewVersionsPrefix: params.NewVersionsPrefix,
+			PlanID:            int64(plan.ID),
 		}); err != nil {
 			return fmt.Errorf("failed to rename plan version paths: %w", err)
 		}
 
 		if err := q.RenamePlanRow(ctx, RenamePlanRowParams{
-			FileName:   params.NewFileName,
-			FilePath:   params.NewFilePath,
-			FileName_2: params.OldFileName,
-			SyncSource: params.SyncSource,
+			NewFileName: params.NewFileName,
+			NewFilePath: params.NewFilePath,
+			OldFileName: params.OldFileName,
+			SyncSource:  params.SyncSource,
 		}); err != nil {
 			return fmt.Errorf("failed to rename plan: %w", err)
 		}

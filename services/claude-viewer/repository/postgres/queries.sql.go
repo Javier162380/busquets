@@ -1049,17 +1049,17 @@ WHERE file_name = $3 AND sync_source = $4
 `
 
 type RenamePlanRowParams struct {
-	FileName   string `json:"file_name"`
-	FilePath   string `json:"file_path"`
-	FileName_2 string `json:"file_name_2"`
-	SyncSource string `json:"sync_source"`
+	NewFileName string `json:"new_file_name"`
+	NewFilePath string `json:"new_file_path"`
+	OldFileName string `json:"old_file_name"`
+	SyncSource  string `json:"sync_source"`
 }
 
 func (q *Queries) RenamePlanRow(ctx context.Context, arg RenamePlanRowParams) error {
 	_, err := q.db.Exec(ctx, renamePlanRow,
-		arg.FileName,
-		arg.FilePath,
-		arg.FileName_2,
+		arg.NewFileName,
+		arg.NewFilePath,
+		arg.OldFileName,
 		arg.SyncSource,
 	)
 	return err
@@ -1072,13 +1072,13 @@ WHERE plan_id = $3
 `
 
 type RenamePlanVersionPathsParams struct {
-	Replace   string `json:"replace"`
-	Replace_2 string `json:"replace_2"`
-	PlanID    int64  `json:"plan_id"`
+	OldVersionsPrefix string `json:"old_versions_prefix"`
+	NewVersionsPrefix string `json:"new_versions_prefix"`
+	PlanID            int64  `json:"plan_id"`
 }
 
 func (q *Queries) RenamePlanVersionPaths(ctx context.Context, arg RenamePlanVersionPathsParams) error {
-	_, err := q.db.Exec(ctx, renamePlanVersionPaths, arg.Replace, arg.Replace_2, arg.PlanID)
+	_, err := q.db.Exec(ctx, renamePlanVersionPaths, arg.OldVersionsPrefix, arg.NewVersionsPrefix, arg.PlanID)
 	return err
 }
 

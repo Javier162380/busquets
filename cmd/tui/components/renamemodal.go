@@ -29,7 +29,6 @@ type RenameModal struct {
 // NewRenameModal creates an inactive rename modal ready to be opened.
 func NewRenameModal() *RenameModal {
 	ti := textinput.New()
-	ti.Placeholder = "new-file-name.md"
 	ti.CharLimit = 255
 
 	return &RenameModal{
@@ -85,40 +84,36 @@ func (m *RenameModal) Update(msg tea.Msg) tea.Cmd {
 		return cmd
 	}
 
-	keyMsg, ok := msg.(tea.KeyMsg)
-	if !ok {
-		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(msg)
-		return cmd
+	if keyMsg, ok := msg.(tea.KeyMsg); ok {
+		switch keyMsg.String() {
+		case "esc":
+			m.Close()
+			return nil
+		case "enter":
+			newName := strings.TrimSpace(m.input.Value())
+			if newName == "" || newName == m.fileName {
+				return nil // nothing to rename
+			}
+			fileName, syncSource, filePath := m.fileName, m.syncSource, m.filePath
+			m.confirm.Open(
+				fmt.Sprintf("Rename %q to %q?", fileName, newName),
+				func() tea.Msg {
+					return messages.RenamePlanFileMsg{
+						FileName:    fileName,
+						SyncSource:  syncSource,
+						FilePath:    filePath,
+						NewFileName: newName,
+					}
+				},
+			)
+			return nil
+		}
 	}
 
-	switch keyMsg.String() {
-	case "esc":
-		m.Close()
-		return nil
-	case "enter":
-		newName := strings.TrimSpace(m.input.Value())
-		if newName == "" || newName == m.fileName {
-			return nil // nothing to rename
-		}
-		fileName, syncSource, filePath := m.fileName, m.syncSource, m.filePath
-		m.confirm.Open(
-			fmt.Sprintf("Rename %q to %q?", fileName, newName),
-			func() tea.Msg {
-				return messages.RenamePlanFileMsg{
-					FileName:    fileName,
-					SyncSource:  syncSource,
-					FilePath:    filePath,
-					NewFileName: newName,
-				}
-			},
-		)
-		return nil
-	default:
-		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(keyMsg)
-		return cmd
-	}
+	// Text-entry keys and non-key messages (e.g. cursor blink) go to the input.
+	var cmd tea.Cmd
+	m.input, cmd = m.input.Update(msg)
+	return cmd
 }
 
 // View renders the rename modal, with the confirmation dialog overlaid when active.
