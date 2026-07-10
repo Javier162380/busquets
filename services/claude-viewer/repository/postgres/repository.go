@@ -377,6 +377,47 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName, syncSource string
 	})
 }
 
+func (r *Repository) RenamePlanFile(ctx context.Context, params dto.RenamePlanFileParams, renameFiles func() error) error {
+	return r.withTx(ctx, func(q *Queries) error {
+		plan, err := q.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
+			FileName:   params.OldFileName,
+			SyncSource: params.SyncSource,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to get plan: %w", err)
+		}
+
+		// Rewrite version file paths first — the subquery keys off plan_id, which is
+		// unchanged by the rename, so order relative to the plans update doesn't matter.
+		if err := q.RenamePlanVersionPaths(ctx, RenamePlanVersionPathsParams{
+			OldVersionsPrefix: params.OldVersionsPrefix,
+			NewVersionsPrefix: params.NewVersionsPrefix,
+			PlanID:            int64(plan.ID),
+		}); err != nil {
+			return fmt.Errorf("failed to rename plan version paths: %w", err)
+		}
+
+		if err := q.RenamePlanRow(ctx, RenamePlanRowParams{
+			NewFileName: params.NewFileName,
+			NewFilePath: params.NewFilePath,
+			OldFileName: params.OldFileName,
+			SyncSource:  params.SyncSource,
+		}); err != nil {
+			return fmt.Errorf("failed to rename plan: %w", err)
+		}
+
+		// Rename the files while the transaction is still open. Returning an error here
+		// rolls the DB writes above back with it, so the rename is atomic across DB
+		// and filesystem — no separate compensating write.
+		if renameFiles != nil {
+			if err := renameFiles(); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
 func (r *Repository) ListAllPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]dto.PlanSummary, error) {
 	sb := sqlbuilder.PostgreSQL.NewSelectBuilder()
 	rtExpr := fmt.Sprintf("GREATEST(1, CEIL(p.word_count::numeric / %d)::integer) AS reading_time", wpm)

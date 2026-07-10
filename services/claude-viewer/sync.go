@@ -197,6 +197,110 @@ func (s *Service) DeletePlan(ctx context.Context, fileName, syncSource, filePath
 	return nil
 }
 
+// fileMove is a single filesystem rename (from -> to), tracked so a failed rename
+// partway through RenamePlanFile can undo the moves already performed.
+type fileMove struct {
+	from string
+	to   string
+}
+
+// RenamePlanFile renames a plan's file everywhere it lives: the source file, the
+// viewer mirror file, and the versions directory, plus the plans row and the stored
+// version file paths. Only the file name changes — the plan's title (derived from the
+// markdown heading), content, and sync source are untouched.
+//
+// It is transaction-safe: the plan row, the stored version paths, and the file moves
+// all happen inside a single DB transaction — the transaction commits only once the
+// files have moved, so a failed move rolls the DB writes back with it (there is no
+// separate compensating write that could itself fail). If the commit fails after the
+// moves, the moves are undone.
+//
+// filePath is the plan's mirror path as stored on the DB row (caller-supplied), used
+// verbatim so the rename cannot diverge from where sync actually wrote the file.
+func (s *Service) RenamePlanFile(ctx context.Context, fileName, syncSource, filePath, newFileName string) error {
+	// 1. Normalize + validate the new name.
+	newFileName = filepath.Base(strings.TrimSpace(newFileName))
+	if newFileName == "" || newFileName == "." || newFileName == string(filepath.Separator) {
+		return fmt.Errorf("invalid new file name")
+	}
+	if !strings.EqualFold(filepath.Ext(newFileName), ".md") {
+		newFileName += ".md"
+	}
+	if newFileName == fileName {
+		return fmt.Errorf("new file name is the same as the current one")
+	}
+
+	// 2. Compute old/new paths for source, mirror, and versions.
+	oldSource := filepath.Join(syncSource, fileName)
+	newSource := filepath.Join(syncSource, newFileName)
+	oldMirror := filePath
+	newMirror := filepath.Join(filepath.Dir(filePath), newFileName)
+	oldVersionsDir := filepath.Join(s.viewerDir, "versions", fileName)
+	newVersionsDir := filepath.Join(s.viewerDir, "versions", newFileName)
+
+	// 3. Collision checks — before any DB or FS mutation, so we never clobber another
+	// plan's file on disk or row in the DB.
+	if _, err := os.Stat(newSource); err == nil {
+		return fmt.Errorf("a file already exists at %s", newSource)
+	}
+	if _, err := os.Stat(newMirror); err == nil {
+		return fmt.Errorf("a file already exists at %s", newMirror)
+	}
+	if _, err := os.Stat(newVersionsDir); err == nil {
+		return fmt.Errorf("a versions directory already exists at %s", newVersionsDir)
+	}
+	if _, err := s.db.GetPlanByFileName(ctx, newFileName, syncSource); err == nil {
+		return fmt.Errorf("a plan named %q already exists in this source", newFileName)
+	} else if !dto.IsNotFound(err) {
+		return fmt.Errorf("failed to check for existing plan: %w", err)
+	}
+
+	// 4. Prepare the file moves. They run inside the DB transaction (step 5), so the
+	// commit is gated on them succeeding.
+	pending := []fileMove{
+		{from: oldSource, to: newSource},
+		{from: oldMirror, to: newMirror},
+	}
+	// The versions directory only exists once a plan has at least one saved version.
+	if _, err := os.Stat(oldVersionsDir); err == nil {
+		pending = append(pending, fileMove{from: oldVersionsDir, to: newVersionsDir})
+	}
+
+	// 5. Rename in the DB, moving the files as part of the same transaction. Version
+	// paths key off the immutable plan_id, so renaming file_name never orphans tags,
+	// comments, or version rows.
+	var done []fileMove
+	err := s.db.RenamePlanFile(ctx, dto.RenamePlanFileParams{
+		OldFileName:       fileName,
+		SyncSource:        syncSource,
+		NewFileName:       newFileName,
+		NewFilePath:       newMirror,
+		OldVersionsPrefix: oldVersionsDir + string(filepath.Separator),
+		NewVersionsPrefix: newVersionsDir + string(filepath.Separator),
+	}, func() error {
+		for _, m := range pending {
+			if renameErr := os.Rename(m.from, m.to); renameErr != nil {
+				return fmt.Errorf("failed to move %s to %s: %w", m.from, m.to, renameErr)
+			}
+			done = append(done, m)
+		}
+		return nil
+	})
+	if err != nil {
+		// The transaction did not commit (a move failed, or the commit itself failed).
+		// Undo any moves that did happen so the filesystem matches the rolled-back DB.
+		for i := len(done) - 1; i >= 0; i-- {
+			_ = os.Rename(done[i].to, done[i].from)
+		}
+		return fmt.Errorf("failed to rename plan: %w", err)
+	}
+
+	// 6. Invalidate the summary cache for both the old and new file names.
+	s.summaryCache.Delete(fileName)
+	s.summaryCache.Delete(newFileName)
+	return nil
+}
+
 // syncSinglePlan copies and indexes a single plan file from the given source directory.
 // Returns true if the file was updated, false if skipped (no changes).
 func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileName string) (bool, error) {

@@ -30,6 +30,7 @@ type PlansScreen struct {
 	tagFilter     *components.TagFilter
 	tagPanel      *components.TagPanel
 	commentModal  *components.CommentModal
+	renameModal   *components.RenameModal
 
 	// State.
 	layout        types.Layout
@@ -75,6 +76,7 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 		tagModal:      components.NewTagModal(),
 		confirmDialog: components.NewConfirmModal(),
 		commentModal:  components.NewCommentModal(),
+		renameModal:   components.NewRenameModal(),
 		tagFilter:     components.NewTagFilter(panelWidth),
 		layout:        types.LayoutSplit,
 		focus:         types.FocusList,
@@ -124,6 +126,8 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s.handleTagModalUpdate(msg)
 	case types.ModalComment:
 		return s.handleCommentModalUpdate(msg)
+	case types.ModalRenameFile:
+		return s.handleRenameModalUpdate(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -440,6 +444,14 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 					return messages.DeletePlanMsg{FileName: fileName, SyncSource: syncSource, FilePath: filePath}
 				},
 			)
+		}
+		return s, nil
+
+	case "R":
+		if s.current != nil {
+			s.activeModal = types.ModalRenameFile
+			s.renameModal.SetSize(min(60, s.width-4), min(12, s.height-2))
+			s.renameModal.Open(s.current.FileName, s.current.SyncSource, s.current.FilePath)
 		}
 		return s, nil
 
@@ -836,6 +848,15 @@ func (s *PlansScreen) handleCommentModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
 	return s, nil
 }
 
+// handleRenameModalUpdate routes messages while the rename modal is active.
+func (s *PlansScreen) handleRenameModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
+	cmd := s.renameModal.Update(msg)
+	if !s.renameModal.IsActive() {
+		s.activeModal = types.ModalNone
+	}
+	return s, cmd
+}
+
 // View renders the screen.
 func (s *PlansScreen) View() string {
 	var mainContent string
@@ -916,6 +937,16 @@ func (s *PlansScreen) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			s.commentModal.View(),
+		)
+		return s.overlayContent(mainContent, overlay)
+
+	case types.ModalRenameFile:
+		overlay := lipgloss.Place(
+			s.width,
+			s.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			s.renameModal.View(),
 		)
 		return s.overlayContent(mainContent, overlay)
 	}
@@ -1230,7 +1261,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.displayMode == claudeviewer.DisplayModeTagPlanContent {
 			tagNav = "shift+tab: tags | "
 		}
-		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | n: comments | r: rsync | d: dump | D: delete | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
+		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | n: comments | r: rsync | d: dump | D: delete | R: rename | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
 	case types.FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeGlamour {
