@@ -1,6 +1,6 @@
 # Claude Plan Viewer
 
-A powerful Go application for indexing, searching, and viewing [Claude Code](https://claude.com/claude-code) plan files with multiple interfaces (Web UI, TUI, CLI).
+A powerful Go application for indexing, searching, and viewing [Claude Code](https://claude.com/claude-code) plan files with multiple interfaces (TUI, CLI, MCP).
 
 ## Table of Contents
 
@@ -12,7 +12,6 @@ A powerful Go application for indexing, searching, and viewing [Claude Code](htt
 - [Usage](#usage)
   - [Sync Plans](#sync-plans)
   - [Dump Plans](#dump-plans)
-  - [Web Server](#web-server)
   - [Terminal UI (TUI)](#terminal-ui-tui)
   - [MCP Server](#mcp-server)
   - [Database Migrations](#database-migrations)
@@ -27,7 +26,7 @@ Claude Plan Viewer provides a centralized solution for managing Claude Code plan
 - **Centralized Management**: Keep all your Claude Code plans organized and searchable in one place
 - **Full-Text Search**: Quickly find plans by content, not just filename
 - **Version Tracking**: Track changes to plans over time
-- **Multiple Interfaces**: Choose between web UI, terminal UI, or CLI based on your workflow
+- **Multiple Interfaces**: Choose between terminal UI, CLI, or MCP based on your workflow
 - **Flexible Storage**: Use SQLite for simplicity or PostgreSQL for scale
 
 ## Features
@@ -42,7 +41,6 @@ Claude Plan Viewer provides a centralized solution for managing Claude Code plan
 - **Tag Management**: Organize plans with custom tags — created and assigned via the UI or API, stored entirely in the database (not embedded in plan files)
 
 ### User Interfaces
-- **Web Interface**: Clean, responsive UI with markdown rendering and syntax highlighting
 - **Terminal UI (TUI)**: Feature-rich terminal interface for command-line enthusiasts
 - **MCP Server**: Model Context Protocol integration for Claude Code AI assistant
 - **CLI Commands**: Direct command-line operations for scripting and automation
@@ -56,7 +54,6 @@ Claude Plan Viewer provides a centralized solution for managing Claude Code plan
 - **Connector System**: Extensible notification system (includes Telegram integration)
 - **Markdown Rendering**: Beautiful plan display with code syntax highlighting
 - **Pagination**: Efficient browsing of large plan collections
-- **HTMX Integration**: Fast, dynamic web interface without full page reloads
 
 ## Prerequisites
 
@@ -88,11 +85,7 @@ The binary will be created at `./bin/plan-viewer`.
 # Run initial sync to import your plans
 make sync
 
-# Start the web server
-make serve
-# Open http://localhost:8081 in your browser
-
-# Or start the TUI
+# Start the TUI
 make tui
 ```
 
@@ -206,32 +199,6 @@ Write all plans stored in the database back to `~/.claude/plans/`. Useful when t
 
 In the TUI, press `d` from the plans list to trigger a dump.
 
-### Web Server
-
-Start the HTTP server for web-based browsing:
-
-```bash
-# Default port (8081)
-make serve
-./bin/plan-viewer serve
-
-# Custom port
-./bin/plan-viewer serve -addr :3000
-
-# Custom port with environment override
-./bin/plan-viewer serve -addr :9000
-```
-
-**Features:**
-- Full-text search across all plans
-- Markdown rendering with syntax highlighting
-- Version comparison with diff view
-- Pagination for large collections
-- HTMX-powered dynamic updates
-- Responsive design
-
-**Access:** Open `http://localhost:8081` in your browser.
-
 ### Terminal UI (TUI)
 
 Launch the interactive terminal interface:
@@ -292,7 +259,7 @@ Enable Claude Code to directly search and retrieve your plans during coding sess
 
 Tags are managed exclusively through the database — they are never read from or written to plan file content.
 
-Create tags and assign them to plans using the web UI, TUI, or via the `SetPlanTags` service API. Tags persist independently of plan files, so syncing a plan never overwrites its tags.
+Create tags and assign them to plans using the TUI or via the `SetPlanTags` service API. Tags persist independently of plan files, so syncing a plan never overwrites its tags.
 
 To search plans by tag via MCP:
 ```
@@ -321,9 +288,6 @@ This is typically only needed when:
 ```
 claude-plan-viewer/
 ├── cmd/                        # Application entry points
-│   ├── http/                   # Web server and handlers
-│   │   ├── templates/          # HTML templates
-│   │   └── static/             # CSS, JS assets
 │   ├── mcp/                    # MCP server (Claude integration)
 │   └── tui/                    # Terminal UI
 │       ├── screens/            # TUI screens
@@ -358,11 +322,6 @@ claude-plan-viewer/
 - TOML-based configuration
 - Environment variable overrides
 - Validation and defaults
-
-**Web Server** (`cmd/http/`)
-- Echo framework for routing
-- HTMX for dynamic interactions
-- Server-side rendering with Go templates
 
 **Terminal UI** (`cmd/tui/`)
 - Built with Bubble Tea framework

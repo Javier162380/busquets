@@ -79,7 +79,7 @@ type WatchService interface {
 	UpdateWatchInterval(intervalSeconds float64)
 }
 
-// UnifiedService combines all service interfaces for use by HTTP and TUI.
+// UnifiedService combines all service interfaces for use by the TUI and MCP.
 type UnifiedService interface {
 	PlanService
 	VersionService
