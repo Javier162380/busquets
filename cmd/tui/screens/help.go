@@ -10,76 +10,137 @@ import (
 
 const helpContent = `Claude Plan Viewer - Keyboard Shortcuts
 
-PLANS LIST (Two-Panel mode):
+GENERAL:
+  ?              Toggle this help screen
+  q, Ctrl+C      Quit application
+  S              Open settings
+  C              Open connectors
+
+PLANS LIST (left panel):
   j/k, ↑/↓       Navigate plans list
   Tab            Switch to content panel (right)
-  /              Open search bar
-  c              Clear search (when search is active)
-  v              Enter fullscreen view mode
-  e              Enter edit mode
-  s              Sync plans from source directory
-  d              Dump all plans from database to source directory
+  Shift+Tab      Switch to tag panel (three-panel mode)
+  /              Search plans
+  T              Filter by tags
+  c              Clear active search / tag filters
+  m              Manage tags for the selected plan
+  n              View / add comments
+  X              Generate (or regenerate) a TLDR summary
+  v              Open fullscreen view
+  e              Edit the plan
+  R              Rename the plan file
+  D              Delete the plan
+  s              Sync plans from the source directory
+  r              Rsync indexed plans back to the source directory
+  d              Dump all plans from the database to the source directory
 
-PLAN CONTENT (Two-Panel mode, right panel):
+PLAN CONTENT (right panel / fullscreen):
   j/k, ↑/↓       Scroll up/down
-  g              Jump to top
-  G              Jump to bottom
-  r              Toggle markdown rendering (raw vs HTML)
-  Tab            Switch to plans list (left)
-  Esc            Back to plans list
+  g / G          Jump to top / bottom
+  r              Toggle markdown rendering (raw vs rendered)
+  e              Edit the plan
+  n              View / add comments
+  v              View version history
+  t              Transmit to a connector (e.g. Telegram)
+  Tab            Switch panel
+  Esc            Back to the plans list / split view
+
+EDITING:
+  Ctrl+S         Save and sync changes
+  tt / bb        Jump to first / last line
+  dd             Delete the current line
+  oo             Insert a new line below
+  Esc            Cancel without saving
 
 SEARCH:
   Enter          Execute search
   Esc            Cancel search input
 
-PLAN VIEW (Fullscreen mode):
+TAG FILTER:
+  Enter          Apply the tag filter
+  Ctrl+T         Toggle match mode (AND / OR)
+  Esc            Cancel
+
+TAG PANEL (three-panel mode):
+  ↑/↓            Navigate tags (filters the plan list)
+  Tab            Switch to the plans list
+  /              Search plans
+  n              Create a new tag
+  Enter          Confirm new tag (while creating)
+  Esc            Cancel new tag (while creating)
+
+MANAGE TAGS (m):
+  Space          Toggle the selected tag on the plan
+  Tab            Switch between tag list and input
+  Enter          Add the typed tag
+  d              Delete the selected tag (with confirmation)
+  Esc            Save and close
+
+COMMENTS (n):
+  ↑/↓            Navigate comments
+  Tab            Switch between comment list and input
+  Ctrl+S         Save the comment
+  d              Delete the selected comment (with confirmation)
+  Esc            Cancel / close
+
+RENAME (R):
+  (type)         Enter the new file name
+  Enter          Continue to confirmation
+  Esc            Cancel
+
+SUMMARY POPUP (X):
+  s              Save the summary as a comment
+  q, Esc         Close
+
+CONFIRMATION DIALOG:
+  ←/→            Select Yes / No
+  Enter          Confirm the selection
+  Esc            Cancel
+
+VERSION HISTORY (left panel):
+  j/k, ↑/↓       Navigate versions
+  g / G          Jump to top / bottom
+  Tab            Switch to content panel
+  /              Search versions
+  c              Clear the version search
+  v              View the version fullscreen
+  R              Restore the selected version
+  r              Toggle markdown rendering (raw vs rendered)
+  Esc            Back to the plan
+
+VERSION VIEW (fullscreen):
   j/k, ↑/↓       Scroll up/down
-  g              Jump to top
-  G              Jump to bottom
-  r              Toggle markdown rendering (raw vs HTML)
-  e              Enter edit mode
-  v              View version history
-  t              Transmit to connector (e.g., Telegram)
-  Esc            Back to split view
+  g / G          Jump to top / bottom
+  Tab            Switch to the versions list
+  R              Restore this version
+  r              Toggle markdown rendering (raw vs rendered)
+  Esc            Back to the versions list
 
-VERSION HISTORY (Two-Panel mode):
-  j/k, ↑/↓       Navigate versions list
-  /              Open search bar
-  v              View version fullscreen
-  r              Restore this version
-  Esc            Back to plan view
+CONNECTORS (left panel):
+  j/k, ↑/↓       Navigate connectors
+  t              Set as the transmit connector
+  X              Set as the summarizer connector
+  d              Clear the connector's role
+  V              Validate the connector's settings
+  Tab            Switch to the settings panel
+  Esc            Back to the plans list
 
-VERSION VIEW (Fullscreen mode):
-  j/k, ↑/↓       Scroll up/down
-  g              Jump to top
-  G              Jump to bottom
-  r              Restore this version
-  Esc            Back to versions list
-
-CONNECTORS (Two-Panel mode):
-  j/k, ↑/↓       Navigate list / settings
-  Tab            Switch between panels
-  Enter          Enable connector (left panel)
-  e              Edit setting (right panel)
-  d              Disable connector
-  Esc            Back to plans / Cancel edit
-
-EDITING:
-  Ctrl+S         Save and sync changes
-  Esc            Cancel without saving
+CONNECTOR SETTINGS (right panel):
+  j/k, ↑/↓       Navigate settings
+  e              Edit the selected setting
+  s              Show / hide secret values
+  V              Validate the connector's settings
+  Tab            Switch to the connectors list
+  Esc            Back
+  Enter          Save (while editing)
 
 SETTINGS:
   j/k, ↑/↓       Navigate settings
-  Enter/Space    Toggle boolean / Edit number
-  0-9            Type digits (in edit mode)
-  Backspace      Delete digit (in edit mode)
-  Enter          Save (in edit mode)
-  Esc            Cancel edit / Go back
-
-GENERAL:
-  S              Open settings
-  ?              Toggle this help screen
-  q, Ctrl+C      Quit application`
+  Enter/Space    Toggle boolean / edit number
+  0-9            Type digits (while editing)
+  Backspace      Delete a digit (while editing)
+  Enter          Save (while editing)
+  Esc            Cancel edit / go back`
 
 // HelpScreen displays keyboard shortcuts and help information.
 type HelpScreen struct {
