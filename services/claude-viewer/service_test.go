@@ -3382,6 +3382,15 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		_, err = service.GetPlanByFileName(ctx, "renamed.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.FileExists(t, filepath.Join(sourcePlansDir, "renamed.md"))
+
+		// An existing .md extension is preserved case-insensitively (not doubled to .MD.md).
+		detail2, err := service.GetPlanDetailByFileName(ctx, "renamed.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.NoError(t, service.RenamePlanFile(ctx, "renamed.md", sourcePlansDir, detail2.FilePath, "keepcase.MD"))
+		_, err = service.GetPlanByFileName(ctx, "keepcase.MD", sourcePlansDir)
+		require.NoError(t, err)
+		_, err = service.GetPlanByFileName(ctx, "keepcase.MD.md", sourcePlansDir)
+		require.Error(t, err)
 	})
 
 	t.Run("rejects renaming to the same name", func(t *testing.T) {
@@ -3430,18 +3439,17 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		detail, err := service.GetPlanDetailByFileName(ctx, "rb.md", sourcePlansDir)
 		require.NoError(t, err)
 
-		// Block the versions-dir move (the last file move) with a regular file where the
-		// versions directory would be renamed to. The collision check only guards the
-		// source/mirror paths, so this failure happens mid-move and forces a rollback.
-		blocker := filepath.Join(viewerDir, "versions", "rb-new.md")
-		require.NoError(t, os.WriteFile(blocker, []byte("x"), 0o600))
+		// Force the mirror move (the second move) to fail by deleting the mirror file
+		// before the rename. The source move succeeds first, so this exercises both the
+		// LIFO file rollback (undoing the source move) and the DB rollback. Removing an
+		// existing file avoids tripping the pre-flight collision checks.
+		require.NoError(t, os.Remove(detail.FilePath))
 
 		require.Error(t, service.RenamePlanFile(ctx, "rb.md", sourcePlansDir, detail.FilePath, "rb-new.md"))
 
-		// Source and mirror moves rolled back.
+		// The source move was rolled back.
 		require.FileExists(t, filepath.Join(sourcePlansDir, "rb.md"))
 		require.NoFileExists(t, filepath.Join(sourcePlansDir, "rb-new.md"))
-		require.FileExists(t, filepath.Join(viewerDir, "test", "rb.md"))
 		require.NoFileExists(t, filepath.Join(viewerDir, "test", "rb-new.md"))
 
 		// DB reverted.
@@ -3452,6 +3460,30 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 
 		// Original versions dir untouched.
 		require.DirExists(t, filepath.Join(viewerDir, "versions", "rb.md"))
+	})
+
+	t.Run("rejects when the target versions directory already exists", func(t *testing.T) {
+		service, sourcePlansDir, viewerDir, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "vc.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+		detail, err := service.GetPlanDetailByFileName(ctx, "vc.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		// A stray versions directory already sits at the target name.
+		require.NoError(t, os.MkdirAll(filepath.Join(viewerDir, "versions", "vc-new.md"), 0o750))
+
+		require.Error(t, service.RenamePlanFile(ctx, "vc.md", sourcePlansDir, detail.FilePath, "vc-new.md"))
+
+		// Nothing changed: old plan still resolves and its source file is intact.
+		require.FileExists(t, filepath.Join(sourcePlansDir, "vc.md"))
+		_, err = service.GetPlanByFileName(ctx, "vc.md", sourcePlansDir)
+		require.NoError(t, err)
+		_, err = service.GetPlanByFileName(ctx, "vc-new.md", sourcePlansDir)
+		require.Error(t, err)
 	})
 
 	// The following two subtests drive the repository directly to prove the DB rename

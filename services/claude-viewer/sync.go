@@ -223,7 +223,7 @@ func (s *Service) RenamePlanFile(ctx context.Context, fileName, syncSource, file
 	if newFileName == "" || newFileName == "." || newFileName == string(filepath.Separator) {
 		return fmt.Errorf("invalid new file name")
 	}
-	if !strings.HasSuffix(newFileName, ".md") {
+	if !strings.EqualFold(filepath.Ext(newFileName), ".md") {
 		newFileName += ".md"
 	}
 	if newFileName == fileName {
@@ -245,6 +245,9 @@ func (s *Service) RenamePlanFile(ctx context.Context, fileName, syncSource, file
 	}
 	if _, err := os.Stat(newMirror); err == nil {
 		return fmt.Errorf("a file already exists at %s", newMirror)
+	}
+	if _, err := os.Stat(newVersionsDir); err == nil {
+		return fmt.Errorf("a versions directory already exists at %s", newVersionsDir)
 	}
 	if _, err := s.db.GetPlanByFileName(ctx, newFileName, syncSource); err == nil {
 		return fmt.Errorf("a plan named %q already exists in this source", newFileName)
