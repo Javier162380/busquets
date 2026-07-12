@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/cache"
+	"github.com/Javier162380/claude-plan-viewer/internal/clipboard"
 	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
 	"github.com/Javier162380/claude-plan-viewer/internal/nowprovider"
@@ -39,6 +40,7 @@ type Service struct {
 	watchManager         *WatchManager
 	summaryCache         *cache.MuxCache[string]
 	logger               *slog.Logger
+	clipboard            Clipboard
 }
 
 // SetLogger replaces the logger used for non-fatal internal warnings.
@@ -75,6 +77,7 @@ func New(db dto.Repository, viewerDir string, syncDirs []config.SyncDir, indexFu
 		nowProvider:          nowprovider.SystemTimeProvider{},
 		summaryCache:         cache.New[string](summaryCacheTTL, summaryCacheGCPeriod),
 		logger:               slog.New(slog.NewTextHandler(io.Discard, nil)),
+		clipboard:            clipboard.New(),
 	}
 
 	// Initialize watch manager

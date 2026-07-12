@@ -22,7 +22,8 @@ PLANS LIST (left panel):
   Shift+Tab      Switch to tag panel (three-panel mode)
   /              Search plans
   T              Filter by tags
-  c              Clear active search / tag filters
+  Ctrl+L         Clear active search / tag filters
+  c              Copy plan content to clipboard
   m              Manage tags for the selected plan
   n              View / add comments
   X              Generate (or regenerate) a TLDR summary
@@ -38,6 +39,7 @@ PLAN CONTENT (right panel / fullscreen):
   j/k, ↑/↓       Scroll up/down
   g / G          Jump to top / bottom
   r              Toggle markdown rendering (raw vs rendered)
+  c              Copy plan content to clipboard
   e              Edit the plan
   n              View / add comments
   v              View version history

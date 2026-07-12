@@ -392,7 +392,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		}
 		return s, nil
 
-	case "c":
+	case "ctrl+l":
 		if s.searchQuery != "" || len(s.tagFilters) > 0 {
 			s.searchQuery = ""
 			s.tagFilters = nil
@@ -400,6 +400,14 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 			s.tagFilter.Reset()
 			return s, func() tea.Msg {
 				return messages.ClearSearchMsg{}
+			}
+		}
+		return s, nil
+
+	case "c":
+		if s.current != nil {
+			return s, func() tea.Msg {
+				return messages.CopyPlanContentMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
 			}
 		}
 		return s, nil
@@ -580,6 +588,15 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 	case "r":
 		// Toggle render mode.
 		s.viewer.ToggleRenderMode()
+		return s, nil
+
+	case "c":
+		// Copy the plan's raw markdown to the clipboard.
+		if s.current != nil {
+			return s, func() tea.Msg {
+				return messages.CopyPlanContentMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
+			}
+		}
 		return s, nil
 
 	case "v":
@@ -1255,22 +1272,22 @@ func (s *PlansScreen) ShortHelp() string {
 					activeFilters = tagStr
 				}
 			}
-			searchHelp = fmt.Sprintf("/: search | T: tags | c: clear [%s]", activeFilters)
+			searchHelp = fmt.Sprintf("/: search | T: tags | ctrl+l: clear [%s]", activeFilters)
 		}
 		tagNav := ""
 		if s.displayMode == claudeviewer.DisplayModeTagPlanContent {
 			tagNav = "shift+tab: tags | "
 		}
-		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | n: comments | r: rsync | d: dump | D: delete | R: rename | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
+		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | n: comments | r: rsync | d: dump | D: delete | R: rename | c: copy | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
 	case types.FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeGlamour {
 			mode = "RENDERED"
 		}
 		if s.layout == types.LayoutSplit {
-			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | tab: list | esc: back", mode)
+			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | c: copy | tab: list | esc: back", mode)
 		}
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | e: edit | v: versions | t: transmit | esc: back", mode)
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | c: copy | e: edit | v: versions | t: transmit | esc: back", mode)
 	case types.FocusEditor:
 		modified := ""
 		if s.editor.IsModified() {

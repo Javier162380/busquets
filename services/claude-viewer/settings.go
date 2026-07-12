@@ -6,6 +6,7 @@ import (
 	"time"
 
 	planviewer "github.com/Javier162380/claude-plan-viewer"
+	"github.com/Javier162380/claude-plan-viewer/internal/clipboard"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
@@ -28,6 +29,17 @@ const (
 	SettingPlansSortKey            = "plans_sort_key"
 	SettingPlansSortDir            = "plans_sort_dir"
 	SettingSearchOver              = "search_over"
+	SettingClipboardMode           = "clipboard_mode"
+)
+
+// Clipboard mode values for SettingClipboardMode. These mirror the modes in
+// internal/clipboard: native clipboard, OSC52 escape sequence, or auto (native
+// with an OSC52 fallback).
+const (
+	ClipboardModeAuto    = clipboard.ModeAuto
+	ClipboardModeNative  = clipboard.ModeNative
+	ClipboardModeOSC52   = clipboard.ModeOSC52
+	DefaultClipboardMode = ClipboardModeAuto
 )
 
 // SearchField re-exports the root type so callers only need one import.
@@ -194,6 +206,16 @@ func (s *Service) resolveSearchScope(ctx context.Context) planviewer.SearchField
 		return planviewer.SearchField(setting.GetStringValue())
 	}
 	return planviewer.DefaultSearchOver
+}
+
+// getClipboardMode returns the stored clipboard mode setting, or the default.
+// The PLAN_VIEWER_CLIPBOARD env var can still override this at write time
+// (see internal/clipboard).
+func (s *Service) getClipboardMode(ctx context.Context) string {
+	if setting, exists, _ := s.GetSetting(ctx, SettingClipboardMode); exists && setting.IsString() {
+		return setting.GetStringValue()
+	}
+	return DefaultClipboardMode
 }
 
 // getSortSettings returns the sort key and direction from DB settings, with defaults.

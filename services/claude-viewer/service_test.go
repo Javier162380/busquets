@@ -3569,3 +3569,97 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		require.Error(t, err)
 	})
 }
+
+// fakeClipboard captures the last Write call and can be told to fail.
+type fakeClipboard struct {
+	calls    int
+	lastText string
+	lastMode string
+	err      error
+}
+
+func (f *fakeClipboard) Write(text, mode string) error {
+	f.calls++
+	f.lastText = text
+	f.lastMode = mode
+	return f.err
+}
+
+func TestCopyPlanContentOperations(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testCopyPlanContent(t, b.setupFn)
+		})
+	}
+}
+
+func testCopyPlanContent(t *testing.T, setup serviceSetupFn) {
+	t.Run("copies the plan's raw content in auto mode by default", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "copy.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		fake := &fakeClipboard{}
+		service.clipboard = fake
+
+		require.NoError(t, service.CopyPlanContent(ctx, "copy.md", sourcePlansDir))
+
+		detail, err := service.GetPlanDetailByFileName(ctx, "copy.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, 1, fake.calls)
+		require.Equal(t, detail.Content, fake.lastText)
+		require.Equal(t, DefaultClipboardMode, fake.lastMode)
+	})
+
+	t.Run("passes the clipboard_mode setting through to the writer", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "copy.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		mode := ClipboardModeOSC52
+		require.NoError(t, service.SetSetting(ctx, SettingClipboardMode, SettingValues{StringValue: &mode}))
+
+		fake := &fakeClipboard{}
+		service.clipboard = fake
+
+		require.NoError(t, service.CopyPlanContent(ctx, "copy.md", sourcePlansDir))
+		require.Equal(t, ClipboardModeOSC52, fake.lastMode)
+	})
+
+	t.Run("returns an error for an unknown plan without touching the clipboard", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		fake := &fakeClipboard{}
+		service.clipboard = fake
+
+		require.Error(t, service.CopyPlanContent(ctx, "missing.md", sourcePlansDir))
+		require.Equal(t, 0, fake.calls)
+	})
+
+	t.Run("propagates a clipboard writer error", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "copy.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		fake := &fakeClipboard{err: fmt.Errorf("no clipboard available")}
+		service.clipboard = fake
+
+		err = service.CopyPlanContent(ctx, "copy.md", sourcePlansDir)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no clipboard available")
+	})
+}

@@ -186,6 +186,14 @@ func RenamePlanFileCmd(ctx context.Context, svc claudeviewer.UnifiedService, fil
 	}
 }
 
+// CopyPlanContentCmd copies a plan's raw markdown content to the system clipboard.
+func CopyPlanContentCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, syncSource string) tea.Cmd {
+	return func() tea.Msg {
+		err := svc.CopyPlanContent(ctx, fileName, syncSource)
+		return messages.CopyPlanContentResultMsg{FileName: fileName, Error: err}
+	}
+}
+
 // SearchVersionsCmd searches a plan over its different versions.
 func SearchVersionsCmd(ctx context.Context, svc claudeviewer.UnifiedService, currentPlanName, syncSource, query string) tea.Cmd {
 	return func() tea.Msg {
