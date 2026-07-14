@@ -8,6 +8,7 @@ type PlanService interface {
 	GetPlanDetailByFileName(ctx context.Context, fileName, syncSource string) (*PlanDetail, error)
 	UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*UpdatePlanResult, error)
 	RenamePlanFile(ctx context.Context, fileName, syncSource, filePath, newFileName string) error
+	CopyToClipboard(ctx context.Context, text string) error
 	SearchPlansWithReadingTime(ctx context.Context, query string) ([]PlanSummary, error)
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]PlanSummary, error)
 	DeleteTag(ctx context.Context, id int64) error

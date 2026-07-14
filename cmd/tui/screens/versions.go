@@ -159,7 +159,7 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 			s.focus = types.FocusContent
 		}
 		return s, nil
-	case "c":
+	case "ctrl+l":
 		// Clear search and reload all versions.
 		if s.searchQuery != "" {
 			s.searchQuery = ""
@@ -167,6 +167,12 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 			return s, func() tea.Msg {
 				return messages.LoadVersionsMsg{PlanName: s.planName}
 			}
+		}
+		return s, nil
+	case "c":
+		// Copy the selected version's content to the clipboard.
+		if s.current != nil {
+			return s, s.copyVersion()
 		}
 		return s, nil
 	case "esc":
@@ -235,6 +241,12 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 		return s, nil
 	case "r":
 		s.viewer.ToggleRenderMode()
+		return s, nil
+	case "c":
+		// Copy the selected version's content to the clipboard.
+		if s.current != nil {
+			return s, s.copyVersion()
+		}
 		return s, nil
 	case "g":
 		s.viewer.GotoTop()
@@ -393,11 +405,11 @@ func (s *VersionsScreen) ShortHelp() string {
 	case types.FocusList:
 		searchHelp := "/: search"
 		if s.searchQuery != "" {
-			searchHelp = fmt.Sprintf("/: search | c: clear [%s]", s.searchQuery)
+			searchHelp = fmt.Sprintf("/: search | ctrl+l: clear [%s]", s.searchQuery)
 		}
-		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | r: render (%s) | %s | esc: back | Versions: %d", mode, searchHelp, len(s.versions))
+		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | r: render (%s) | c: copy | %s | esc: back | Versions: %d", mode, searchHelp, len(s.versions))
 	case types.FocusContent:
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | esc: back", mode)
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | c: copy | esc: back", mode)
 	case types.FocusSearch:
 		return "enter: search | esc: cancel"
 	default:
@@ -435,6 +447,15 @@ func (s *VersionsScreen) restoreVersion() tea.Cmd {
 		return messages.RestoreVersionMsg{
 			PlanName:      s.planName,
 			VersionNumber: s.current.VersionNumber,
+		}
+	}
+}
+
+func (s *VersionsScreen) copyVersion() tea.Cmd {
+	return func() tea.Msg {
+		return messages.CopyToClipboardMsg{
+			Text:  s.current.Content,
+			Label: fmt.Sprintf("Version %d", s.current.VersionNumber),
 		}
 	}
 }

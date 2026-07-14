@@ -77,6 +77,13 @@ var KnownSettings = []SettingDefinition{
 		Default:       claudeviewer.SettingValues{StringValue: new(string(claudeviewer.DefaultSearchOver))},
 		AllowedValues: []string{string(claudeviewer.SearchOverAll), string(claudeviewer.SearchOverPlanName), string(claudeviewer.SearchOverContent)},
 	},
+	{
+		Name:          claudeviewer.SettingClipboardMode,
+		Description:   "Clipboard: auto (native+OSC52), native, or osc52",
+		Type:          claudeviewer.SettingTypeString,
+		Default:       claudeviewer.SettingValues{StringValue: new(claudeviewer.DefaultClipboardMode)},
+		AllowedValues: []string{claudeviewer.ClipboardModeAuto, claudeviewer.ClipboardModeNative, claudeviewer.ClipboardModeOSC52},
+	},
 }
 
 type SettingItem struct {

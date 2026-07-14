@@ -201,6 +201,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleRenamePlanFile(msg)
 	case messages.RenamePlanFileResultMsg:
 		return a.handleRenamePlanFileResult(msg)
+	case messages.CopyToClipboardMsg:
+		return a.handleCopyToClipboard(msg)
+	case messages.CopyToClipboardResultMsg:
+		return a.handleCopyToClipboardResult(msg)
 	case messages.WatchResultMsg:
 		return a.handleWatchResult(msg)
 	case messages.WatchModeApplyMsg:

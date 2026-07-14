@@ -100,6 +100,16 @@ type RenamePlanFileResultMsg struct {
 	Error                             error
 }
 
+// CopyToClipboardMsg requests copying text to the clipboard. Label names what was
+// copied (e.g. a file name or "Version 3") for the confirmation status message.
+type CopyToClipboardMsg struct{ Text, Label string }
+
+// CopyToClipboardResultMsg is sent when a clipboard copy completes.
+type CopyToClipboardResultMsg struct {
+	Label string
+	Error error
+}
+
 // ErrorMsg is sent on error.
 type ErrorMsg struct {
 	Error error

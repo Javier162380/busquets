@@ -65,3 +65,13 @@ func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName, syncSou
 		RenderedHTML: renderedHTML,
 	}, nil
 }
+
+// CopyToClipboard writes text to the system clipboard. The clipboard mode comes
+// from the clipboard_mode setting (overridable via the PLAN_VIEWER_CLIPBOARD env
+// var). Used to copy plan and version content that the caller already holds.
+func (s *Service) CopyToClipboard(ctx context.Context, text string) error {
+	if err := s.clipboard.Write(text, s.getClipboardMode(ctx)); err != nil {
+		return fmt.Errorf("failed to copy to clipboard: %w", err)
+	}
+	return nil
+}

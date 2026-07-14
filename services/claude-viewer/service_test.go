@@ -14,6 +14,7 @@ import (
 	"time"
 
 	planviewer "github.com/Javier162380/claude-plan-viewer"
+	clipboard_test "github.com/Javier162380/claude-plan-viewer/internal/clipboard/test"
 	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
 	connectors_test "github.com/Javier162380/claude-plan-viewer/internal/connectors/test"
@@ -3567,5 +3568,62 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		require.Equal(t, newMirror, renamed.FilePath)
 		_, err = service.GetPlanByFileName(ctx, "commit.md", sourcePlansDir)
 		require.Error(t, err)
+	})
+}
+
+func TestCopyToClipboardOperations(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testCopyToClipboard(t, b.setupFn)
+		})
+	}
+}
+
+func testCopyToClipboard(t *testing.T, setup serviceSetupFn) {
+	t.Run("writes the text in auto mode by default", func(t *testing.T) {
+		service, _, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		clip := clipboard_test.NewMockClipboard(ctrl)
+		clip.EXPECT().Write("hello world", DefaultClipboardMode).Return(nil)
+		service.clipboard = clip
+
+		require.NoError(t, service.CopyToClipboard(ctx, "hello world"))
+	})
+
+	t.Run("passes the clipboard_mode setting through to the writer", func(t *testing.T) {
+		service, _, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		mode := ClipboardModeOSC52
+		require.NoError(t, service.SetSetting(ctx, SettingClipboardMode, SettingValues{StringValue: &mode}))
+
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		clip := clipboard_test.NewMockClipboard(ctrl)
+		clip.EXPECT().Write(gomock.Any(), ClipboardModeOSC52).Return(nil)
+		service.clipboard = clip
+
+		require.NoError(t, service.CopyToClipboard(ctx, "hello"))
+	})
+
+	t.Run("propagates a clipboard writer error", func(t *testing.T) {
+		service, _, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		clip := clipboard_test.NewMockClipboard(ctrl)
+		clip.EXPECT().Write(gomock.Any(), gomock.Any()).Return(fmt.Errorf("no clipboard available"))
+		service.clipboard = clip
+
+		err := service.CopyToClipboard(ctx, "hello")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no clipboard available")
 	})
 }

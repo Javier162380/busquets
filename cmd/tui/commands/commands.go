@@ -186,6 +186,15 @@ func RenamePlanFileCmd(ctx context.Context, svc claudeviewer.UnifiedService, fil
 	}
 }
 
+// CopyToClipboardCmd copies text to the system clipboard. label names what was
+// copied, for the confirmation message.
+func CopyToClipboardCmd(ctx context.Context, svc claudeviewer.UnifiedService, text, label string) tea.Cmd {
+	return func() tea.Msg {
+		err := svc.CopyToClipboard(ctx, text)
+		return messages.CopyToClipboardResultMsg{Label: label, Error: err}
+	}
+}
+
 // SearchVersionsCmd searches a plan over its different versions.
 func SearchVersionsCmd(ctx context.Context, svc claudeviewer.UnifiedService, currentPlanName, syncSource, query string) tea.Cmd {
 	return func() tea.Msg {

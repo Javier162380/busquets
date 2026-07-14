@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
@@ -137,4 +138,51 @@ func TestDeleteConfirmDialogVisibleFromList(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, ps.confirmDialog.IsActive())
 	require.Contains(t, ps.View(), "delete the plan")
+}
+
+func TestCopyKeyEmitsCopyMsg(t *testing.T) {
+	newScreen := func(focus types.Focus) *PlansScreen {
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content")
+		s.focus = focus
+		s.plans = []claudeviewer.PlanSummary{{FileName: "p.md", SyncSource: "/src", Title: "My Plan"}}
+		s.current = &claudeviewer.PlanDetail{
+			PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "My Plan"},
+			FilePath:    "/mirror/p.md",
+			Content:     "# My Plan\n\nbody",
+		}
+		s.updateListItems()
+		return s
+	}
+
+	for _, tc := range []struct {
+		name  string
+		focus types.Focus
+	}{
+		{"from list", types.FocusList},
+		{"from content", types.FocusContent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newScreen(tc.focus)
+			_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+			require.NotNil(t, cmd)
+			copyMsg, ok := cmd().(messages.CopyToClipboardMsg)
+			require.True(t, ok)
+			require.Equal(t, "p.md", copyMsg.Label)
+			require.Equal(t, "# My Plan\n\nbody", copyMsg.Text)
+		})
+	}
+}
+
+func TestCtrlLClearsFiltersFromList(t *testing.T) {
+	s := NewPlansScreen(100, 40, false, false, false, "plan_content")
+	s.focus = types.FocusList
+	s.searchQuery = "needle"
+	s.plans = []claudeviewer.PlanSummary{{FileName: "p.md", SyncSource: "/src", Title: "My Plan"}}
+	s.updateListItems()
+
+	_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
+	require.Empty(t, s.searchQuery)
+	require.NotNil(t, cmd)
+	_, ok := cmd().(messages.ClearSearchMsg)
+	require.True(t, ok)
 }
