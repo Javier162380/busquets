@@ -104,10 +104,11 @@ VERSION HISTORY (left panel):
   g / G          Jump to top / bottom
   Tab            Switch to content panel
   /              Search versions
-  c              Clear the version search
+  Ctrl+L         Clear the version search
   v              View the version fullscreen
   R              Restore the selected version
   r              Toggle markdown rendering (raw vs rendered)
+  c              Copy the version content to clipboard
   Esc            Back to the plan
 
 VERSION VIEW (fullscreen):
@@ -116,6 +117,7 @@ VERSION VIEW (fullscreen):
   Tab            Switch to the versions list
   R              Restore this version
   r              Toggle markdown rendering (raw vs rendered)
+  c              Copy the version content to clipboard
   Esc            Back to the versions list
 
 CONNECTORS (left panel):

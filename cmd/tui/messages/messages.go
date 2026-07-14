@@ -100,13 +100,14 @@ type RenamePlanFileResultMsg struct {
 	Error                             error
 }
 
-// CopyPlanContentMsg requests copying a plan's raw markdown to the clipboard.
-type CopyPlanContentMsg struct{ FileName, SyncSource string }
+// CopyToClipboardMsg requests copying text to the clipboard. Label names what was
+// copied (e.g. a file name or "Version 3") for the confirmation status message.
+type CopyToClipboardMsg struct{ Text, Label string }
 
-// CopyPlanContentResultMsg is sent when a clipboard copy completes.
-type CopyPlanContentResultMsg struct {
-	FileName string
-	Error    error
+// CopyToClipboardResultMsg is sent when a clipboard copy completes.
+type CopyToClipboardResultMsg struct {
+	Label string
+	Error error
 }
 
 // ErrorMsg is sent on error.

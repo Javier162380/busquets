@@ -148,6 +148,7 @@ func TestCopyKeyEmitsCopyMsg(t *testing.T) {
 		s.current = &claudeviewer.PlanDetail{
 			PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "My Plan"},
 			FilePath:    "/mirror/p.md",
+			Content:     "# My Plan\n\nbody",
 		}
 		s.updateListItems()
 		return s
@@ -164,10 +165,10 @@ func TestCopyKeyEmitsCopyMsg(t *testing.T) {
 			s := newScreen(tc.focus)
 			_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
 			require.NotNil(t, cmd)
-			copyMsg, ok := cmd().(messages.CopyPlanContentMsg)
+			copyMsg, ok := cmd().(messages.CopyToClipboardMsg)
 			require.True(t, ok)
-			require.Equal(t, "p.md", copyMsg.FileName)
-			require.Equal(t, "/src", copyMsg.SyncSource)
+			require.Equal(t, "p.md", copyMsg.Label)
+			require.Equal(t, "# My Plan\n\nbody", copyMsg.Text)
 		})
 	}
 }

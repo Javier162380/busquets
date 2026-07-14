@@ -407,7 +407,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 	case "c":
 		if s.current != nil {
 			return s, func() tea.Msg {
-				return messages.CopyPlanContentMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
+				return messages.CopyToClipboardMsg{Text: s.current.Content, Label: s.current.FileName}
 			}
 		}
 		return s, nil
@@ -594,7 +594,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		// Copy the plan's raw markdown to the clipboard.
 		if s.current != nil {
 			return s, func() tea.Msg {
-				return messages.CopyPlanContentMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
+				return messages.CopyToClipboardMsg{Text: s.current.Content, Label: s.current.FileName}
 			}
 		}
 		return s, nil

@@ -4,9 +4,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
 )
 
@@ -54,4 +56,30 @@ func TestVersionsIsInputMode(t *testing.T) {
 		s := NewVersionsScreenWithData("plan.md", nil, 80, 24, false, false)
 		require.False(t, s.IsInputMode())
 	})
+}
+
+func TestVersionCopyKeyEmitsCopyMsg(t *testing.T) {
+	versions := []claudeviewer.PlanVersionDetail{
+		{PlanVersion: claudeviewer.PlanVersion{VersionNumber: 2, Content: "# v2\n\nbody", CreatedAt: time.Now()}},
+	}
+
+	for _, tc := range []struct {
+		name  string
+		focus types.Focus
+	}{
+		{"from list", types.FocusList},
+		{"from content", types.FocusContent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewVersionsScreenWithData("plan.md", versions, 100, 40, false, false)
+			s.focus = tc.focus
+
+			_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+			require.NotNil(t, cmd)
+			msg, ok := cmd().(messages.CopyToClipboardMsg)
+			require.True(t, ok)
+			require.Equal(t, "Version 2", msg.Label)
+			require.Equal(t, "# v2\n\nbody", msg.Text)
+		})
+	}
 }

@@ -186,11 +186,12 @@ func RenamePlanFileCmd(ctx context.Context, svc claudeviewer.UnifiedService, fil
 	}
 }
 
-// CopyPlanContentCmd copies a plan's raw markdown content to the system clipboard.
-func CopyPlanContentCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName, syncSource string) tea.Cmd {
+// CopyToClipboardCmd copies text to the system clipboard. label names what was
+// copied, for the confirmation message.
+func CopyToClipboardCmd(ctx context.Context, svc claudeviewer.UnifiedService, text, label string) tea.Cmd {
 	return func() tea.Msg {
-		err := svc.CopyPlanContent(ctx, fileName, syncSource)
-		return messages.CopyPlanContentResultMsg{FileName: fileName, Error: err}
+		err := svc.CopyToClipboard(ctx, text)
+		return messages.CopyToClipboardResultMsg{Label: label, Error: err}
 	}
 }
 
