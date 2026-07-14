@@ -14,6 +14,7 @@ import (
 	"time"
 
 	planviewer "github.com/Javier162380/claude-plan-viewer"
+	clipboard_test "github.com/Javier162380/claude-plan-viewer/internal/clipboard/test"
 	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
 	connectors_test "github.com/Javier162380/claude-plan-viewer/internal/connectors/test"
@@ -3570,21 +3571,6 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 	})
 }
 
-// fakeClipboard captures the last Write call and can be told to fail.
-type fakeClipboard struct {
-	calls    int
-	lastText string
-	lastMode string
-	err      error
-}
-
-func (f *fakeClipboard) Write(text, mode string) error {
-	f.calls++
-	f.lastText = text
-	f.lastMode = mode
-	return f.err
-}
-
 func TestCopyPlanContentOperations(t *testing.T) {
 	for _, b := range registeredBackends {
 		t.Run(b.name, func(t *testing.T) {
@@ -3603,16 +3589,16 @@ func testCopyPlanContent(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		fake := &fakeClipboard{}
-		service.clipboard = fake
-
-		require.NoError(t, service.CopyPlanContent(ctx, "copy.md", sourcePlansDir))
-
 		detail, err := service.GetPlanDetailByFileName(ctx, "copy.md", sourcePlansDir)
 		require.NoError(t, err)
-		require.Equal(t, 1, fake.calls)
-		require.Equal(t, detail.Content, fake.lastText)
-		require.Equal(t, DefaultClipboardMode, fake.lastMode)
+
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		clip := clipboard_test.NewMockClipboard(ctrl)
+		clip.EXPECT().Write(detail.Content, DefaultClipboardMode).Return(nil)
+		service.clipboard = clip
+
+		require.NoError(t, service.CopyPlanContent(ctx, "copy.md", sourcePlansDir))
 	})
 
 	t.Run("passes the clipboard_mode setting through to the writer", func(t *testing.T) {
@@ -3627,11 +3613,13 @@ func testCopyPlanContent(t *testing.T, setup serviceSetupFn) {
 		mode := ClipboardModeOSC52
 		require.NoError(t, service.SetSetting(ctx, SettingClipboardMode, SettingValues{StringValue: &mode}))
 
-		fake := &fakeClipboard{}
-		service.clipboard = fake
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		clip := clipboard_test.NewMockClipboard(ctrl)
+		clip.EXPECT().Write(gomock.Any(), ClipboardModeOSC52).Return(nil)
+		service.clipboard = clip
 
 		require.NoError(t, service.CopyPlanContent(ctx, "copy.md", sourcePlansDir))
-		require.Equal(t, ClipboardModeOSC52, fake.lastMode)
 	})
 
 	t.Run("returns an error for an unknown plan without touching the clipboard", func(t *testing.T) {
@@ -3639,11 +3627,13 @@ func testCopyPlanContent(t *testing.T, setup serviceSetupFn) {
 		defer cleanup()
 		ctx := context.Background()
 
-		fake := &fakeClipboard{}
-		service.clipboard = fake
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		clip := clipboard_test.NewMockClipboard(ctrl)
+		// No EXPECT: a missing plan must never reach the clipboard.
+		service.clipboard = clip
 
 		require.Error(t, service.CopyPlanContent(ctx, "missing.md", sourcePlansDir))
-		require.Equal(t, 0, fake.calls)
 	})
 
 	t.Run("propagates a clipboard writer error", func(t *testing.T) {
@@ -3655,8 +3645,11 @@ func testCopyPlanContent(t *testing.T, setup serviceSetupFn) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		fake := &fakeClipboard{err: fmt.Errorf("no clipboard available")}
-		service.clipboard = fake
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+		clip := clipboard_test.NewMockClipboard(ctrl)
+		clip.EXPECT().Write(gomock.Any(), gomock.Any()).Return(fmt.Errorf("no clipboard available"))
+		service.clipboard = clip
 
 		err = service.CopyPlanContent(ctx, "copy.md", sourcePlansDir)
 		require.Error(t, err)

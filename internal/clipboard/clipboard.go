@@ -39,16 +39,23 @@ const (
 	defaultOSC52MaxEncodedLen = 74994
 )
 
-// Writer writes to the system clipboard. It is safe for concurrent use.
-type Writer struct{}
+// Clipboard writes text to the system clipboard using the given mode
+// ("auto"/"native"/"osc52"). It is implemented by SystemClipboard and faked in
+// tests, mirroring the injectable-dependency style of nowprovider.NowProvider.
+type Clipboard interface {
+	Write(text, mode string) error
+}
 
-// New returns a Writer backed by the native clipboard with an OSC52 fallback.
-func New() *Writer { return &Writer{} }
+//go:generate mockgen -package clipboard_test -destination ./test/clipboard_stub.go . Clipboard
+
+// SystemClipboard writes to the native clipboard, falling back to OSC52. It is
+// safe for concurrent use.
+type SystemClipboard struct{}
 
 // Write copies text to the clipboard using mode ("auto"/"native"/"osc52"). An
 // empty text is a no-op. The PLAN_VIEWER_CLIPBOARD env var, when set to a valid
 // mode, overrides the mode argument.
-func (Writer) Write(text, mode string) error {
+func (SystemClipboard) Write(text, mode string) error {
 	if text == "" {
 		return nil
 	}

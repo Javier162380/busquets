@@ -40,7 +40,7 @@ type Service struct {
 	watchManager         *WatchManager
 	summaryCache         *cache.MuxCache[string]
 	logger               *slog.Logger
-	clipboard            Clipboard
+	clipboard            clipboard.Clipboard
 }
 
 // SetLogger replaces the logger used for non-fatal internal warnings.
@@ -77,7 +77,7 @@ func New(db dto.Repository, viewerDir string, syncDirs []config.SyncDir, indexFu
 		nowProvider:          nowprovider.SystemTimeProvider{},
 		summaryCache:         cache.New[string](summaryCacheTTL, summaryCacheGCPeriod),
 		logger:               slog.New(slog.NewTextHandler(io.Discard, nil)),
-		clipboard:            clipboard.New(),
+		clipboard:            clipboard.SystemClipboard{},
 	}
 
 	// Initialize watch manager
