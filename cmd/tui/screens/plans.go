@@ -1051,10 +1051,14 @@ func (s *PlansScreen) renderThreePanelView() string {
 	if s.searchBar.IsActive() {
 		listInnerH -= 3
 	}
+	if s.tagFilter.IsActive() {
+		listInnerH -= 3
+	}
 	s.tagPanel.SetSize(tagsW-4, innerH)
 	s.list.SetSize(plansW-4, listInnerH)
 	s.viewer.SetSize(viewW-4, innerH)
 	s.searchBar.SetWidth(plansW - 4)
+	s.tagFilter.SetWidth(plansW - 4)
 
 	activeBorder := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -1086,6 +1090,9 @@ func (s *PlansScreen) renderThreePanelView() string {
 	}
 	if s.searchBar.IsActive() {
 		listContent = lipgloss.JoinVertical(lipgloss.Left, listContent, s.searchBar.View())
+	}
+	if s.tagFilter.IsActive() {
+		listContent = lipgloss.JoinVertical(lipgloss.Left, listContent, s.tagFilter.View())
 	}
 	listView := listBorder.
 		Width(plansW).
