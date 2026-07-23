@@ -201,14 +201,34 @@ func (c *Config) Validate() error {
 		if effectiveLabel == "" {
 			effectiveLabel = filepath.Base(d.Path)
 		}
-		if prev, dup := seenLabels[effectiveLabel]; dup {
+		slug := Slugify(effectiveLabel)
+		if prev, dup := seenLabels[slug]; dup {
 			return fmt.Errorf(
 				"plans_dirs[%d] and plans_dirs[%d] resolve to the same label %q — set distinct labels to avoid viewer directory collisions",
-				prev, i, effectiveLabel,
+				prev, i, slug,
 			)
 		}
-		seenLabels[effectiveLabel] = i
+		seenLabels[slug] = i
 	}
 
 	return nil
+}
+
+// Slugify converts a label to a safe directory name: lowercased, with only
+// [a-z0-9-_] kept, spaces turned into hyphens, and everything else stripped.
+// Used both to name a sync source's viewer mirror directory and, in
+// Validate, to detect labels that would collide once slugified even though
+// their raw values differ (e.g. "Work" and "WORK!").
+func Slugify(s string) string {
+	s = strings.ToLower(s)
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
+			b.WriteRune(r)
+		case r == ' ':
+			b.WriteRune('-')
+		}
+	}
+	return b.String()
 }

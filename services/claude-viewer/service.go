@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/cache"
@@ -123,24 +122,7 @@ func (s *Service) labelForSource(syncSource string) string {
 // viewerSubdirFor returns the viewer subdirectory label (slugified) for a sync source path.
 func (s *Service) viewerSubdirFor(syncSource string) string {
 	label := s.labelForSource(syncSource)
-	return slugify(label)
-}
-
-// slugify converts a label to a safe directory name.
-// Only characters in [a-z0-9-_] are kept; spaces become hyphens; all other
-// characters (including path separators) are stripped.
-func slugify(s string) string {
-	s = strings.ToLower(s)
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-', r == '_':
-			b.WriteRune(r)
-		case r == ' ':
-			b.WriteRune('-')
-		}
-	}
-	return b.String()
+	return config.Slugify(label)
 }
 
 // Close stops background goroutines started by New (cache GC and watch manager).

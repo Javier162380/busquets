@@ -6,6 +6,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestSlugify(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"plans", "plans"},
+		{"My Plans", "my-plans"},
+		{"WORK", "work"},
+		{"A B C", "a-b-c"},
+		{"already-slug", "already-slug"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.input, func(t *testing.T) {
+			require.Equal(t, tc.want, Slugify(tc.input))
+		})
+	}
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -122,6 +140,17 @@ func TestValidate(t *testing.T) {
 					{Path: "/a/plans", Label: "plans"},
 					{Path: "/b/other"},            // derives label "other" — OK
 					{Path: "/c/plans", Label: ""}, // derives label "plans" — collision with index 0
+				}},
+			},
+			wantErr: "resolve to the same label",
+		},
+		{
+			name: "distinct raw labels collide once slugified",
+			cfg: Config{
+				Database: DatabaseConfig{Backend: BackendSQLite},
+				Paths: PathsConfig{PlansDirs: []SyncDir{
+					{Path: "/a/other", Label: "Work"},
+					{Path: "/b/other", Label: "WORK!"}, // slugifies to "work" too
 				}},
 			},
 			wantErr: "resolve to the same label",
