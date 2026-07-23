@@ -433,7 +433,7 @@ func (s *VersionsScreen) updateListItems() {
 	for i, version := range s.versions {
 		items[i] = components.NewListItem(
 			fmt.Sprintf("Version %d", version.VersionNumber),
-			fmt.Sprintf("%s | %d min read", version.CreatedAt.Format("2006-01-02 15:04"), version.ReadingTime),
+			fmt.Sprintf("%s | %d min read | Path: %s", version.CreatedAt.Format("2006-01-02 15:04"), version.ReadingTime, version.PlanVersion.FilePath),
 			version,
 		)
 	}

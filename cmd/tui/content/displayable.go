@@ -124,6 +124,7 @@ func (v *VersionContent) GetMetadata() Metadata {
 		PrimaryLabel:  "Created",
 		PrimaryTime:   v.CreatedAt,
 		SecondaryInfo: fmt.Sprintf("Version: %d", v.VersionNumber),
+		SourcePath:    v.PlanVersion.FilePath,
 		TagNames:      tagNames,
 	}
 }
