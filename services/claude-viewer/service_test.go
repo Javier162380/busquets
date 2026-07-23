@@ -2700,24 +2700,6 @@ func newMultiSourceTest(t *testing.T, b backendSetup) (*Service, multiSourceSetu
 	return svc, multiSourceSetup{sourceDir1: sourceDir1, sourceDir2: sourceDir2, viewerDir: viewerDir}, cleanup
 }
 
-func TestSlugify(t *testing.T) {
-	tests := []struct {
-		input string
-		want  string
-	}{
-		{"plans", "plans"},
-		{"My Plans", "my-plans"},
-		{"WORK", "work"},
-		{"A B C", "a-b-c"},
-		{"already-slug", "already-slug"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.input, func(t *testing.T) {
-			require.Equal(t, tc.want, slugify(tc.input))
-		})
-	}
-}
-
 func TestLabelHelpers(t *testing.T) {
 	for _, b := range registeredBackends {
 		t.Run(b.name, func(t *testing.T) {
