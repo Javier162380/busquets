@@ -56,7 +56,7 @@ var KnownSettings = []SettingDefinition{
 		Name:          claudeviewer.SettingDefaultDisplayMode,
 		Description:   "Default plans screen layout",
 		Type:          claudeviewer.SettingTypeString,
-		AllowedValues: []string{claudeviewer.DisplayModePlanContent, claudeviewer.DisplayModeTagPlanContent},
+		AllowedValues: []string{claudeviewer.DisplayModePlanContent, claudeviewer.DisplayModeTagPlanContent, claudeviewer.DisplayModeLabelPlanContent},
 	},
 	{
 		Name:          claudeviewer.SettingPlansSortKey,
