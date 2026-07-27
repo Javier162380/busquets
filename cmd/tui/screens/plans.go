@@ -444,12 +444,11 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		// or before the first PlanDetailLoadedMsg. Without it, D would nil-panic.
 		if s.current != nil {
 			fileName, syncSource := s.current.FileName, s.current.SyncSource
-			filePath := s.current.FilePath
 			title := s.current.Title
 			s.confirmDialog.Open(
 				fmt.Sprintf("Are you sure you want to delete the plan %q? This cannot be undone.", title),
 				func() tea.Msg {
-					return messages.DeletePlanMsg{FileName: fileName, SyncSource: syncSource, FilePath: filePath}
+					return messages.DeletePlanMsg{FileName: fileName, SyncSource: syncSource}
 				},
 			)
 		}
@@ -459,7 +458,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		if s.current != nil {
 			s.activeModal = types.ModalRenameFile
 			s.renameModal.SetSize(min(60, s.width-4), min(12, s.height-2))
-			s.renameModal.Open(s.current.FileName, s.current.SyncSource, s.current.FilePath)
+			s.renameModal.Open(s.current.FileName, s.current.SyncSource)
 		}
 		return s, nil
 

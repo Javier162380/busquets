@@ -2870,7 +2870,7 @@ func testMultiDirSyncPlans(t *testing.T, b backendSetup) {
 		require.Equal(t, "# Shared B\n\nVersion 1 of B.", versionsB[0].Content)
 
 		// Deleting plan A's version history must not touch plan B's.
-		require.NoError(t, svc.DeletePlan(ctx, "shared.md", dirs.sourceDir1, planA.FilePath))
+		require.NoError(t, svc.DeletePlan(ctx, "shared.md", dirs.sourceDir1))
 		_, err = os.Stat(svc.versionsDirFor(planB.ID))
 		require.NoError(t, err, "deleting plan A must not remove plan B's versions directory")
 		remainingB, err := svc.GetPlanVersionHistory(ctx, "shared.md", dirs.sourceDir2, 0, 10)
@@ -3168,14 +3168,14 @@ func testCommentOperations(t *testing.T, service *Service, sourcePlansDir string
 func TestDeletePlanOperations(t *testing.T) {
 	for _, b := range registeredBackends {
 		t.Run(b.name, func(t *testing.T) {
-			service, sourcePlansDir, viewerDir, cleanup := b.setupFn(t)
+			service, sourcePlansDir, _, cleanup := b.setupFn(t)
 			defer cleanup()
-			testDeletePlan(t, service, sourcePlansDir, viewerDir)
+			testDeletePlan(t, service, sourcePlansDir)
 		})
 	}
 }
 
-func testDeletePlan(t *testing.T, service *Service, sourcePlansDir, viewerDir string) {
+func testDeletePlan(t *testing.T, service *Service, sourcePlansDir string) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -3205,8 +3205,7 @@ func testDeletePlan(t *testing.T, service *Service, sourcePlansDir, viewerDir st
 		require.NoError(t, err)
 		require.Equal(t, 1, commentCounts[plan.ID])
 
-		// Caller supplies the stored mirror path (as the TUI does).
-		require.NoError(t, service.DeletePlan(ctx, "delete-me.md", sourcePlansDir, plan.FilePath))
+		require.NoError(t, service.DeletePlan(ctx, "delete-me.md", sourcePlansDir))
 
 		// DB row gone.
 		_, err = service.GetPlanByFileName(ctx, "delete-me.md", sourcePlansDir)
@@ -3246,7 +3245,7 @@ func testDeletePlan(t *testing.T, service *Service, sourcePlansDir, viewerDir st
 		}, func(int64) (string, error) { return badPath, nil })
 		require.NoError(t, err)
 
-		err = service.DeletePlan(ctx, fileName, sourcePlansDir, filepath.Join(viewerDir, "test", fileName))
+		err = service.DeletePlan(ctx, fileName, sourcePlansDir)
 		require.Error(t, err)
 
 		// DB row must survive the failed delete (files-first ordering).
@@ -3289,7 +3288,7 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, err)
 		require.NoError(t, service.SavePlanVersion(ctx, "old-plan.md", sourcePlansDir, sampleMarkdown))
 
-		require.NoError(t, service.RenamePlanFile(ctx, "old-plan.md", sourcePlansDir, detail.FilePath, "new-plan.md"))
+		require.NoError(t, service.RenamePlanFile(ctx, "old-plan.md", sourcePlansDir, "new-plan.md"))
 
 		// Old paths gone, new paths present with identical mirror content, same directory
 		// (only the file name inside the plan's id-scoped dir changes).
@@ -3369,7 +3368,7 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		detail, err := service.GetPlanDetailByFileName(ctx, "ver.md", sourcePlansDir)
 		require.NoError(t, err)
 		versionsDir := service.versionsDirFor(detail.ID)
-		require.NoError(t, service.RenamePlanFile(ctx, "ver.md", sourcePlansDir, detail.FilePath, "ver-renamed.md"))
+		require.NoError(t, service.RenamePlanFile(ctx, "ver.md", sourcePlansDir, "ver-renamed.md"))
 
 		// The versions dir is exactly where it was, still holding the same files.
 		require.DirExists(t, versionsDir)
@@ -3399,19 +3398,15 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		createTestPlanFile(t, sourcePlansDir, "np.md", sampleMarkdown)
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
-		detail, err := service.GetPlanDetailByFileName(ctx, "np.md", sourcePlansDir)
-		require.NoError(t, err)
 
 		// No .md and a path separator -> normalized to "renamed.md".
-		require.NoError(t, service.RenamePlanFile(ctx, "np.md", sourcePlansDir, detail.FilePath, "sub/renamed"))
+		require.NoError(t, service.RenamePlanFile(ctx, "np.md", sourcePlansDir, "sub/renamed"))
 		_, err = service.GetPlanByFileName(ctx, "renamed.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.FileExists(t, filepath.Join(sourcePlansDir, "renamed.md"))
 
 		// An existing .md extension is preserved case-insensitively (not doubled to .MD.md).
-		detail2, err := service.GetPlanDetailByFileName(ctx, "renamed.md", sourcePlansDir)
-		require.NoError(t, err)
-		require.NoError(t, service.RenamePlanFile(ctx, "renamed.md", sourcePlansDir, detail2.FilePath, "keepcase.MD"))
+		require.NoError(t, service.RenamePlanFile(ctx, "renamed.md", sourcePlansDir, "keepcase.MD"))
 		_, err = service.GetPlanByFileName(ctx, "keepcase.MD", sourcePlansDir)
 		require.NoError(t, err)
 		_, err = service.GetPlanByFileName(ctx, "keepcase.MD.md", sourcePlansDir)
@@ -3426,10 +3421,8 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		createTestPlanFile(t, sourcePlansDir, "same.md", sampleMarkdown)
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
-		detail, err := service.GetPlanDetailByFileName(ctx, "same.md", sourcePlansDir)
-		require.NoError(t, err)
 
-		require.Error(t, service.RenamePlanFile(ctx, "same.md", sourcePlansDir, detail.FilePath, "same.md"))
+		require.Error(t, service.RenamePlanFile(ctx, "same.md", sourcePlansDir, "same.md"))
 	})
 
 	t.Run("rejects when a plan with the target name already exists", func(t *testing.T) {
@@ -3441,10 +3434,8 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		createTestPlanFile(t, sourcePlansDir, "b.md", sampleMarkdown)
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
-		detailA, err := service.GetPlanDetailByFileName(ctx, "a.md", sourcePlansDir)
-		require.NoError(t, err)
 
-		require.Error(t, service.RenamePlanFile(ctx, "a.md", sourcePlansDir, detailA.FilePath, "b.md"))
+		require.Error(t, service.RenamePlanFile(ctx, "a.md", sourcePlansDir, "b.md"))
 
 		// Nothing changed: a.md still resolves and still on disk.
 		require.FileExists(t, filepath.Join(sourcePlansDir, "a.md"))
@@ -3471,7 +3462,7 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		// existing file avoids tripping the pre-flight collision checks.
 		require.NoError(t, os.Remove(detail.FilePath))
 
-		require.Error(t, service.RenamePlanFile(ctx, "rb.md", sourcePlansDir, detail.FilePath, "rb-new.md"))
+		require.Error(t, service.RenamePlanFile(ctx, "rb.md", sourcePlansDir, "rb-new.md"))
 
 		// The source move was rolled back.
 		require.FileExists(t, filepath.Join(sourcePlansDir, "rb.md"))

@@ -18,7 +18,7 @@ func TestRenameModal(t *testing.T) {
 	t.Run("Open pre-fills the current file name", func(t *testing.T) {
 		m := NewRenameModal()
 		m.SetSize(60, 12)
-		m.Open("old.md", "/src", "/mirror/old.md")
+		m.Open("old.md", "/src")
 		require.True(t, m.IsActive())
 		require.Equal(t, "old.md", m.input.Value())
 	})
@@ -26,7 +26,7 @@ func TestRenameModal(t *testing.T) {
 	t.Run("esc cancels without emitting", func(t *testing.T) {
 		m := NewRenameModal()
 		m.SetSize(60, 12)
-		m.Open("old.md", "/src", "/mirror/old.md")
+		m.Open("old.md", "/src")
 		cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 		require.Nil(t, cmd)
 		require.False(t, m.IsActive())
@@ -35,7 +35,7 @@ func TestRenameModal(t *testing.T) {
 	t.Run("enter with unchanged name does not open the confirm", func(t *testing.T) {
 		m := NewRenameModal()
 		m.SetSize(60, 12)
-		m.Open("old.md", "/src", "/mirror/old.md")
+		m.Open("old.md", "/src")
 		cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 		require.Nil(t, cmd)
 		require.False(t, m.confirm.IsActive())
@@ -45,7 +45,7 @@ func TestRenameModal(t *testing.T) {
 	t.Run("enter then confirm emits RenamePlanFileMsg with the new name", func(t *testing.T) {
 		m := NewRenameModal()
 		m.SetSize(60, 12)
-		m.Open("old.md", "/src", "/mirror/old.md")
+		m.Open("old.md", "/src")
 
 		// Type a suffix so the name differs from the original.
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("-new")})
@@ -65,14 +65,13 @@ func TestRenameModal(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, "old.md", msg.FileName)
 		require.Equal(t, "/src", msg.SyncSource)
-		require.Equal(t, "/mirror/old.md", msg.FilePath)
 		require.Equal(t, "old.md-new", msg.NewFileName)
 	})
 
 	t.Run("confirm cancelled (No) emits nothing and closes", func(t *testing.T) {
 		m := NewRenameModal()
 		m.SetSize(60, 12)
-		m.Open("old.md", "/src", "/mirror/old.md")
+		m.Open("old.md", "/src")
 		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("-new")})
 		m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // open confirm (defaults to No)
 		cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})

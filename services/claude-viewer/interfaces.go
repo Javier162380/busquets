@@ -7,7 +7,7 @@ type PlanService interface {
 	ListAllPlansWithReadingTime(ctx context.Context) ([]PlanSummary, error)
 	GetPlanDetailByFileName(ctx context.Context, fileName, syncSource string) (*PlanDetail, error)
 	UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*UpdatePlanResult, error)
-	RenamePlanFile(ctx context.Context, fileName, syncSource, filePath, newFileName string) error
+	RenamePlanFile(ctx context.Context, fileName, syncSource, newFileName string) error
 	CopyToClipboard(ctx context.Context, text string) error
 	SearchPlansWithReadingTime(ctx context.Context, query string) ([]PlanSummary, error)
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]PlanSummary, error)
@@ -46,7 +46,7 @@ type SyncService interface {
 	SyncPlans(ctx context.Context) (int, error)
 	RSyncPlans(ctx context.Context) (int, error)
 	DumpPlans(ctx context.Context) (int, error)
-	DeletePlan(ctx context.Context, fileName, syncSource, filePath string) error
+	DeletePlan(ctx context.Context, fileName, syncSource string) error
 }
 
 // ConnectorService defines connector operations.

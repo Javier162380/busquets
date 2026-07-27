@@ -158,13 +158,18 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 // file can never resurrect the plan on the next sync). The DB row, its tag/comment
 // associations, and all version rows are then removed in a single transaction.
 //
-// filePath is the plan's mirror path as stored on the DB row (caller-supplied),
-// used verbatim rather than re-derived so the delete cannot diverge from where
-// sync actually wrote the file.
-func (s *Service) DeletePlan(ctx context.Context, fileName, syncSource, filePath string) error {
+// The plan's mirror path is looked up fresh from the DB rather than accepted as a
+// parameter — trusting a caller-supplied path would let a mismatched value delete
+// an unrelated plan's files.
+func (s *Service) DeletePlan(ctx context.Context, fileName, syncSource string) error {
+	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
+	if err != nil {
+		return fmt.Errorf("plan not found: %w", err)
+	}
+
 	paths := []string{
 		filepath.Join(syncSource, fileName), // source
-		filePath,                            // mirror (stored path, caller-supplied)
+		plan.FilePath,                       // mirror
 	}
 	for _, p := range paths {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
@@ -172,9 +177,9 @@ func (s *Service) DeletePlan(ctx context.Context, fileName, syncSource, filePath
 		}
 	}
 	// os.RemoveAll is a no-op if the dir is absent; only a real failure returns err.
-	// filepath.Dir(filePath) is the plan's id-scoped directory, so its "versions"
+	// filepath.Dir(plan.FilePath) is the plan's id-scoped directory, so its "versions"
 	// sibling belongs to this plan alone — no cross-source collision risk.
-	versionsDir := filepath.Join(filepath.Dir(filePath), "versions")
+	versionsDir := filepath.Join(filepath.Dir(plan.FilePath), "versions")
 	if err := os.RemoveAll(versionsDir); err != nil {
 		return fmt.Errorf("failed to delete version files %s: %w", versionsDir, err)
 	}
@@ -205,9 +210,15 @@ type fileMove struct {
 // separate compensating write that could itself fail). If the commit fails after the
 // moves, the moves are undone.
 //
-// filePath is the plan's mirror path as stored on the DB row (caller-supplied), used
-// verbatim so the rename cannot diverge from where sync actually wrote the file.
-func (s *Service) RenamePlanFile(ctx context.Context, fileName, syncSource, filePath, newFileName string) error {
+// The plan's current mirror path is looked up fresh from the DB rather than accepted
+// as a parameter — trusting a caller-supplied path would let a mismatched value rename
+// (and thus corrupt the DB row of) an unrelated plan's file.
+func (s *Service) RenamePlanFile(ctx context.Context, fileName, syncSource, newFileName string) error {
+	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
+	if err != nil {
+		return fmt.Errorf("plan not found: %w", err)
+	}
+
 	// 1. Normalize + validate the new name.
 	newFileName = filepath.Base(strings.TrimSpace(newFileName))
 	if newFileName == "" || newFileName == "." || newFileName == string(filepath.Separator) {
@@ -226,8 +237,8 @@ func (s *Service) RenamePlanFile(ctx context.Context, fileName, syncSource, file
 	// numbers/timestamps, nothing about it depends on the current file name.
 	oldSource := filepath.Join(syncSource, fileName)
 	newSource := filepath.Join(syncSource, newFileName)
-	oldMirror := filePath
-	newMirror := filepath.Join(filepath.Dir(filePath), newFileName)
+	oldMirror := plan.FilePath
+	newMirror := filepath.Join(filepath.Dir(plan.FilePath), newFileName)
 
 	// 3. Collision checks — before any DB or FS mutation, so we never clobber another
 	// plan's file on disk or row in the DB.
@@ -254,7 +265,7 @@ func (s *Service) RenamePlanFile(ctx context.Context, fileName, syncSource, file
 	// paths key off the immutable plan_id, so renaming file_name never orphans tags,
 	// comments, or version rows.
 	var done []fileMove
-	err := s.db.RenamePlanFile(ctx, dto.RenamePlanFileParams{
+	err = s.db.RenamePlanFile(ctx, dto.RenamePlanFileParams{
 		OldFileName: fileName,
 		SyncSource:  syncSource,
 		NewFileName: newFileName,

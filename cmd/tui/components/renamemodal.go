@@ -18,7 +18,6 @@ import (
 type RenameModal struct {
 	fileName   string
 	syncSource string
-	filePath   string
 	input      textinput.Model
 	confirm    *ConfirmModal
 	width      int
@@ -38,10 +37,9 @@ func NewRenameModal() *RenameModal {
 }
 
 // Open activates the modal for the given plan, pre-filling the current file name.
-func (m *RenameModal) Open(fileName, syncSource, filePath string) {
+func (m *RenameModal) Open(fileName, syncSource string) {
 	m.fileName = fileName
 	m.syncSource = syncSource
-	m.filePath = filePath
 	m.active = true
 	m.input.SetValue(fileName)
 	m.input.CursorEnd()
@@ -94,14 +92,13 @@ func (m *RenameModal) Update(msg tea.Msg) tea.Cmd {
 			if newName == "" || newName == m.fileName {
 				return nil // nothing to rename
 			}
-			fileName, syncSource, filePath := m.fileName, m.syncSource, m.filePath
+			fileName, syncSource := m.fileName, m.syncSource
 			m.confirm.Open(
 				fmt.Sprintf("Rename %q to %q?", fileName, newName),
 				func() tea.Msg {
 					return messages.RenamePlanFileMsg{
 						FileName:    fileName,
 						SyncSource:  syncSource,
-						FilePath:    filePath,
 						NewFileName: newName,
 					}
 				},

@@ -67,7 +67,7 @@ func (a *App) handleDumpResult(msg messages.DumpResultMsg) (tea.Model, tea.Cmd) 
 func (a *App) handleDeletePlan(msg messages.DeletePlanMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Deleting plan...")
 	return a, tea.Batch(
-		commands.DeletePlanCmd(a.ctx, a.service, msg.FileName, msg.SyncSource, msg.FilePath),
+		commands.DeletePlanCmd(a.ctx, a.service, msg.FileName, msg.SyncSource),
 		commands.ClearStatusCmdWithDefaultDuration(),
 	)
 }
@@ -88,7 +88,7 @@ func (a *App) handleDeletePlanResult(msg messages.DeletePlanResultMsg) (tea.Mode
 func (a *App) handleRenamePlanFile(msg messages.RenamePlanFileMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Renaming plan...")
 	return a, tea.Batch(
-		commands.RenamePlanFileCmd(a.ctx, a.service, msg.FileName, msg.SyncSource, msg.FilePath, msg.NewFileName),
+		commands.RenamePlanFileCmd(a.ctx, a.service, msg.FileName, msg.SyncSource, msg.NewFileName),
 		commands.ClearStatusCmdWithDefaultDuration(),
 	)
 }
