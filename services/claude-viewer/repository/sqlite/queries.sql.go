@@ -626,9 +626,10 @@ func (q *Queries) InsertComment(ctx context.Context, arg InsertCommentParams) (P
 	return i, err
 }
 
-const insertPlan = `-- name: InsertPlan :exec
+const insertPlan = `-- name: InsertPlan :one
 INSERT INTO plans (file_name, sync_source, file_path, title, content, created_at, modified_at, indexed_at, file_size, word_count)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+RETURNING id
 `
 
 type InsertPlanParams struct {
@@ -644,8 +645,8 @@ type InsertPlanParams struct {
 	WordCount  int64     `json:"word_count"`
 }
 
-func (q *Queries) InsertPlan(ctx context.Context, arg InsertPlanParams) error {
-	_, err := q.db.ExecContext(ctx, insertPlan,
+func (q *Queries) InsertPlan(ctx context.Context, arg InsertPlanParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, insertPlan,
 		arg.FileName,
 		arg.SyncSource,
 		arg.FilePath,
@@ -657,7 +658,9 @@ func (q *Queries) InsertPlan(ctx context.Context, arg InsertPlanParams) error {
 		arg.FileSize,
 		arg.WordCount,
 	)
-	return err
+	var id int64
+	err := row.Scan(&id)
+	return id, err
 }
 
 const insertPlanVersion = `-- name: InsertPlanVersion :exec
@@ -757,6 +760,47 @@ func (q *Queries) ListAllPlans(ctx context.Context) ([]ListAllPlansRow, error) {
 			&i.ModifiedAt,
 			&i.FileSize,
 			&i.WordCount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAllPlansFull = `-- name: ListAllPlansFull :many
+SELECT id, file_name, sync_source, file_path, content FROM plans
+`
+
+type ListAllPlansFullRow struct {
+	ID         int64  `json:"id"`
+	FileName   string `json:"file_name"`
+	SyncSource string `json:"sync_source"`
+	FilePath   string `json:"file_path"`
+	Content    string `json:"content"`
+}
+
+func (q *Queries) ListAllPlansFull(ctx context.Context) ([]ListAllPlansFullRow, error) {
+	rows, err := q.db.QueryContext(ctx, listAllPlansFull)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllPlansFullRow{}
+	for rows.Next() {
+		var i ListAllPlansFullRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.FileName,
+			&i.SyncSource,
+			&i.FilePath,
+			&i.Content,
 		); err != nil {
 			return nil, err
 		}
@@ -999,6 +1043,41 @@ func (q *Queries) ListConnectors(ctx context.Context) ([]Connector, error) {
 	return items, nil
 }
 
+const listPlanVersionsAll = `-- name: ListPlanVersionsAll :many
+SELECT id, plan_id, version_number, file_path, content, word_count, created_at FROM plan_versions WHERE plan_id = ?
+`
+
+func (q *Queries) ListPlanVersionsAll(ctx context.Context, planID int64) ([]PlanVersion, error) {
+	rows, err := q.db.QueryContext(ctx, listPlanVersionsAll, planID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PlanVersion{}
+	for rows.Next() {
+		var i PlanVersion
+		if err := rows.Scan(
+			&i.ID,
+			&i.PlanID,
+			&i.VersionNumber,
+			&i.FilePath,
+			&i.Content,
+			&i.WordCount,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUntaggedPlans = `-- name: ListUntaggedPlans :many
 SELECT id, file_name, sync_source, title, created_at, modified_at, file_size, word_count
 FROM plans
@@ -1104,23 +1183,6 @@ func (q *Queries) RenamePlanRow(ctx context.Context, arg RenamePlanRowParams) er
 	return err
 }
 
-const renamePlanVersionPaths = `-- name: RenamePlanVersionPaths :exec
-UPDATE plan_versions
-SET file_path = REPLACE(file_path, ?1, ?2)
-WHERE plan_id = ?3
-`
-
-type RenamePlanVersionPathsParams struct {
-	OldVersionsPrefix string `json:"old_versions_prefix"`
-	NewVersionsPrefix string `json:"new_versions_prefix"`
-	PlanID            int64  `json:"plan_id"`
-}
-
-func (q *Queries) RenamePlanVersionPaths(ctx context.Context, arg RenamePlanVersionPathsParams) error {
-	_, err := q.db.ExecContext(ctx, renamePlanVersionPaths, arg.OldVersionsPrefix, arg.NewVersionsPrefix, arg.PlanID)
-	return err
-}
-
 const searchVersionsByContent = `-- name: SearchVersionsByContent :many
 SELECT id, plan_id, version_number, file_path, content, word_count, created_at
 FROM plan_versions
@@ -1206,6 +1268,34 @@ func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) error {
 		arg.FileName,
 		arg.SyncSource,
 	)
+	return err
+}
+
+const updatePlanFilePath = `-- name: UpdatePlanFilePath :exec
+UPDATE plans SET file_path = ? WHERE id = ?
+`
+
+type UpdatePlanFilePathParams struct {
+	FilePath string `json:"file_path"`
+	ID       int64  `json:"id"`
+}
+
+func (q *Queries) UpdatePlanFilePath(ctx context.Context, arg UpdatePlanFilePathParams) error {
+	_, err := q.db.ExecContext(ctx, updatePlanFilePath, arg.FilePath, arg.ID)
+	return err
+}
+
+const updatePlanVersionFilePath = `-- name: UpdatePlanVersionFilePath :exec
+UPDATE plan_versions SET file_path = ? WHERE id = ?
+`
+
+type UpdatePlanVersionFilePathParams struct {
+	FilePath string `json:"file_path"`
+	ID       int64  `json:"id"`
+}
+
+func (q *Queries) UpdatePlanVersionFilePath(ctx context.Context, arg UpdatePlanVersionFilePathParams) error {
+	_, err := q.db.ExecContext(ctx, updatePlanVersionFilePath, arg.FilePath, arg.ID)
 	return err
 }
 

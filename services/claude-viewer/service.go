@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/cache"
@@ -119,10 +120,16 @@ func (s *Service) labelForSource(syncSource string) string {
 	return filepath.Base(syncSource)
 }
 
-// viewerSubdirFor returns the viewer subdirectory label (slugified) for a sync source path.
-func (s *Service) viewerSubdirFor(syncSource string) string {
-	label := s.labelForSource(syncSource)
-	return config.Slugify(label)
+// mirrorPathFor returns the on-disk path for a plan's current-content mirror.
+// Keyed by plan.id (immutable, globally unique) — never depends on sync
+// label or filename collisions across sources.
+func (s *Service) mirrorPathFor(planID int64, fileName string) string {
+	return filepath.Join(s.viewerDir, "plans", strconv.FormatInt(planID, 10), fileName)
+}
+
+// versionsDirFor returns a plan's versions directory, keyed by plan.id.
+func (s *Service) versionsDirFor(planID int64) string {
+	return filepath.Join(s.viewerDir, "plans", strconv.FormatInt(planID, 10), "versions")
 }
 
 // Close stops background goroutines started by New (cache GC and watch manager).

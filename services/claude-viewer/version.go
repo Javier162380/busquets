@@ -17,7 +17,7 @@ func (s *Service) SavePlanVersion(ctx context.Context, planName, syncSource, con
 		return fmt.Errorf("plan not found: %w", err)
 	}
 
-	versionsDir := filepath.Join(s.viewerDir, "versions", planName)
+	versionsDir := s.versionsDirFor(plan.ID)
 	if _, err := os.Stat(versionsDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(versionsDir, 0o750); err != nil {
 			return fmt.Errorf("failed to create versions directory: %w", err)
@@ -175,7 +175,7 @@ func (s *Service) RestorePlanVersion(ctx context.Context, planName, syncSource s
 	}
 
 	sourcePath := filepath.Join(syncSource, planName)
-	viewerPath := filepath.Join(s.viewerDir, s.viewerSubdirFor(syncSource), planName)
+	viewerPath := plan.FilePath
 
 	//nolint:gosec // G304: path is constructed by the application from trusted config, not user input
 	oldSource, err := os.ReadFile(sourcePath)
@@ -221,7 +221,7 @@ func (s *Service) RestorePlanVersion(ctx context.Context, planName, syncSource s
 
 	nextVersionNum := lastVersionNum + 1
 	timestamp := strconv.FormatInt(now.Unix(), 10)
-	versionsDir := filepath.Join(s.viewerDir, "versions", planName)
+	versionsDir := s.versionsDirFor(plan.ID)
 
 	if err := os.MkdirAll(versionsDir, 0o750); err != nil {
 		rollbackFiles(sourcePath, oldSource, viewerPath, oldViewer)

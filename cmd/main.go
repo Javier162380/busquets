@@ -293,6 +293,28 @@ func runMigrate(cfg *config.Config, logger *slog.Logger) error {
 		return fmt.Errorf("unsupported database backend: %s", cfg.Database.Backend)
 	}
 
+	// Storage-layout migration is separate from the schema migration above: it
+	// moves plan files, not DB rows. initRepository re-running schema
+	// migrations here is a harmless no-op (goose is idempotent).
+	repo, cleanup, err := initRepository(ctx, cfg, logger)
+	if err != nil {
+		return fmt.Errorf("failed to initialize repository: %w", err)
+	}
+	defer cleanup()
+
+	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
+	if err != nil {
+		return fmt.Errorf("failed to initialize service: %w", err)
+	}
+	defer service.Close()
+	service.SetLogger(logger)
+
+	migrated, err := service.MigrateStorageLayout(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to migrate storage layout: %w", err)
+	}
+	fmt.Printf("✓ Storage layout migration: %d plan(s) migrated to id-keyed storage\n", migrated)
+
 	return nil
 }
 
@@ -345,7 +367,9 @@ Commands:
   dump                Write all plans from the database back to the source plans directory
   tui                 Start terminal user interface
   mcp                 Start MCP server for Claude integration
-  migrate             Run database migrations
+  migrate             Run database schema migrations and migrate plan storage
+                      to the current on-disk layout. Run this after upgrading,
+                      before starting the TUI/MCP server.
 
 Configuration:
   Place a plan-viewer.toml file in the current directory to configure:

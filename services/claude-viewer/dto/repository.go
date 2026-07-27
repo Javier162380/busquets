@@ -11,13 +11,24 @@ type Repository interface {
 	// Plan operations
 	CountPlans(ctx context.Context) (int64, error)
 	GetPlanByFileName(ctx context.Context, fileName, syncSource string) (Plan, error)
-	InsertPlan(ctx context.Context, params InsertPlanParams) error
+	// InsertPlan inserts a new plan row and, while the transaction is open,
+	// invokes writeFile with the newly assigned id so the caller can write
+	// the id-keyed mirror file, then persists the path writeFile returns —
+	// all atomically. If writeFile fails, the insert rolls back with it.
+	InsertPlan(ctx context.Context, params InsertPlanParams, writeFile func(id int64) (filePath string, err error)) (int64, error)
 	UpdatePlan(ctx context.Context, params UpdatePlanParams) error
+	// UpdatePlanFilePath runs writeFile inside a transaction and only sets
+	// file_path if it succeeds — same atomicity guarantee as InsertPlan.
+	UpdatePlanFilePath(ctx context.Context, id int64, filePath string, writeFile func() error) error
+	UpdatePlanVersionFilePath(ctx context.Context, id int64, filePath string, writeFile func() error) error
 	InsertPlanWithTags(ctx context.Context, params InsertPlanWithTagsParams) error
 	UpdatePlanWithTags(ctx context.Context, params UpdatePlanWithTagsParams) error
 	DeletePlan(ctx context.Context, fileName, syncSource string) error
 	RenamePlanFile(ctx context.Context, params RenamePlanFileParams, renameFiles func() error) error
 	ListAllPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]PlanSummary, error)
+	// ListAllPlansFull and ListPlanVersionsAll are used only by MigrateStorageLayout.
+	ListAllPlansFull(ctx context.Context) ([]Plan, error)
+	ListPlanVersionsAll(ctx context.Context, planID int64) ([]PlanVersion, error)
 	ListAllPlansWithPagination(ctx context.Context, params PaginationParams) ([]PlanSummary, error)
 	SearchPlans(ctx context.Context, params SearchParams) ([]PlanSummary, error)
 	SearchPlansWithPagination(ctx context.Context, params SearchPaginationParams) ([]PlanSummary, error)
