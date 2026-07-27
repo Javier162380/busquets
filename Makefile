@@ -27,7 +27,7 @@ tui: build ## Build and run TUI
 tui-debug: build ## Build and run TUI in debug mode (logs to ~/.claude-viewer/tui-debug.log)
 	DEBUG=1 ./bin/plan-viewer tui
 
-migrate: build ## Run database migrations
+migrate: build ## Run DB schema migrations + migrate plan storage layout (run before tui after upgrading)
 	./bin/plan-viewer migrate
 
 test: ## Run tests

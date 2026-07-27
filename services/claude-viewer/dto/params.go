@@ -29,14 +29,13 @@ type UpdatePlanParams struct {
 }
 
 // RenamePlanFileParams holds the writes for an atomic file rename: the plan row's
-// file_name/file_path, plus the versions dir path prefix rewrite on plan_versions.
+// file_name/file_path. Versions live under a plan-id-keyed directory (see
+// versionsDirFor), so renaming a plan's file never needs to touch them.
 type RenamePlanFileParams struct {
-	OldFileName       string // WHERE clause
-	SyncSource        string // WHERE clause
-	NewFileName       string
-	NewFilePath       string
-	OldVersionsPrefix string // e.g. <viewerDir>/versions/<old>/
-	NewVersionsPrefix string // e.g. <viewerDir>/versions/<new>/
+	OldFileName string // WHERE clause
+	SyncSource  string // WHERE clause
+	NewFileName string
+	NewFilePath string
 }
 
 // InsertPlanVersionParams contains parameters for inserting a plan version.

@@ -1,21 +1,29 @@
--- name: InsertPlan :exec
+-- name: InsertPlan :one
 INSERT INTO plans (file_name, sync_source, file_path, title, content, created_at, modified_at, indexed_at, file_size, word_count)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10);
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id;
 
 -- name: UpdatePlan :exec
 UPDATE plans
 SET title = $1, content = $2, modified_at = $3, indexed_at = $4, file_size = $5, word_count = $6
 WHERE file_name = $7 AND sync_source = $8;
 
+-- name: UpdatePlanFilePath :exec
+UPDATE plans SET file_path = $1 WHERE id = $2;
+
+-- name: UpdatePlanVersionFilePath :exec
+UPDATE plan_versions SET file_path = $1 WHERE id = $2;
+
+-- name: ListAllPlansFull :many
+SELECT id, file_name, sync_source, file_path, content FROM plans;
+
+-- name: ListPlanVersionsAll :many
+SELECT * FROM plan_versions WHERE plan_id = $1;
+
 -- name: RenamePlanRow :exec
 UPDATE plans
 SET file_name = sqlc.arg(new_file_name), file_path = sqlc.arg(new_file_path)
 WHERE file_name = sqlc.arg(old_file_name) AND sync_source = sqlc.arg(sync_source);
-
--- name: RenamePlanVersionPaths :exec
-UPDATE plan_versions
-SET file_path = REPLACE(file_path, sqlc.arg(old_versions_prefix), sqlc.arg(new_versions_prefix))
-WHERE plan_id = sqlc.arg(plan_id);
 
 -- name: GetPlanByFileNameAndSource :one
 SELECT * FROM plans WHERE file_name = $1 AND sync_source = $2 LIMIT 1;

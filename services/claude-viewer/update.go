@@ -36,8 +36,13 @@ type ConflictInfo struct {
 // UpdatePlan updates a plan file and syncs it back to the source directory.
 // It checks for conflicts by comparing timestamps.
 func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*UpdatePlanResult, error) {
+	plan, err := s.db.GetPlanByFileName(ctx, req.FileName, req.SyncSource)
+	if err != nil {
+		return nil, fmt.Errorf("plan not found: %w", err)
+	}
+
 	sourcePath := filepath.Join(req.SyncSource, req.FileName)
-	viewerPath := filepath.Join(s.viewerDir, s.viewerSubdirFor(req.SyncSource), req.FileName)
+	viewerPath := plan.FilePath
 
 	sourceInfo, err := os.Stat(sourcePath)
 	if err != nil {
@@ -107,7 +112,11 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 
 // SavePlanLocal saves a plan file to the viewer directory only (no sync to source).
 func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*UpdatePlanResult, error) {
-	viewerPath := filepath.Join(s.viewerDir, s.viewerSubdirFor(req.SyncSource), req.FileName)
+	plan, err := s.db.GetPlanByFileName(ctx, req.FileName, req.SyncSource)
+	if err != nil {
+		return nil, fmt.Errorf("plan not found: %w", err)
+	}
+	viewerPath := plan.FilePath
 
 	viewerInfo, err := os.Stat(viewerPath)
 	if err != nil && !os.IsNotExist(err) {

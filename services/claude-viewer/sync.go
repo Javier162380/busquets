@@ -23,13 +23,6 @@ func (s *Service) SyncPlans(ctx context.Context) (int, error) {
 		}
 	}
 
-	versionsDir := filepath.Join(s.viewerDir, "versions")
-	if _, err := os.Stat(versionsDir); os.IsNotExist(err) {
-		if err := os.MkdirAll(versionsDir, 0o750); err != nil {
-			return 0, fmt.Errorf("failed to create versions directory: %w", err)
-		}
-	}
-
 	syncPlans := atomic.Int64{}
 	errGroup, groupCtx := errgroup.WithContext(ctx)
 	errGroup.SetLimit(len(s.sourcePlansDirs))
@@ -54,11 +47,6 @@ func (s *Service) SyncPlans(ctx context.Context) (int, error) {
 
 // syncDirectory syncs all .md files from a single source directory.
 func (s *Service) syncDirectory(ctx context.Context, dir config.SyncDir) (int, error) {
-	destSubdir := filepath.Join(s.viewerDir, s.viewerSubdirFor(dir.Path))
-	if err := os.MkdirAll(destSubdir, 0o750); err != nil {
-		return 0, fmt.Errorf("failed to create viewer subdir for %s: %w", dir.Label, err)
-	}
-
 	entries, err := os.ReadDir(dir.Path)
 	if err != nil {
 		return 0, fmt.Errorf("failed to read plans directory %s: %w", dir.Path, err)
@@ -135,14 +123,14 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 	for _, summary := range summaries {
 		fileName := summary.FileName
 		syncSource := summary.SyncSource
-		viewerSubdir := s.viewerSubdirFor(syncSource)
+		planID := summary.ID
 
 		if _, ok := sourceFiles[syncSource][fileName]; ok {
 			continue
 		}
 
 		errGroup.Go(func() error {
-			viewerPath := filepath.Join(s.viewerDir, viewerSubdir, fileName)
+			viewerPath := s.mirrorPathFor(planID, fileName)
 			if _, statErr := os.Stat(viewerPath); os.IsNotExist(statErr) {
 				return nil
 			} else if statErr != nil {
@@ -170,13 +158,18 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 // file can never resurrect the plan on the next sync). The DB row, its tag/comment
 // associations, and all version rows are then removed in a single transaction.
 //
-// filePath is the plan's mirror path as stored on the DB row (caller-supplied),
-// used verbatim rather than re-derived so the delete cannot diverge from where
-// sync actually wrote the file.
-func (s *Service) DeletePlan(ctx context.Context, fileName, syncSource, filePath string) error {
+// The plan's mirror path is looked up fresh from the DB rather than accepted as a
+// parameter — trusting a caller-supplied path would let a mismatched value delete
+// an unrelated plan's files.
+func (s *Service) DeletePlan(ctx context.Context, fileName, syncSource string) error {
+	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
+	if err != nil {
+		return fmt.Errorf("plan not found: %w", err)
+	}
+
 	paths := []string{
 		filepath.Join(syncSource, fileName), // source
-		filePath,                            // mirror (stored path, caller-supplied)
+		plan.FilePath,                       // mirror
 	}
 	for _, p := range paths {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
@@ -184,7 +177,9 @@ func (s *Service) DeletePlan(ctx context.Context, fileName, syncSource, filePath
 		}
 	}
 	// os.RemoveAll is a no-op if the dir is absent; only a real failure returns err.
-	versionsDir := filepath.Join(s.viewerDir, "versions", fileName)
+	// filepath.Dir(plan.FilePath) is the plan's id-scoped directory, so its "versions"
+	// sibling belongs to this plan alone — no cross-source collision risk.
+	versionsDir := filepath.Join(filepath.Dir(plan.FilePath), "versions")
 	if err := os.RemoveAll(versionsDir); err != nil {
 		return fmt.Errorf("failed to delete version files %s: %w", versionsDir, err)
 	}
@@ -215,9 +210,15 @@ type fileMove struct {
 // separate compensating write that could itself fail). If the commit fails after the
 // moves, the moves are undone.
 //
-// filePath is the plan's mirror path as stored on the DB row (caller-supplied), used
-// verbatim so the rename cannot diverge from where sync actually wrote the file.
-func (s *Service) RenamePlanFile(ctx context.Context, fileName, syncSource, filePath, newFileName string) error {
+// The plan's current mirror path is looked up fresh from the DB rather than accepted
+// as a parameter — trusting a caller-supplied path would let a mismatched value rename
+// (and thus corrupt the DB row of) an unrelated plan's file.
+func (s *Service) RenamePlanFile(ctx context.Context, fileName, syncSource, newFileName string) error {
+	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
+	if err != nil {
+		return fmt.Errorf("plan not found: %w", err)
+	}
+
 	// 1. Normalize + validate the new name.
 	newFileName = filepath.Base(strings.TrimSpace(newFileName))
 	if newFileName == "" || newFileName == "." || newFileName == string(filepath.Separator) {
@@ -230,13 +231,14 @@ func (s *Service) RenamePlanFile(ctx context.Context, fileName, syncSource, file
 		return fmt.Errorf("new file name is the same as the current one")
 	}
 
-	// 2. Compute old/new paths for source, mirror, and versions.
+	// 2. Compute old/new paths for source and mirror. The versions directory
+	// (a sibling of the mirror file, under the plan's id-scoped directory) is
+	// untouched by a rename — it's keyed by plan id and internal version
+	// numbers/timestamps, nothing about it depends on the current file name.
 	oldSource := filepath.Join(syncSource, fileName)
 	newSource := filepath.Join(syncSource, newFileName)
-	oldMirror := filePath
-	newMirror := filepath.Join(filepath.Dir(filePath), newFileName)
-	oldVersionsDir := filepath.Join(s.viewerDir, "versions", fileName)
-	newVersionsDir := filepath.Join(s.viewerDir, "versions", newFileName)
+	oldMirror := plan.FilePath
+	newMirror := filepath.Join(filepath.Dir(plan.FilePath), newFileName)
 
 	// 3. Collision checks — before any DB or FS mutation, so we never clobber another
 	// plan's file on disk or row in the DB.
@@ -245,9 +247,6 @@ func (s *Service) RenamePlanFile(ctx context.Context, fileName, syncSource, file
 	}
 	if _, err := os.Stat(newMirror); err == nil {
 		return fmt.Errorf("a file already exists at %s", newMirror)
-	}
-	if _, err := os.Stat(newVersionsDir); err == nil {
-		return fmt.Errorf("a versions directory already exists at %s", newVersionsDir)
 	}
 	if _, err := s.db.GetPlanByFileName(ctx, newFileName, syncSource); err == nil {
 		return fmt.Errorf("a plan named %q already exists in this source", newFileName)
@@ -261,22 +260,16 @@ func (s *Service) RenamePlanFile(ctx context.Context, fileName, syncSource, file
 		{from: oldSource, to: newSource},
 		{from: oldMirror, to: newMirror},
 	}
-	// The versions directory only exists once a plan has at least one saved version.
-	if _, err := os.Stat(oldVersionsDir); err == nil {
-		pending = append(pending, fileMove{from: oldVersionsDir, to: newVersionsDir})
-	}
 
 	// 5. Rename in the DB, moving the files as part of the same transaction. Version
 	// paths key off the immutable plan_id, so renaming file_name never orphans tags,
 	// comments, or version rows.
 	var done []fileMove
-	err := s.db.RenamePlanFile(ctx, dto.RenamePlanFileParams{
-		OldFileName:       fileName,
-		SyncSource:        syncSource,
-		NewFileName:       newFileName,
-		NewFilePath:       newMirror,
-		OldVersionsPrefix: oldVersionsDir + string(filepath.Separator),
-		NewVersionsPrefix: newVersionsDir + string(filepath.Separator),
+	err = s.db.RenamePlanFile(ctx, dto.RenamePlanFileParams{
+		OldFileName: fileName,
+		SyncSource:  syncSource,
+		NewFileName: newFileName,
+		NewFilePath: newMirror,
 	}, func() error {
 		for _, m := range pending {
 			if renameErr := os.Rename(m.from, m.to); renameErr != nil {
@@ -305,8 +298,6 @@ func (s *Service) RenamePlanFile(ctx context.Context, fileName, syncSource, file
 // Returns true if the file was updated, false if skipped (no changes).
 func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileName string) (bool, error) {
 	sourcePath := filepath.Join(dir.Path, fileName)
-	destSubdir := filepath.Join(s.viewerDir, s.viewerSubdirFor(dir.Path))
-	destPath := filepath.Join(destSubdir, fileName)
 
 	sourceInfo, err := os.Stat(sourcePath)
 	if err != nil {
@@ -324,14 +315,10 @@ func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileNa
 		return false, fmt.Errorf("failed to check existing plan: %w", err)
 	}
 
-	if err := copyFile(sourcePath, destPath); err != nil {
-		return false, fmt.Errorf("failed to copy file: %w", err)
-	}
-
 	//nolint:gosec // G304: Path is controlled by application, not user input
-	content, err := os.ReadFile(destPath)
+	content, err := os.ReadFile(sourcePath)
 	if err != nil {
-		return false, fmt.Errorf("failed to read file: %w", err)
+		return false, fmt.Errorf("failed to read source file: %w", err)
 	}
 
 	title := extractTitle(string(content))
@@ -342,41 +329,51 @@ func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileNa
 		contentToStore = title
 	}
 
-	info, err := os.Stat(destPath)
-	if err != nil {
-		return false, fmt.Errorf("failed to stat file: %w", err)
-	}
-
 	now := s.nowProvider.Now()
 
 	if planExists {
-		err = s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
+		if err := s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
 			FileName:   fileName,
 			SyncSource: dir.Path,
 			Title:      title,
 			Content:    contentToStore,
-			ModifiedAt: info.ModTime(),
+			ModifiedAt: sourceInfo.ModTime(),
 			IndexedAt:  now,
-			FileSize:   info.Size(),
+			FileSize:   sourceInfo.Size(),
 			WordCount:  int64(wordCount),
-		})
-		if err != nil {
+		}); err != nil {
 			return false, fmt.Errorf("failed to update plan: %w", err)
+		}
+
+		destPath := s.mirrorPathFor(existingPlan.ID, fileName)
+		if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
+			return false, fmt.Errorf("failed to create plan directory: %w", err)
+		}
+		if err := copyFile(sourcePath, destPath); err != nil {
+			return false, fmt.Errorf("failed to copy file: %w", err)
 		}
 		return true, nil
 	}
 
-	err = s.db.InsertPlan(ctx, dto.InsertPlanParams{
+	_, err = s.db.InsertPlan(ctx, dto.InsertPlanParams{
 		FileName:   fileName,
 		SyncSource: dir.Path,
-		FilePath:   destPath,
 		Title:      title,
 		Content:    contentToStore,
-		CreatedAt:  info.ModTime(),
-		ModifiedAt: info.ModTime(),
+		CreatedAt:  sourceInfo.ModTime(),
+		ModifiedAt: sourceInfo.ModTime(),
 		IndexedAt:  now,
-		FileSize:   info.Size(),
+		FileSize:   sourceInfo.Size(),
 		WordCount:  int64(wordCount),
+	}, func(id int64) (string, error) {
+		destPath := s.mirrorPathFor(id, fileName)
+		if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
+			return "", err
+		}
+		if err := copyFile(sourcePath, destPath); err != nil {
+			return "", err
+		}
+		return destPath, nil
 	})
 	if err != nil {
 		return false, fmt.Errorf("failed to insert plan: %w", err)

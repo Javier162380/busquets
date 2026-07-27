@@ -80,9 +80,9 @@ type DumpResultMsg struct {
 }
 
 // DeletePlanMsg requests deleting a single plan (DB row, files, and versions).
-// FilePath is the plan's stored mirror path, sent so the service deletes the
-// exact file rather than re-deriving the path.
-type DeletePlanMsg struct{ FileName, SyncSource, FilePath string }
+// The service looks up the plan's mirror path itself rather than trusting a
+// caller-supplied one.
+type DeletePlanMsg struct{ FileName, SyncSource string }
 
 // DeletePlanResultMsg is sent when a plan delete completes.
 type DeletePlanResultMsg struct {
@@ -91,8 +91,9 @@ type DeletePlanResultMsg struct {
 }
 
 // RenamePlanFileMsg requests renaming a plan's file (source, mirror, versions, DB row).
-// FilePath is the plan's stored mirror path; NewFileName is the requested new name.
-type RenamePlanFileMsg struct{ FileName, SyncSource, FilePath, NewFileName string }
+// NewFileName is the requested new name; the service looks up the plan's
+// current mirror path itself rather than trusting a caller-supplied one.
+type RenamePlanFileMsg struct{ FileName, SyncSource, NewFileName string }
 
 // RenamePlanFileResultMsg is sent when a plan file rename completes.
 type RenamePlanFileResultMsg struct {

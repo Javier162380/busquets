@@ -242,19 +242,86 @@ func (r *Repository) GetPlanByFileName(ctx context.Context, fileName, syncSource
 	return planToDomain(p), nil
 }
 
-func (r *Repository) InsertPlan(ctx context.Context, params dto.InsertPlanParams) error {
-	return r.q.InsertPlan(ctx, InsertPlanParams{
-		FileName:   params.FileName,
-		SyncSource: params.SyncSource,
-		FilePath:   params.FilePath,
-		Title:      params.Title,
-		Content:    params.Content,
-		CreatedAt:  timeToTimestamptz(params.CreatedAt),
-		ModifiedAt: timeToTimestamptz(params.ModifiedAt),
-		IndexedAt:  timeToTimestamptz(params.IndexedAt),
-		FileSize:   params.FileSize,
-		WordCount:  params.WordCount,
+func (r *Repository) InsertPlan(ctx context.Context, params dto.InsertPlanParams, writeFile func(id int64) (string, error)) (int64, error) {
+	var id int64
+	err := r.withTx(ctx, func(q *Queries) error {
+		insertedID, err := q.InsertPlan(ctx, InsertPlanParams{
+			FileName:   params.FileName,
+			SyncSource: params.SyncSource,
+			FilePath:   params.FilePath,
+			Title:      params.Title,
+			Content:    params.Content,
+			CreatedAt:  timeToTimestamptz(params.CreatedAt),
+			ModifiedAt: timeToTimestamptz(params.ModifiedAt),
+			IndexedAt:  timeToTimestamptz(params.IndexedAt),
+			FileSize:   params.FileSize,
+			WordCount:  params.WordCount,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to insert plan: %w", err)
+		}
+
+		filePath, err := writeFile(int64(insertedID))
+		if err != nil {
+			return err
+		}
+
+		if err := q.UpdatePlanFilePath(ctx, UpdatePlanFilePathParams{FilePath: filePath, ID: insertedID}); err != nil {
+			return fmt.Errorf("failed to set plan file path: %w", err)
+		}
+
+		id = int64(insertedID)
+		return nil
 	})
+	return id, err
+}
+
+func (r *Repository) UpdatePlanFilePath(ctx context.Context, id int64, filePath string, writeFile func() error) error {
+	return r.withTx(ctx, func(q *Queries) error {
+		if err := writeFile(); err != nil {
+			return err
+		}
+		return q.UpdatePlanFilePath(ctx, UpdatePlanFilePathParams{FilePath: filePath, ID: int32(id)})
+	})
+}
+
+func (r *Repository) UpdatePlanVersionFilePath(ctx context.Context, id int64, filePath string, writeFile func() error) error {
+	return r.withTx(ctx, func(q *Queries) error {
+		if err := writeFile(); err != nil {
+			return err
+		}
+		return q.UpdatePlanVersionFilePath(ctx, UpdatePlanVersionFilePathParams{FilePath: filePath, ID: int32(id)})
+	})
+}
+
+func (r *Repository) ListAllPlansFull(ctx context.Context) ([]dto.Plan, error) {
+	rows, err := r.q.ListAllPlansFull(ctx)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.Plan, len(rows))
+	for i, row := range rows {
+		result[i] = dto.Plan{
+			ID:         int64(row.ID),
+			FileName:   row.FileName,
+			SyncSource: row.SyncSource,
+			FilePath:   row.FilePath,
+			Content:    row.Content,
+		}
+	}
+	return result, nil
+}
+
+func (r *Repository) ListPlanVersionsAll(ctx context.Context, planID int64) ([]dto.PlanVersion, error) {
+	rows, err := r.q.ListPlanVersionsAll(ctx, planID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]dto.PlanVersion, len(rows))
+	for i, row := range rows {
+		result[i] = planVersionToDomain(row)
+	}
+	return result, nil
 }
 
 func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams) error {
@@ -272,7 +339,7 @@ func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams
 
 func (r *Repository) InsertPlanWithTags(ctx context.Context, params dto.InsertPlanWithTagsParams) error {
 	return r.withTx(ctx, func(q *Queries) error {
-		if err := q.InsertPlan(ctx, InsertPlanParams{
+		if _, err := q.InsertPlan(ctx, InsertPlanParams{
 			FileName:   params.Plan.FileName,
 			SyncSource: params.Plan.SyncSource,
 			FilePath:   params.Plan.FilePath,
@@ -379,24 +446,9 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName, syncSource string
 
 func (r *Repository) RenamePlanFile(ctx context.Context, params dto.RenamePlanFileParams, renameFiles func() error) error {
 	return r.withTx(ctx, func(q *Queries) error {
-		plan, err := q.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
-			FileName:   params.OldFileName,
-			SyncSource: params.SyncSource,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to get plan: %w", err)
-		}
-
-		// Rewrite version file paths first — the subquery keys off plan_id, which is
-		// unchanged by the rename, so order relative to the plans update doesn't matter.
-		if err := q.RenamePlanVersionPaths(ctx, RenamePlanVersionPathsParams{
-			OldVersionsPrefix: params.OldVersionsPrefix,
-			NewVersionsPrefix: params.NewVersionsPrefix,
-			PlanID:            int64(plan.ID),
-		}); err != nil {
-			return fmt.Errorf("failed to rename plan version paths: %w", err)
-		}
-
+		// Versions live under a plan-id-keyed directory (see versionsDirFor) —
+		// nothing about them depends on the plan's file name, so a rename never
+		// needs to touch plan_versions at all.
 		if err := q.RenamePlanRow(ctx, RenamePlanRowParams{
 			NewFileName: params.NewFileName,
 			NewFilePath: params.NewFilePath,
