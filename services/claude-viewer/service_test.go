@@ -3668,10 +3668,15 @@ func testMigrateStorageLayout(t *testing.T, b backendSetup) {
 		require.NoError(t, err)
 		require.Equal(t, "# Legacy\n\nOld content.", string(data))
 
-		// Idempotent: a second run finds nothing left to migrate.
+		// The old file is removed once migrated — no duplicate left behind.
+		require.NoFileExists(t, oldPath)
+
+		// Idempotent: a second run finds nothing left to migrate, and doesn't
+		// delete the file it just migrated (src == dst guard).
 		migratedAgain, err := service.MigrateStorageLayout(ctx)
 		require.NoError(t, err)
 		require.Equal(t, 0, migratedAgain)
+		require.FileExists(t, wantPath)
 	})
 
 	t.Run("regenerates the mirror file from DB content when the old file is already gone", func(t *testing.T) {
@@ -3756,6 +3761,65 @@ func testMigrateStorageLayout(t *testing.T, b backendSetup) {
 		data, err := os.ReadFile(wantVersionPath)
 		require.NoError(t, err)
 		require.Equal(t, "# Versioned\n\nOld version body.", string(data))
+
+		// Both old files are removed once migrated.
+		require.NoFileExists(t, oldPath)
+		require.NoFileExists(t, oldVersionPath)
+	})
+
+	t.Run("finishes a version left unmigrated by an interrupted prior run", func(t *testing.T) {
+		service, sourcePlansDir, viewerDir, cleanup := b.setupFn(t)
+		defer cleanup()
+
+		// Simulate a run that migrated the mirror (and committed) but crashed
+		// before reaching this plan's versions: the plan row already has its
+		// new, id-keyed file_path, but the version row still points at the old
+		// flat versions/<fileName>/ layout.
+		now := service.nowProvider.Now()
+		id, err := service.db.InsertPlan(ctx, dto.InsertPlanParams{
+			FileName:   "half-done.md",
+			SyncSource: sourcePlansDir,
+			Title:      "Half Done",
+			Content:    "# Half Done\n\nCurrent.",
+			CreatedAt:  now,
+			ModifiedAt: now,
+			IndexedAt:  now,
+			FileSize:   1,
+			WordCount:  2,
+		}, func(planID int64) (string, error) {
+			newPath := service.mirrorPathFor(planID, "half-done.md")
+			require.NoError(t, os.MkdirAll(filepath.Dir(newPath), 0o750))
+			require.NoError(t, os.WriteFile(newPath, []byte("# Half Done\n\nCurrent."), 0o600))
+			return newPath, nil
+		})
+		require.NoError(t, err)
+
+		oldVersionsDir := filepath.Join(viewerDir, "versions", "half-done.md")
+		require.NoError(t, os.MkdirAll(oldVersionsDir, 0o750))
+		oldVersionPath := filepath.Join(oldVersionsDir, "1-1700000000.md")
+		require.NoError(t, os.WriteFile(oldVersionPath, []byte("# Half Done\n\nOld version body."), 0o600))
+		require.NoError(t, service.db.InsertPlanVersion(ctx, dto.InsertPlanVersionParams{
+			PlanID:        id,
+			VersionNumber: 1,
+			FilePath:      oldVersionPath,
+			Content:       "# Half Done\n\nOld version body.",
+			WordCount:     4,
+			CreatedAt:     now,
+		}))
+
+		// The mirror is already on the new layout, so it must not be counted again —
+		// but the stranded version still gets picked up and migrated.
+		migrated, err := service.MigrateStorageLayout(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 0, migrated)
+
+		versions, err := service.db.ListPlanVersionsAll(ctx, id)
+		require.NoError(t, err)
+		require.Len(t, versions, 1)
+		wantVersionPath := filepath.Join(service.versionsDirFor(id), "1-1700000000.md")
+		require.Equal(t, wantVersionPath, versions[0].FilePath)
+		require.FileExists(t, wantVersionPath)
+		require.NoFileExists(t, oldVersionPath)
 	})
 }
 
