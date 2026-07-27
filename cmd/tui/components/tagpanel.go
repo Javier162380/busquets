@@ -70,6 +70,17 @@ func (t *TagPanel) SetEntries(entries []TagPanelEntry, totalPlans, untaggedCount
 	}
 }
 
+// SetFlatEntries replaces the entry list, prepending only an "All" header row
+// (no "Untagged" row). Used by callers whose entries have no untagged concept,
+// e.g. sync labels — every plan has exactly one, so there's nothing to bucket.
+func (t *TagPanel) SetFlatEntries(entries []TagPanelEntry, totalPlans int) {
+	t.entries = []TagPanelEntry{{Name: "", Count: totalPlans}}
+	t.entries = append(t.entries, entries...)
+	if t.cursor >= len(t.entries) {
+		t.cursor = 0
+	}
+}
+
 // Focus marks the panel as focused (affects cursor rendering).
 func (t *TagPanel) Focus() {
 	t.focused = true

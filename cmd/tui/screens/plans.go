@@ -93,7 +93,7 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 		p.viewer.SetRenderMode(components.RenderModeGlamour)
 	}
 
-	if displayMode == claudeviewer.DisplayModeTagPlanContent {
+	if displayMode == claudeviewer.DisplayModeTagPlanContent || displayMode == claudeviewer.DisplayModeLabelPlanContent {
 		tagsW, _, _ := p.panelWidths()
 		p.tagPanel = components.NewTagPanel(tagsW-4, contentHeight-4)
 		p.tagPanel.Focus()
@@ -140,7 +140,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		}
 		s.plans = msg.Plans
 		if s.tagPanel != nil {
-			s.rebuildTagPanelEntries()
+			s.rebuildPanelEntries()
 		}
 		s.updateListItems()
 		s.list.Select(0)
@@ -148,7 +148,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		if len(s.plans) > 0 {
 			cmds = append(cmds, s.loadPlanDetail(s.plans[0].FileName, s.plans[0].SyncSource))
 		}
-		if s.tagPanel != nil && !msg.IsFiltered {
+		if s.tagPanel != nil && !msg.IsFiltered && s.displayMode == claudeviewer.DisplayModeTagPlanContent {
 			cmds = append(cmds, func() tea.Msg { return messages.LoadAllTagsForPanelMsg{} })
 		}
 		return s, tea.Batch(cmds...)
@@ -295,12 +295,12 @@ func (s *PlansScreen) handleTagPanelKey(key string, msg tea.KeyMsg) (Screen, tea
 
 	switch key {
 	case "down":
-		tag := s.tagPanel.MoveDown()
-		return s, s.applyTagFilter(tag)
+		entry := s.tagPanel.MoveDown()
+		return s, s.applyPanelSelection(entry)
 
 	case "up":
-		tag := s.tagPanel.MoveUp()
-		return s, s.applyTagFilter(tag)
+		entry := s.tagPanel.MoveUp()
+		return s, s.applyPanelSelection(entry)
 
 	case "tab":
 		s.tagPanel.Blur()
@@ -314,10 +314,22 @@ func (s *PlansScreen) handleTagPanelKey(key string, msg tea.KeyMsg) (Screen, tea
 		return s, s.searchBar.Focus()
 
 	case "n":
-		return s, s.tagPanel.StartCreating()
+		if s.displayMode == claudeviewer.DisplayModeTagPlanContent {
+			return s, s.tagPanel.StartCreating()
+		}
+		return s, nil
 	}
 
 	return s, nil
+}
+
+// applyPanelSelection applies the side-panel selection according to the active
+// display mode: tag mode filters via tagPlanMap, label mode filters by SyncLabel.
+func (s *PlansScreen) applyPanelSelection(entry string) tea.Cmd {
+	if s.displayMode == claudeviewer.DisplayModeLabelPlanContent {
+		return s.applyLabelFilter(entry)
+	}
+	return s.applyTagFilter(entry)
 }
 
 // applyTagFilter filters the plan list by tag. Uses tagPlanMap for instant in-memory
@@ -359,6 +371,29 @@ func (s *PlansScreen) applyTagFilter(tag string) tea.Cmd {
 	return func() tea.Msg {
 		return messages.SearchPlansWithTagsMsg{Tags: []string{tag}, MatchAll: false}
 	}
+}
+
+// applyLabelFilter filters the plan list by sync label, entirely in-memory —
+// unlike tags, every plan's SyncLabel is already present on s.allPlans, so
+// there's no DB round-trip or "map not yet loaded" fallback to handle.
+func (s *PlansScreen) applyLabelFilter(label string) tea.Cmd {
+	if label == "" {
+		s.plans = s.allPlans
+	} else {
+		filtered := make([]claudeviewer.PlanSummary, 0, len(s.allPlans))
+		for _, p := range s.allPlans {
+			if p.SyncLabel == label {
+				filtered = append(filtered, p)
+			}
+		}
+		s.plans = filtered
+	}
+	s.updateListItems()
+	s.list.Select(0)
+	if len(s.plans) > 0 {
+		return s.loadPlanDetail(s.plans[0].FileName, s.plans[0].SyncSource)
+	}
+	return nil
 }
 
 // handleListKey handles keys in list focus mode.
@@ -491,7 +526,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		return s, nil
 
 	case "shift+tab":
-		if s.displayMode == claudeviewer.DisplayModeTagPlanContent && s.tagPanel != nil {
+		if (s.displayMode == claudeviewer.DisplayModeTagPlanContent || s.displayMode == claudeviewer.DisplayModeLabelPlanContent) && s.tagPanel != nil {
 			s.focus = types.FocusTagPanel
 			s.tagPanel.Focus()
 			s.list.Blur()
@@ -542,7 +577,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		// In three-panel mode, complete the cycle: content → tag panel.
 		// In split view, content → list.
 		if s.layout == types.LayoutSplit {
-			if s.displayMode == claudeviewer.DisplayModeTagPlanContent && s.tagPanel != nil {
+			if (s.displayMode == claudeviewer.DisplayModeTagPlanContent || s.displayMode == claudeviewer.DisplayModeLabelPlanContent) && s.tagPanel != nil {
 				s.tagPanel.Focus()
 				s.focus = types.FocusTagPanel
 				s.list.Blur()
@@ -555,7 +590,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		return s, nil
 
 	case "shift+tab":
-		if s.displayMode == claudeviewer.DisplayModeTagPlanContent {
+		if s.displayMode == claudeviewer.DisplayModeTagPlanContent || s.displayMode == claudeviewer.DisplayModeLabelPlanContent {
 			s.focus = types.FocusList
 			s.list.Focus()
 			return s, nil
@@ -885,7 +920,7 @@ func (s *PlansScreen) View() string {
 			mainContent = s.renderFullscreenViewer()
 		}
 	default:
-		if s.displayMode == claudeviewer.DisplayModeTagPlanContent && s.tagPanel != nil {
+		if (s.displayMode == claudeviewer.DisplayModeTagPlanContent || s.displayMode == claudeviewer.DisplayModeLabelPlanContent) && s.tagPanel != nil {
 			mainContent = s.renderThreePanelView()
 		} else {
 			mainContent = s.renderSplitView()
@@ -1174,7 +1209,7 @@ func (s *PlansScreen) getViewerWidth() int {
 	if s.layout == types.LayoutFullscreen {
 		return s.width - 4
 	}
-	if s.displayMode == claudeviewer.DisplayModeTagPlanContent && s.tagPanel != nil {
+	if (s.displayMode == claudeviewer.DisplayModeTagPlanContent || s.displayMode == claudeviewer.DisplayModeLabelPlanContent) && s.tagPanel != nil {
 		_, _, viewW := s.panelWidths()
 		return viewW - 4
 	}
@@ -1227,16 +1262,51 @@ func (s *PlansScreen) rebuildTagPanelEntries() {
 	s.tagPanel.SetEntries(entries, len(s.allPlans), s.untaggedCount)
 }
 
+// rebuildLabelPanelEntries updates the panel with sync-label counts computed
+// from s.allPlans. Unlike tags, every plan has exactly one SyncLabel (never
+// empty — see labelForSource), so counting from allPlans is authoritative;
+// there's no DB-backed "universe of labels" to reconcile against.
+func (s *PlansScreen) rebuildLabelPanelEntries() {
+	if s.tagPanel == nil {
+		return
+	}
+	counts := make(map[string]int)
+	for _, plan := range s.allPlans {
+		counts[plan.SyncLabel]++
+	}
+	labels := make([]string, 0, len(counts))
+	for label := range counts {
+		labels = append(labels, label)
+	}
+	sort.Strings(labels)
+	entries := make([]components.TagPanelEntry, len(labels))
+	for i, label := range labels {
+		entries[i] = components.TagPanelEntry{Name: label, Count: counts[label]}
+	}
+	s.tagPanel.SetFlatEntries(entries, len(s.allPlans))
+}
+
+// rebuildPanelEntries refreshes the side panel's entries for whichever
+// three-panel display mode is currently active.
+func (s *PlansScreen) rebuildPanelEntries() {
+	switch s.displayMode {
+	case claudeviewer.DisplayModeTagPlanContent:
+		s.rebuildTagPanelEntries()
+	case claudeviewer.DisplayModeLabelPlanContent:
+		s.rebuildLabelPanelEntries()
+	}
+}
+
 // SetDisplayMode switches the screen between display modes.
 func (s *PlansScreen) SetDisplayMode(mode string) {
 	s.displayMode = mode
-	if mode == claudeviewer.DisplayModeTagPlanContent {
+	if mode == claudeviewer.DisplayModeTagPlanContent || mode == claudeviewer.DisplayModeLabelPlanContent {
 		if s.tagPanel == nil {
 			tagsW, _, _ := s.panelWidths()
 			contentHeight := s.height - 4
 			s.tagPanel = components.NewTagPanel(tagsW-4, contentHeight-4)
 		}
-		s.rebuildTagPanelEntries()
+		s.rebuildPanelEntries()
 		s.tagPanel.Focus()
 		s.focus = types.FocusTagPanel
 	} else {
@@ -1262,6 +1332,9 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.tagPanel != nil && s.tagPanel.IsCreating() {
 			return "enter: create tag | esc: cancel"
 		}
+		if s.displayMode == claudeviewer.DisplayModeLabelPlanContent {
+			return fmt.Sprintf("down/up: navigate labels | tab: plans | /: search | q: quit | Plans: %d", len(s.plans))
+		}
 		return fmt.Sprintf("down/up: navigate tags | tab: plans | /: search | n: new tag | q: quit | Plans: %d", len(s.plans))
 	case types.FocusList:
 		searchHelp := "/: search | T: tags"
@@ -1281,8 +1354,11 @@ func (s *PlansScreen) ShortHelp() string {
 			searchHelp = fmt.Sprintf("/: search | T: tags | ctrl+l: clear [%s]", activeFilters)
 		}
 		tagNav := ""
-		if s.displayMode == claudeviewer.DisplayModeTagPlanContent {
+		switch s.displayMode {
+		case claudeviewer.DisplayModeTagPlanContent:
 			tagNav = "shift+tab: tags | "
+		case claudeviewer.DisplayModeLabelPlanContent:
+			tagNav = "shift+tab: labels | "
 		}
 		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | n: comments | r: rsync | d: dump | D: delete | R: rename | c: copy | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
 	case types.FocusContent:

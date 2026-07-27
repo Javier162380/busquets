@@ -123,6 +123,48 @@ func TestRebuildTagPanelEntries(t *testing.T) {
 	})
 }
 
+func TestLabelPanelEntriesAndFilter(t *testing.T) {
+	s := NewPlansScreen(120, 40, false, false, false, claudeviewer.DisplayModeLabelPlanContent)
+	s.allPlans = []claudeviewer.PlanSummary{
+		{FileName: "a.md", SyncSource: "/a", SyncLabel: "work", Title: "A"},
+		{FileName: "b.md", SyncSource: "/a", SyncLabel: "work", Title: "B"},
+		{FileName: "c.md", SyncSource: "/b", SyncLabel: "personal", Title: "C"},
+	}
+	s.plans = s.allPlans
+	s.rebuildLabelPanelEntries()
+
+	t.Run("panel lists labels with counts, sorted, under an All header", func(t *testing.T) {
+		require.Contains(t, s.tagPanel.View(), "personal")
+		require.Contains(t, s.tagPanel.View(), "work")
+		require.Contains(t, s.tagPanel.View(), "All")
+	})
+
+	t.Run("selecting a label filters plans to that label only", func(t *testing.T) {
+		cmd := s.applyPanelSelection("work")
+		require.NotNil(t, cmd)
+		require.Len(t, s.plans, 2)
+		for _, p := range s.plans {
+			require.Equal(t, "work", p.SyncLabel)
+		}
+	})
+
+	t.Run("selecting All restores the full plan list", func(t *testing.T) {
+		s.applyPanelSelection("")
+		require.Len(t, s.plans, 3)
+	})
+}
+
+func TestLabelPanelCreateKeyIsNoop(t *testing.T) {
+	s := NewPlansScreen(120, 40, false, false, false, claudeviewer.DisplayModeLabelPlanContent)
+	s.focus = types.FocusTagPanel
+
+	screen, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	ps := screen.(*PlansScreen)
+
+	require.False(t, ps.tagPanel.IsCreating())
+	require.Nil(t, cmd)
+}
+
 func TestDeleteConfirmDialogVisibleFromList(t *testing.T) {
 	s := NewPlansScreen(100, 40, false, false, false, "plan_content")
 	s.focus = types.FocusList
@@ -169,6 +211,48 @@ func TestCopyKeyEmitsCopyMsg(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, "p.md", copyMsg.Label)
 			require.Equal(t, "# My Plan\n\nbody", copyMsg.Text)
+		})
+	}
+}
+
+func TestTagFilterVisibleInBothDisplayModes(t *testing.T) {
+	modes := []string{
+		claudeviewer.DisplayModePlanContent,
+		claudeviewer.DisplayModeTagPlanContent,
+		claudeviewer.DisplayModeLabelPlanContent,
+	}
+	for _, mode := range modes {
+		t.Run(mode, func(t *testing.T) {
+			s := NewPlansScreen(120, 40, false, false, false, mode)
+			s.focus = types.FocusList
+
+			screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'T'}})
+			ps := screen.(*PlansScreen)
+
+			require.True(t, ps.tagFilter.IsActive())
+			require.Equal(t, types.FocusTagFilter, ps.focus)
+			require.Contains(t, ps.View(), "[OR]")
+		})
+	}
+}
+
+func TestSearchBarVisibleInBothDisplayModes(t *testing.T) {
+	modes := []string{
+		claudeviewer.DisplayModePlanContent,
+		claudeviewer.DisplayModeTagPlanContent,
+		claudeviewer.DisplayModeLabelPlanContent,
+	}
+	for _, mode := range modes {
+		t.Run(mode, func(t *testing.T) {
+			s := NewPlansScreen(120, 40, false, false, false, mode)
+			s.focus = types.FocusList
+
+			screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+			ps := screen.(*PlansScreen)
+
+			require.True(t, ps.searchBar.IsActive())
+			require.Equal(t, types.FocusSearch, ps.focus)
+			require.Contains(t, ps.View(), "Type to")
 		})
 	}
 }

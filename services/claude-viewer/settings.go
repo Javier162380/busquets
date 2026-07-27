@@ -55,8 +55,9 @@ const (
 
 // Display mode values for SettingDefaultDisplayMode.
 const (
-	DisplayModePlanContent    = "plan_content"     //nolint:gci    // two-panel: list + content (default)
-	DisplayModeTagPlanContent = "tag_plan_content" // three-panel: tags + list + content
+	DisplayModePlanContent      = "plan_content"       //nolint:gci    // two-panel: list + content (default)
+	DisplayModeTagPlanContent   = "tag_plan_content"   // three-panel: tags + list + content
+	DisplayModeLabelPlanContent = "label_plan_content" // three-panel: sync labels + list + content
 )
 
 // Sort key values for SettingPlansSortKey.
