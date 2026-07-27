@@ -3807,11 +3807,11 @@ func testMigrateStorageLayout(t *testing.T, b backendSetup) {
 			CreatedAt:     now,
 		}))
 
-		// The mirror is already on the new layout, so it must not be counted again —
-		// but the stranded version still gets picked up and migrated.
+		// The mirror is already on the new layout — the plan still counts as
+		// migrated because its stranded version gets picked up and fixed.
 		migrated, err := service.MigrateStorageLayout(ctx)
 		require.NoError(t, err)
-		require.Equal(t, 0, migrated)
+		require.Equal(t, 1, migrated)
 
 		versions, err := service.db.ListPlanVersionsAll(ctx, id)
 		require.NoError(t, err)
@@ -3820,6 +3820,82 @@ func testMigrateStorageLayout(t *testing.T, b backendSetup) {
 		require.Equal(t, wantVersionPath, versions[0].FilePath)
 		require.FileExists(t, wantVersionPath)
 		require.NoFileExists(t, oldVersionPath)
+	})
+
+	t.Run("recovers correctly when two plans historically shared the same old path", func(t *testing.T) {
+		service, sourcePlansDir, viewerDir, cleanup := b.setupFn(t)
+		defer cleanup()
+
+		// Simulate a historical pre-PR-#55 collision: two different sync sources
+		// whose labels slugified to the same viewer subdirectory, so both plans'
+		// file_path ended up pointing at the identical, last-writer-wins file.
+		sharedOldPath := filepath.Join(viewerDir, "collided-label", "shared.md")
+		require.NoError(t, os.MkdirAll(filepath.Dir(sharedOldPath), 0o750))
+		require.NoError(t, os.WriteFile(sharedOldPath, []byte("# Shared\n\nWhichever plan wrote last."), 0o600))
+
+		now := service.nowProvider.Now()
+		otherSource := sourcePlansDir + "-other"
+		contentA := "# Shared\n\nPlan A's own recorded content."
+		contentB := "# Shared\n\nPlan B's own recorded content."
+
+		idA, err := service.db.InsertPlan(ctx, dto.InsertPlanParams{
+			FileName:   "shared.md",
+			SyncSource: sourcePlansDir,
+			Title:      "Plan A",
+			Content:    contentA,
+			CreatedAt:  now,
+			ModifiedAt: now,
+			IndexedAt:  now,
+			FileSize:   1,
+			WordCount:  4,
+		}, func(int64) (string, error) { return sharedOldPath, nil })
+		require.NoError(t, err)
+
+		idB, err := service.db.InsertPlan(ctx, dto.InsertPlanParams{
+			FileName:   "shared.md",
+			SyncSource: otherSource,
+			Title:      "Plan B",
+			Content:    contentB,
+			CreatedAt:  now,
+			ModifiedAt: now,
+			IndexedAt:  now,
+			FileSize:   1,
+			WordCount:  4,
+		}, func(int64) (string, error) { return sharedOldPath, nil })
+		require.NoError(t, err)
+
+		migrated, err := service.MigrateStorageLayout(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 2, migrated)
+
+		wantPathA := service.mirrorPathFor(idA, "shared.md")
+		wantPathB := service.mirrorPathFor(idB, "shared.md")
+		require.NotEqual(t, wantPathA, wantPathB)
+
+		dataA, err := os.ReadFile(wantPathA)
+		require.NoError(t, err)
+		dataB, err := os.ReadFile(wantPathB)
+		require.NoError(t, err)
+
+		// Processing order between A and B isn't guaranteed, so assert the
+		// invariant rather than which one wins: whichever is processed first
+		// recovers the still-present shared file; by the time the other is
+		// processed, that file is already gone (deleted by the first plan's
+		// migration step), so it must fall back to its own DB content rather
+		// than fail, silently duplicate the first plan's content, or come up empty.
+		const sharedContent = "# Shared\n\nWhichever plan wrote last."
+		gotA, gotB := string(dataA), string(dataB)
+		switch {
+		case gotA == sharedContent:
+			require.Equal(t, contentB, gotB, "the plan processed second must fall back to its own DB content")
+		case gotB == sharedContent:
+			require.Equal(t, contentA, gotA, "the plan processed second must fall back to its own DB content")
+		default:
+			t.Fatalf("neither plan recovered the shared on-disk content; got A=%q B=%q", gotA, gotB)
+		}
+
+		// The old shared file itself is gone either way.
+		require.NoFileExists(t, sharedOldPath)
 	})
 }
 

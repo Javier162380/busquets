@@ -14,7 +14,8 @@ import (
 // file once the copy succeeds, falling back to regenerating from the DB's
 // content column when the old on-disk file is already missing — recovering
 // gracefully from the cross-source collisions this migration exists to
-// retire. Returns the number of plans whose mirror file was migrated.
+// retire. Returns the number of plans that needed any migration work — their
+// mirror file, one or more version files, or both.
 func (s *Service) MigrateStorageLayout(ctx context.Context) (int, error) {
 	plans, err := s.db.ListAllPlansFull(ctx)
 	if err != nil {
@@ -23,6 +24,8 @@ func (s *Service) MigrateStorageLayout(ctx context.Context) (int, error) {
 
 	migrated := 0
 	for _, p := range plans {
+		planMigrated := false
+
 		newPath := s.mirrorPathFor(p.ID, p.FileName)
 		if p.FilePath != newPath {
 			writeFile := func() error {
@@ -34,7 +37,7 @@ func (s *Service) MigrateStorageLayout(ctx context.Context) (int, error) {
 			if err := s.db.UpdatePlanFilePath(ctx, p.ID, newPath, writeFile); err != nil {
 				return migrated, err
 			}
-			migrated++
+			planMigrated = true
 		}
 
 		// Versions are checked independently of the mirror above (not skipped
@@ -59,6 +62,11 @@ func (s *Service) MigrateStorageLayout(ctx context.Context) (int, error) {
 			if err := s.db.UpdatePlanVersionFilePath(ctx, v.ID, newVPath, writeVersionFile); err != nil {
 				return migrated, err
 			}
+			planMigrated = true
+		}
+
+		if planMigrated {
+			migrated++
 		}
 	}
 	return migrated, nil
