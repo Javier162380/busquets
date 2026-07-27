@@ -148,9 +148,20 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		if len(s.plans) > 0 {
 			cmds = append(cmds, s.loadPlanDetail(s.plans[0].FileName, s.plans[0].SyncSource))
 		}
+
+		// Tag panel: the selected tag filter is reapplied once tags finish reloading
+		// (see AllTagsForPanelLoadedMsg), since it requires the tag/plan map.
 		if s.tagPanel != nil && !msg.IsFiltered && s.displayMode == claudeviewer.DisplayModeTagPlanContent {
 			cmds = append(cmds, func() tea.Msg { return messages.LoadAllTagsForPanelMsg{} })
 		}
+
+		// Label panel: filtering is purely in-memory, so reapply the selected label
+		// right away — otherwise an unfiltered reload (e.g. after a mutating command)
+		// would silently drop the active filter.
+		if s.tagPanel != nil && !msg.IsFiltered && s.displayMode == claudeviewer.DisplayModeLabelPlanContent {
+			cmds = append(cmds, s.applyLabelFilter(s.tagPanel.SelectedTag()))
+		}
+
 		return s, tea.Batch(cmds...)
 
 	case messages.AllTagsForPanelLoadedMsg:
@@ -159,11 +170,16 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.untaggedCount = msg.UntaggedCount
 		s.tagPlanMap = msg.TagPlanMap
 		s.allPlans = msg.AllPlans
-		s.rebuildTagPanelEntries()
-		if s.tagPanel != nil {
-			s.applyTagFilter(s.tagPanel.SelectedTag())
+		// Callers (e.g. rename/delete result handlers) fire this unconditionally
+		// alongside LoadPlansCmd, regardless of the active display mode. Route through
+		// the same per-mode dispatchers used elsewhere so the label panel — which
+		// shares the tagPanel field — rebuilds from label data instead of being
+		// clobbered with tag entries, and plan_content mode stays a no-op.
+		s.rebuildPanelEntries()
+		if s.tagPanel == nil {
+			return s, nil
 		}
-		return s, nil
+		return s, s.applyPanelSelection(s.tagPanel.SelectedTag())
 
 	case components.CreateTagRequestedMsg:
 		return s, func() tea.Msg {

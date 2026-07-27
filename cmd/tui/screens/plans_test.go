@@ -154,6 +154,76 @@ func TestLabelPanelEntriesAndFilter(t *testing.T) {
 	})
 }
 
+func newLabelModeScreenWithPlans() *PlansScreen {
+	s := NewPlansScreen(120, 40, false, false, false, claudeviewer.DisplayModeLabelPlanContent)
+	s.allPlans = []claudeviewer.PlanSummary{
+		{FileName: "a.md", SyncSource: "/a", SyncLabel: "work", Title: "A"},
+		{FileName: "b.md", SyncSource: "/a", SyncLabel: "work", Title: "B"},
+		{FileName: "c.md", SyncSource: "/b", SyncLabel: "personal", Title: "C"},
+	}
+	s.plans = s.allPlans
+	s.rebuildLabelPanelEntries()
+	return s
+}
+
+func TestLabelFilterPersistsAcrossUnfilteredReload(t *testing.T) {
+	s := newLabelModeScreenWithPlans()
+
+	// Navigate to "work", mirroring the down-key path in handleTagPanelKey.
+	require.Equal(t, "personal", s.tagPanel.MoveDown())
+	require.Equal(t, "work", s.tagPanel.MoveDown())
+
+	cmd := s.applyPanelSelection(s.tagPanel.SelectedTag())
+	require.NotNil(t, cmd)
+	require.Len(t, s.plans, 2)
+
+	// Simulate the unfiltered reload a mutating command (rename/delete/sync/save)
+	// sends via LoadPlansCmd — this used to silently drop the active label filter.
+	screen, _ := s.Update(messages.PlansLoadedMsg{Plans: s.allPlans, IsFiltered: false})
+	ps := screen.(*PlansScreen)
+
+	require.Equal(t, "work", ps.tagPanel.SelectedTag())
+	require.Equal(t, 2, len(ps.plans))
+	for _, p := range ps.plans {
+		require.Equal(t, "work", p.SyncLabel)
+	}
+}
+
+func TestAllTagsForPanelLoadedMsgDoesNotClobberLabelPanel(t *testing.T) {
+	s := newLabelModeScreenWithPlans()
+
+	// Confirm the panel entries are exactly the labels, in order, before the
+	// message under test arrives.
+	require.Equal(t, "", s.tagPanel.SelectedTag())
+	require.Equal(t, "personal", s.tagPanel.MoveDown())
+	require.Equal(t, "work", s.tagPanel.MoveDown())
+
+	cmd := s.applyPanelSelection(s.tagPanel.SelectedTag())
+	require.NotNil(t, cmd)
+	require.Len(t, s.plans, 2)
+
+	// AllTagsForPanelLoadedMsg is tag-panel specific, but rename/delete result
+	// handlers fire it unconditionally regardless of display mode (see
+	// handlers_sync.go). In label mode it must refresh the underlying plan data
+	// without overwriting the label panel with tag entries — if the bug were
+	// still present, the cursor would now land on "go" (index 2 of an
+	// All/api/go tag list) instead of "work".
+	screen, _ := s.Update(messages.AllTagsForPanelLoadedMsg{
+		Tags:          []claudeviewer.Tag{{Name: "go"}, {Name: "api"}},
+		Counts:        map[string]int{"go": 1},
+		UntaggedCount: 0,
+		TagPlanMap:    map[string][]claudeviewer.PlanSummary{"go": {{FileName: "a.md"}}},
+		AllPlans:      s.allPlans,
+	})
+	ps := screen.(*PlansScreen)
+
+	require.Equal(t, "work", ps.tagPanel.SelectedTag())
+	require.Equal(t, 2, len(ps.plans))
+	for _, p := range ps.plans {
+		require.Equal(t, "work", p.SyncLabel)
+	}
+}
+
 func TestLabelPanelCreateKeyIsNoop(t *testing.T) {
 	s := NewPlansScreen(120, 40, false, false, false, claudeviewer.DisplayModeLabelPlanContent)
 	s.focus = types.FocusTagPanel

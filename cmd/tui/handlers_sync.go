@@ -79,8 +79,7 @@ func (a *App) handleDeletePlanResult(msg messages.DeletePlanResultMsg) (tea.Mode
 	}
 	a.statusBar.SetSuccess("Deleted plan")
 	return a, tea.Batch(
-		commands.LoadPlansCmd(a.ctx, a.service),
-		commands.LoadAllTagsForPanelCmd(a.ctx, a.service),
+		a.reloadPlans(),
 		commands.ClearStatusCmd(1*time.Second),
 	)
 }
@@ -100,8 +99,7 @@ func (a *App) handleRenamePlanFileResult(msg messages.RenamePlanFileResultMsg) (
 	}
 	a.statusBar.SetSuccess("Renamed plan")
 	return a, tea.Batch(
-		commands.LoadPlansCmd(a.ctx, a.service),
-		commands.LoadAllTagsForPanelCmd(a.ctx, a.service),
+		a.reloadPlans(),
 		commands.ClearStatusCmdWithDefaultDuration(),
 	)
 }
