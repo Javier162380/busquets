@@ -149,6 +149,58 @@ func TestHandleSettingsHandlers(t *testing.T) {
 	})
 }
 
+// flattenCmd resolves cmd, and recursively any tea.BatchMsg it produces, into
+// the concrete messages it would eventually deliver to Update.
+func flattenCmd(cmd tea.Cmd) []tea.Msg {
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		var out []tea.Msg
+		for _, c := range batch {
+			out = append(out, flattenCmd(c)...)
+		}
+		return out
+	}
+	return []tea.Msg{msg}
+}
+
+func hasMsgType[T any](msgs []tea.Msg) bool {
+	for _, m := range msgs {
+		if _, ok := m.(T); ok {
+			return true
+		}
+	}
+	return false
+}
+
+func TestReloadAfterMutationRespectsDisplayMode(t *testing.T) {
+	t.Run("label mode: delete reloads plans without a redundant tag panel fetch", func(t *testing.T) {
+		app := newTestApp(t)
+		model, _ := app.Update(messages.DisplayModeChangedMsg{Mode: claudeviewer.DisplayModeLabelPlanContent})
+		app = model.(*App)
+
+		_, cmd := app.Update(messages.DeletePlanResultMsg{})
+		msgs := flattenCmd(cmd)
+
+		require.True(t, hasMsgType[messages.PlansLoadedMsg](msgs))
+		require.False(t, hasMsgType[messages.AllTagsForPanelLoadedMsg](msgs))
+	})
+
+	t.Run("tag mode: rename reloads via the tag panel fetch, not a separate plans fetch", func(t *testing.T) {
+		app := newTestApp(t)
+		model, _ := app.Update(messages.DisplayModeChangedMsg{Mode: claudeviewer.DisplayModeTagPlanContent})
+		app = model.(*App)
+
+		_, cmd := app.Update(messages.RenamePlanFileResultMsg{})
+		msgs := flattenCmd(cmd)
+
+		require.True(t, hasMsgType[messages.AllTagsForPanelLoadedMsg](msgs))
+		require.False(t, hasMsgType[messages.PlansLoadedMsg](msgs))
+	})
+}
+
 func TestNavigation(t *testing.T) {
 	t.Run("PopScreenMsg with multi-screen stack reduces stack by one", func(t *testing.T) {
 		app := newTestApp(t)
