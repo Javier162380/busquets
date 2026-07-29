@@ -25,8 +25,7 @@ var DarkTheme = Theme{
 	BorderColor:     lipgloss.Color("238"),
 	MutedColor:      lipgloss.Color("244"),
 	InactiveColor:   lipgloss.Color("240"),
-	SubtleColor:     lipgloss.Color("238"), // dimmer than InactiveColor: recedes toward the dark background
-	ForegroundColor: lipgloss.Color("250"),
+	SubtleColor:     lipgloss.Color("238"),
 	BackgroundColor: lipgloss.Color("234"),
 	ErrorColor:      lipgloss.Color("160"),
 	SuccessColor:    lipgloss.Color("42"),
@@ -41,7 +40,7 @@ var LightTheme = Theme{
 	BorderColor:     lipgloss.Color("240"),
 	MutedColor:      lipgloss.Color("238"),
 	InactiveColor:   lipgloss.Color("242"),
-	SubtleColor:     lipgloss.Color("247"), // lighter than InactiveColor: recedes toward the light background
+	SubtleColor:     lipgloss.Color("247"),
 	ForegroundColor: lipgloss.Color("232"),
 	BackgroundColor: lipgloss.Color("255"),
 	ErrorColor:      lipgloss.Color("160"),
