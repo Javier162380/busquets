@@ -167,11 +167,16 @@ internal/
 backend = "sqlite"  # or "postgres"
 
 [database.sqlite]
-path = "~/.claude-viewer/plans.db"
+path = "/Users/yourname/.claude-viewer/plans.db"  # `~` is NOT expanded
 
 [paths]
-plans_dir = "~/.claude/plans"
-viewer_dir = "~/.claude-viewer"
+viewer_dir = "/Users/yourname/.claude-viewer"
+
+# One block per source directory; `label` defaults to the dir's base name and
+# is slugified to name the source's mirror dir under viewer_dir.
+[[paths.plans_dirs]]
+  path  = "/Users/yourname/.claude/plans"
+  label = "claudeRoot"
 
 [mcp]
 server_name = "claude-plan-viewer"
@@ -198,4 +203,5 @@ version = "1.0.0"
 6. **Time is injectable** - Use `nowProvider` for testability
 7. **WatchManager locking** - In `Stop()`, read `wm.running` directly under the write lock; never call `IsRunning()` from within a method that already holds `wm.mu` (deadlock)
 8. **Tags are DB-only** - Tags live exclusively in the database. `SyncPlans` uses `InsertPlan`/`UpdatePlan` (no tag params). Never add tag extraction to sync, and never write tags back to markdown files. `DeleteTag` only deletes the DB row — no file I/O.
-9. **Keep the help screen in sync with keybindings** - Whenever you add, remove, or change a TUI keybinding (in a screen's key handler under `cmd/tui/screens/*.go` or a modal's `Update` in `cmd/tui/components/*.go`), update BOTH the affected screen's `ShortHelp()` string AND the `helpContent` block in `cmd/tui/screens/help.go`, under the matching context section. `helpContent` is the full reference users open with `?`; a binding that isn't listed there is effectively undiscoverable.
+9. **One TUI component, one responsibility** - a component under `cmd/tui/components/` serves exactly one domain concept. When a feature looks like "an existing component plus a mode flag", build a separate component: its own type, its own `types.Focus` value, its own key handler on the screen, and its own messages. Never widen a component to serve two concepts via a `SetXEntries` variant, a display-mode branch, or a sentinel value - the branching does not stay in the component, it spreads into the screen's key handling, focus cycling, and rendering, and messages belonging to one concept end up mutating the other's state. `TagPanel` (DB-backed, async, mutable) and `LabelPanel` (read-only projection of `PlanSummary.SyncLabel`) are the reference split; duplicated row rendering between them is the accepted cost.
+10. **Keep the help screen in sync with keybindings** - Whenever you add, remove, or change a TUI keybinding (in a screen's key handler under `cmd/tui/screens/*.go` or a modal's `Update` in `cmd/tui/components/*.go`), update BOTH the affected screen's `ShortHelp()` string AND the `helpContent` block in `cmd/tui/screens/help.go`, under the matching context section. `helpContent` is the full reference users open with `?`; a binding that isn't listed there is effectively undiscoverable.

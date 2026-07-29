@@ -131,9 +131,23 @@ max_idle_conns = 5
 # Where plan-viewer stores indexed data
 viewer_dir = "/Users/yourname/.claude-viewer"
 
-# Source directory containing Claude plan files
-plans_dir = "/Users/yourname/.claude/plans"
+# Source directories containing Claude plan files — one block per source.
+# `label` is optional and defaults to the directory's base name.
+[[paths.plans_dirs]]
+  path  = "/Users/yourname/.claude/plans"
+  label = "claudeRoot"
+
+[[paths.plans_dirs]]
+  path  = "/Users/yourname/work/some-repo/docs/plans"
+  label = "workRepo"
 ```
+
+Labels are slugified (lowercased, keeping only `[a-z0-9-_]`) to name each
+source's mirror directory under `viewer_dir`. Two sources may not share a
+path or resolve to the same slug — plan-viewer refuses to start if they do.
+
+> **Note:** paths are used verbatim. `~` is **not** expanded — always write
+> the full path.
 
 ### Environment Variables
 
@@ -147,7 +161,6 @@ export PLAN_VIEWER_SQLITE_PATH="/path/to/plans.db"
 
 # Path configuration
 export PLAN_VIEWER_DIR="/path/to/viewer-dir"
-export PLAN_VIEWER_PLANS_DIR="/path/to/claude/plans"
 
 # TUI debug mode
 export DEBUG=1

@@ -123,37 +123,6 @@ func TestRebuildTagPanelEntries(t *testing.T) {
 	})
 }
 
-func TestLabelPanelEntriesAndFilter(t *testing.T) {
-	s := NewPlansScreen(120, 40, false, false, false, claudeviewer.DisplayModeLabelPlanContent)
-	s.allPlans = []claudeviewer.PlanSummary{
-		{FileName: "a.md", SyncSource: "/a", SyncLabel: "work", Title: "A"},
-		{FileName: "b.md", SyncSource: "/a", SyncLabel: "work", Title: "B"},
-		{FileName: "c.md", SyncSource: "/b", SyncLabel: "personal", Title: "C"},
-	}
-	s.plans = s.allPlans
-	s.rebuildLabelPanelEntries()
-
-	t.Run("panel lists labels with counts, sorted, under an All header", func(t *testing.T) {
-		require.Contains(t, s.tagPanel.View(), "personal")
-		require.Contains(t, s.tagPanel.View(), "work")
-		require.Contains(t, s.tagPanel.View(), "All")
-	})
-
-	t.Run("selecting a label filters plans to that label only", func(t *testing.T) {
-		cmd := s.applyPanelSelection("work")
-		require.NotNil(t, cmd)
-		require.Len(t, s.plans, 2)
-		for _, p := range s.plans {
-			require.Equal(t, "work", p.SyncLabel)
-		}
-	})
-
-	t.Run("selecting All restores the full plan list", func(t *testing.T) {
-		s.applyPanelSelection("")
-		require.Len(t, s.plans, 3)
-	})
-}
-
 func newLabelModeScreenWithPlans() *PlansScreen {
 	s := NewPlansScreen(120, 40, false, false, false, claudeviewer.DisplayModeLabelPlanContent)
 	s.allPlans = []claudeviewer.PlanSummary{
@@ -166,14 +135,46 @@ func newLabelModeScreenWithPlans() *PlansScreen {
 	return s
 }
 
+func TestLabelPanelEntriesAndFilter(t *testing.T) {
+	s := newLabelModeScreenWithPlans()
+
+	t.Run("label mode mounts the label panel, not the tag panel", func(t *testing.T) {
+		require.NotNil(t, s.labelPanel)
+		require.Nil(t, s.tagPanel)
+		require.Equal(t, types.FocusLabelPanel, s.focus)
+		require.Equal(t, types.LayoutThreePanel, s.layout)
+	})
+
+	t.Run("panel lists labels with counts, sorted, under an All header", func(t *testing.T) {
+		view := s.labelPanel.View()
+		require.Contains(t, view, "All")
+		require.Contains(t, view, "personal")
+		require.Contains(t, view, "work")
+	})
+
+	t.Run("selecting a label filters plans to that label only", func(t *testing.T) {
+		cmd := s.applyLabelFilter("work")
+		require.NotNil(t, cmd)
+		require.Len(t, s.plans, 2)
+		for _, p := range s.plans {
+			require.Equal(t, "work", p.SyncLabel)
+		}
+	})
+
+	t.Run("selecting All restores the full plan list", func(t *testing.T) {
+		s.applyLabelFilter("")
+		require.Len(t, s.plans, 3)
+	})
+}
+
 func TestLabelFilterPersistsAcrossUnfilteredReload(t *testing.T) {
 	s := newLabelModeScreenWithPlans()
 
-	// Navigate to "work", mirroring the down-key path in handleTagPanelKey.
-	require.Equal(t, "personal", s.tagPanel.MoveDown())
-	require.Equal(t, "work", s.tagPanel.MoveDown())
+	// Navigate to "work", mirroring the down-key path in handleLabelPanelKey.
+	require.Equal(t, "personal", s.labelPanel.MoveDown())
+	require.Equal(t, "work", s.labelPanel.MoveDown())
 
-	cmd := s.applyPanelSelection(s.tagPanel.SelectedTag())
+	cmd := s.applyLabelFilter(s.labelPanel.SelectedLabel())
 	require.NotNil(t, cmd)
 	require.Len(t, s.plans, 2)
 
@@ -182,57 +183,128 @@ func TestLabelFilterPersistsAcrossUnfilteredReload(t *testing.T) {
 	screen, _ := s.Update(messages.PlansLoadedMsg{Plans: s.allPlans, IsFiltered: false})
 	ps := screen.(*PlansScreen)
 
-	require.Equal(t, "work", ps.tagPanel.SelectedTag())
-	require.Equal(t, 2, len(ps.plans))
+	require.Equal(t, "work", ps.labelPanel.SelectedLabel())
+	require.Len(t, ps.plans, 2)
 	for _, p := range ps.plans {
 		require.Equal(t, "work", p.SyncLabel)
 	}
 }
 
-func TestAllTagsForPanelLoadedMsgDoesNotClobberLabelPanel(t *testing.T) {
+func TestLabelModeIgnoresTagPanelMessages(t *testing.T) {
 	s := newLabelModeScreenWithPlans()
 
-	// Confirm the panel entries are exactly the labels, in order, before the
-	// message under test arrives.
-	require.Equal(t, "", s.tagPanel.SelectedTag())
-	require.Equal(t, "personal", s.tagPanel.MoveDown())
-	require.Equal(t, "work", s.tagPanel.MoveDown())
-
-	cmd := s.applyPanelSelection(s.tagPanel.SelectedTag())
-	require.NotNil(t, cmd)
+	require.Equal(t, "personal", s.labelPanel.MoveDown())
+	require.Equal(t, "work", s.labelPanel.MoveDown())
+	require.NotNil(t, s.applyLabelFilter(s.labelPanel.SelectedLabel()))
 	require.Len(t, s.plans, 2)
 
-	// AllTagsForPanelLoadedMsg is tag-panel specific, but rename/delete result
-	// handlers fire it unconditionally regardless of display mode (see
-	// handlers_sync.go). In label mode it must refresh the underlying plan data
-	// without overwriting the label panel with tag entries — if the bug were
-	// still present, the cursor would now land on "go" (index 2 of an
-	// All/api/go tag list) instead of "work".
-	screen, _ := s.Update(messages.AllTagsForPanelLoadedMsg{
-		Tags:          []claudeviewer.Tag{{Name: "go"}, {Name: "api"}},
-		Counts:        map[string]int{"go": 1},
-		UntaggedCount: 0,
-		TagPlanMap:    map[string][]claudeviewer.PlanSummary{"go": {{FileName: "a.md"}}},
-		AllPlans:      s.allPlans,
+	// AllTagsForPanelLoadedMsg is tag-panel data. Label mode never requests it and
+	// must not be mutated by it if one arrives anyway.
+	screen, cmd := s.Update(messages.AllTagsForPanelLoadedMsg{
+		Tags:       []claudeviewer.Tag{{Name: "go"}, {Name: "api"}},
+		Counts:     map[string]int{"go": 1},
+		TagPlanMap: map[string][]claudeviewer.PlanSummary{"go": {{FileName: "a.md"}}},
+		AllPlans:   []claudeviewer.PlanSummary{{FileName: "a.md", SyncLabel: "work"}},
 	})
 	ps := screen.(*PlansScreen)
 
-	require.Equal(t, "work", ps.tagPanel.SelectedTag())
-	require.Equal(t, 2, len(ps.plans))
-	for _, p := range ps.plans {
-		require.Equal(t, "work", p.SyncLabel)
-	}
+	require.Nil(t, cmd)
+	require.Nil(t, ps.tagPanel)
+	require.Nil(t, ps.allTags)
+	require.Equal(t, "work", ps.labelPanel.SelectedLabel())
+	require.Len(t, ps.plans, 2)
+	require.Len(t, ps.allPlans, 3)
 }
 
 func TestLabelPanelCreateKeyIsNoop(t *testing.T) {
-	s := NewPlansScreen(120, 40, false, false, false, claudeviewer.DisplayModeLabelPlanContent)
-	s.focus = types.FocusTagPanel
+	s := newLabelModeScreenWithPlans()
 
 	screen, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	ps := screen.(*PlansScreen)
 
-	require.False(t, ps.tagPanel.IsCreating())
 	require.Nil(t, cmd)
+	require.Equal(t, types.FocusLabelPanel, ps.focus)
+}
+
+func TestSidePanelFocusCycle(t *testing.T) {
+	for _, tc := range []struct {
+		mode  string
+		focus types.Focus
+	}{
+		{claudeviewer.DisplayModeTagPlanContent, types.FocusTagPanel},
+		{claudeviewer.DisplayModeLabelPlanContent, types.FocusLabelPanel},
+	} {
+		t.Run(tc.mode, func(t *testing.T) {
+			t.Run("shift+tab from the list reaches the side panel", func(t *testing.T) {
+				s := NewPlansScreen(120, 40, false, false, false, tc.mode)
+				s.focus = types.FocusList
+
+				screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+				require.Equal(t, tc.focus, screen.(*PlansScreen).focus)
+			})
+
+			t.Run("tab from content reaches the side panel", func(t *testing.T) {
+				s := NewPlansScreen(120, 40, false, false, false, tc.mode)
+				s.focus = types.FocusContent
+
+				screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyTab})
+				require.Equal(t, tc.focus, screen.(*PlansScreen).focus)
+			})
+		})
+	}
+
+	t.Run("plan_content has no side panel to reach", func(t *testing.T) {
+		s := NewPlansScreen(120, 40, false, false, false, claudeviewer.DisplayModePlanContent)
+		s.focus = types.FocusList
+
+		screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
+		require.Equal(t, types.FocusList, screen.(*PlansScreen).focus)
+	})
+}
+
+func TestSetDisplayModeMountsOnePanel(t *testing.T) {
+	s := NewPlansScreen(120, 40, false, false, false, claudeviewer.DisplayModePlanContent)
+
+	s.SetDisplayMode(claudeviewer.DisplayModeTagPlanContent)
+	require.NotNil(t, s.tagPanel)
+	require.Nil(t, s.labelPanel)
+	require.Equal(t, types.FocusTagPanel, s.focus)
+	require.Equal(t, types.LayoutThreePanel, s.layout)
+
+	s.SetDisplayMode(claudeviewer.DisplayModeLabelPlanContent)
+	require.Nil(t, s.tagPanel)
+	require.NotNil(t, s.labelPanel)
+	require.Equal(t, types.FocusLabelPanel, s.focus)
+	require.Equal(t, types.LayoutThreePanel, s.layout)
+
+	s.SetDisplayMode(claudeviewer.DisplayModePlanContent)
+	require.Nil(t, s.tagPanel)
+	require.Nil(t, s.labelPanel)
+	require.Equal(t, types.FocusList, s.focus)
+	require.Equal(t, types.LayoutSplit, s.layout)
+}
+
+func TestLeavingFullscreenRestoresThreePanelLayout(t *testing.T) {
+	for _, mode := range []string{
+		claudeviewer.DisplayModeTagPlanContent,
+		claudeviewer.DisplayModeLabelPlanContent,
+	} {
+		t.Run(mode, func(t *testing.T) {
+			s := NewPlansScreen(120, 40, false, false, false, mode)
+			s.focus = types.FocusList
+			s.current = &claudeviewer.PlanDetail{
+				PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "P"},
+			}
+
+			screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
+			ps := screen.(*PlansScreen)
+			require.Equal(t, types.LayoutFullscreen, ps.layout)
+
+			screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyEsc})
+			ps = screen.(*PlansScreen)
+			require.Equal(t, types.LayoutThreePanel, ps.layout)
+		})
+	}
 }
 
 func TestDeleteConfirmDialogVisibleFromList(t *testing.T) {

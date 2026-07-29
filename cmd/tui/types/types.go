@@ -6,7 +6,7 @@ type Layout int
 const (
 	LayoutSplit      Layout = iota //nolint:gofumpt,gci    // Two panels side-by-side.
 	LayoutFullscreen               // Single content area.
-	LayoutThreePanel               // Three panels: tags + list + content.
+	LayoutThreePanel               // Three panels: tags or labels + list + content.
 )
 
 // Focus determines where user attention is.
@@ -21,6 +21,7 @@ const (
 	FocusTagPanel                  // Left-side tag navigation panel.
 	FocusCommentList               // Navigating the comment list in the comment modal.
 	FocusCommentInput              // Composing a new comment in the comment modal.
+	FocusLabelPanel                // Left-side sync-label navigation panel.
 )
 
 // ModalState tracks which overlay is currently active on PlansScreen.

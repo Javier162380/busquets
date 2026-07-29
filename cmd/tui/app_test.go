@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
 	"github.com/Javier162380/claude-plan-viewer/internal/config"
@@ -198,6 +199,27 @@ func TestReloadAfterMutationRespectsDisplayMode(t *testing.T) {
 
 		require.True(t, hasMsgType[messages.AllTagsForPanelLoadedMsg](msgs))
 		require.False(t, hasMsgType[messages.PlansLoadedMsg](msgs))
+	})
+
+	// Tag mutations reload the plan list in every mode, but must not drag the tag
+	// panel fetch into a mode that has no tag panel.
+	t.Run("label mode: tag create/delete reload plans without a tag panel fetch", func(t *testing.T) {
+		for name, mutation := range map[string]tea.Msg{
+			"create": messages.CreateTagResultMsg{},
+			"delete": components.DeleteTagCmdMsg{},
+		} {
+			t.Run(name, func(t *testing.T) {
+				app := newTestApp(t)
+				model, _ := app.Update(messages.DisplayModeChangedMsg{Mode: claudeviewer.DisplayModeLabelPlanContent})
+				app = model.(*App)
+
+				_, cmd := app.Update(mutation)
+				msgs := flattenCmd(cmd)
+
+				require.True(t, hasMsgType[messages.PlansLoadedMsg](msgs))
+				require.False(t, hasMsgType[messages.AllTagsForPanelLoadedMsg](msgs))
+			})
+		}
 	})
 }
 

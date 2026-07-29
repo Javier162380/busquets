@@ -12,7 +12,8 @@
 #   PLAN_VIEWER_SQLITE_PATH   - SQLite database file path
 #   PLAN_VIEWER_POSTGRES_URL  - PostgreSQL connection string
 #   PLAN_VIEWER_DIR           - Directory for viewer data
-#   PLAN_VIEWER_PLANS_DIR     - Directory containing Claude plan files
+#
+# Source plan directories are configured only via [[paths.plans_dirs]] below.
 
 # =============================================================================
 # Database Configuration
@@ -57,6 +58,21 @@ max_idle_conns = 5
 # Default: $HOME/.claude-viewer
 # viewer_dir = "/Users/yourname/.claude-viewer"
 
-# Directory containing the source Claude plan files to sync
-# Default: $HOME/.claude/plans
-# plans_dir = "/Users/yourname/.claude/plans"
+# Source directories containing the Claude plan files to sync.
+# Declare one [[paths.plans_dirs]] block per source. Each needs a `path`;
+# `label` is optional and defaults to the directory's base name.
+#
+# The label is slugified (lowercased, only [a-z0-9-_] kept) to name that
+# source's mirror directory under viewer_dir, so two sources must not share
+# a path or resolve to the same slug — startup fails if they do.
+#
+# Default when omitted entirely: a single source at $HOME/.claude/plans
+# labelled "plans".
+#
+# [[paths.plans_dirs]]
+#   path  = "/Users/yourname/.claude/plans"
+#   label = "claudeRoot"
+#
+# [[paths.plans_dirs]]
+#   path  = "/Users/yourname/work/some-repo/docs/plans"
+#   label = "workRepo"
