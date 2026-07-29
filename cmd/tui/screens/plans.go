@@ -96,21 +96,23 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 		p.viewer.SetRenderMode(components.RenderModeGlamour)
 	}
 
-	sideW, _, _ := p.panelWidths()
 	switch displayMode {
 	case claudeviewer.DisplayModeTagPlanContent:
-		p.tagPanel = components.NewTagPanel(sideW-4, contentHeight-4)
+		p.tagPanel = components.NewTagPanel(0, contentHeight-4)
 		p.tagPanel.Focus()
 		p.focus = types.FocusTagPanel
 		p.layout = types.LayoutThreePanel
 		p.baseLayout = types.LayoutThreePanel
 	case claudeviewer.DisplayModeLabelPlanContent:
-		p.labelPanel = components.NewLabelPanel(sideW-4, contentHeight-4)
+		p.labelPanel = components.NewLabelPanel(0, contentHeight-4)
 		p.labelPanel.Focus()
 		p.focus = types.FocusLabelPanel
 		p.layout = types.LayoutThreePanel
 		p.baseLayout = types.LayoutThreePanel
 	}
+
+	// panelWidths depends on which panel is mounted, so size after the switch.
+	p.sizeSidePanel()
 
 	return &p
 }
@@ -308,6 +310,19 @@ func (s *PlansScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 	}
 
 	return s, nil
+}
+
+// sizeSidePanel resizes whichever side panel is mounted to the current layout.
+func (s *PlansScreen) sizeSidePanel() {
+	sideW, _, _ := s.panelWidths()
+	innerH := s.height - 8
+
+	switch {
+	case s.tagPanel != nil:
+		s.tagPanel.SetSize(sideW-4, innerH)
+	case s.labelPanel != nil:
+		s.labelPanel.SetSize(sideW-4, innerH)
+	}
 }
 
 // focusSidePanel moves focus to whichever side panel is mounted, reporting
@@ -1142,15 +1157,15 @@ func (s *PlansScreen) renderThreePanelView() string {
 		listInnerH -= 3
 	}
 
+	s.sizeSidePanel()
+
 	var sidePanelContent string
 	sideFocused := false
 	switch {
 	case s.tagPanel != nil:
-		s.tagPanel.SetSize(sideW-4, innerH)
 		sidePanelContent = s.tagPanel.View()
 		sideFocused = s.focus == types.FocusTagPanel
 	case s.labelPanel != nil:
-		s.labelPanel.SetSize(sideW-4, innerH)
 		sidePanelContent = s.labelPanel.View()
 		sideFocused = s.focus == types.FocusLabelPanel
 	}
@@ -1337,8 +1352,14 @@ func (s *PlansScreen) rebuildLabelPanelEntries() {
 		return
 	}
 	counts := make(map[string]int)
+	paths := make(map[string]string)
 	for _, plan := range s.allPlans {
 		counts[plan.SyncLabel]++
+		// A label maps to exactly one source directory, so the first plan
+		// carrying it settles the path.
+		if _, seen := paths[plan.SyncLabel]; !seen {
+			paths[plan.SyncLabel] = plan.SyncSource
+		}
 	}
 	labels := make([]string, 0, len(counts))
 	for label := range counts {
@@ -1347,7 +1368,11 @@ func (s *PlansScreen) rebuildLabelPanelEntries() {
 	sort.Strings(labels)
 	entries := make([]components.LabelPanelEntry, len(labels))
 	for i, label := range labels {
-		entries[i] = components.LabelPanelEntry{Name: label, PlanCount: counts[label]}
+		entries[i] = components.LabelPanelEntry{
+			Name:      label,
+			Path:      paths[label],
+			PlanCount: counts[label],
+		}
 	}
 	s.labelPanel.SetEntries(entries, len(s.allPlans))
 }
@@ -1355,14 +1380,11 @@ func (s *PlansScreen) rebuildLabelPanelEntries() {
 // SetDisplayMode switches the screen between display modes, mounting exactly one
 // side panel (or neither) and setting the layout it implies.
 func (s *PlansScreen) SetDisplayMode(mode string) {
-	sideW, _, _ := s.panelWidths()
-	innerH := s.height - 8
-
 	switch mode {
 	case claudeviewer.DisplayModeTagPlanContent:
 		s.labelPanel = nil
 		if s.tagPanel == nil {
-			s.tagPanel = components.NewTagPanel(sideW-4, innerH)
+			s.tagPanel = components.NewTagPanel(0, 0)
 		}
 		s.rebuildTagPanelEntries()
 		s.tagPanel.Focus()
@@ -1372,7 +1394,7 @@ func (s *PlansScreen) SetDisplayMode(mode string) {
 	case claudeviewer.DisplayModeLabelPlanContent:
 		s.tagPanel = nil
 		if s.labelPanel == nil {
-			s.labelPanel = components.NewLabelPanel(sideW-4, innerH)
+			s.labelPanel = components.NewLabelPanel(0, 0)
 		}
 		s.rebuildLabelPanelEntries()
 		s.labelPanel.Focus()
@@ -1392,6 +1414,8 @@ func (s *PlansScreen) SetDisplayMode(mode string) {
 			s.updateListItems()
 		}
 	}
+
+	s.sizeSidePanel()
 }
 
 // setBaseLayout records the layout to return to when leaving fullscreen, and

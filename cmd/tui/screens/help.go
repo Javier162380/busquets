@@ -73,6 +73,7 @@ TAG PANEL (three-panel mode):
 
 LABEL PANEL (three-panel mode):
   ↑/↓            Navigate sync labels (filters the plan list)
+                 Each label shows its source path beneath it
   Tab            Switch to the plans list
   /              Search plans
 

@@ -1,6 +1,7 @@
 package screens
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -126,9 +127,9 @@ func TestRebuildTagPanelEntries(t *testing.T) {
 func newLabelModeScreenWithPlans() *PlansScreen {
 	s := NewPlansScreen(120, 40, false, false, false, claudeviewer.DisplayModeLabelPlanContent)
 	s.allPlans = []claudeviewer.PlanSummary{
-		{FileName: "a.md", SyncSource: "/a", SyncLabel: "work", Title: "A"},
-		{FileName: "b.md", SyncSource: "/a", SyncLabel: "work", Title: "B"},
-		{FileName: "c.md", SyncSource: "/b", SyncLabel: "personal", Title: "C"},
+		{FileName: "a.md", SyncSource: "/srv/work", SyncLabel: "work", Title: "A"},
+		{FileName: "b.md", SyncSource: "/srv/work", SyncLabel: "work", Title: "B"},
+		{FileName: "c.md", SyncSource: "/srv/mine", SyncLabel: "personal", Title: "C"},
 	}
 	s.plans = s.allPlans
 	s.rebuildLabelPanelEntries()
@@ -150,6 +151,16 @@ func TestLabelPanelEntriesAndFilter(t *testing.T) {
 		require.Contains(t, view, "All")
 		require.Contains(t, view, "personal")
 		require.Contains(t, view, "work")
+	})
+
+	t.Run("each label shows its source path, the All row does not", func(t *testing.T) {
+		view := s.labelPanel.View()
+		require.Contains(t, view, "/srv/work")
+		require.Contains(t, view, "/srv/mine")
+
+		// One label row + one path row per label, plus the pathless All row.
+		require.Equal(t, 3, strings.Count(view, "(")) // All(3), personal(1), work(2)
+		require.Equal(t, 2, strings.Count(view, "/srv/"))
 	})
 
 	t.Run("selecting a label filters plans to that label only", func(t *testing.T) {
