@@ -332,6 +332,16 @@ func (a *App) View() string {
 	return fmt.Sprintf("%s\n%s", mainContent, status)
 }
 
+// reloadPlans refetches the plan list the way the active display mode needs.
+// This is the only place that maps a display mode to a reload command — callers
+// stay mode-agnostic.
+func (a *App) reloadPlans() tea.Cmd {
+	if a.displayMode == claudeviewer.DisplayModeTagPlanContent {
+		return commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
+	}
+	return commands.LoadPlansCmd(a.ctx, a.service)
+}
+
 // Navigation helpers.
 func (a *App) popScreen() tea.Cmd { //nolint:unparam // ok for now.
 	if len(a.stack) > 1 {

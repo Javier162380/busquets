@@ -46,13 +46,6 @@ func (a *App) handleRenderMarkdownChanged(msg messages.RenderMarkDownByDefaultMs
 	return a, nil
 }
 
-func (a *App) reloadPlans() tea.Cmd {
-	if a.displayMode == claudeviewer.DisplayModeTagPlanContent {
-		return commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
-	}
-	return commands.LoadPlansCmd(a.ctx, a.service)
-}
-
 func (a *App) handleDisplayModeChanged(msg messages.DisplayModeChangedMsg) (tea.Model, tea.Cmd) {
 	a.displayMode = msg.Mode
 	for _, screen := range a.stack {
@@ -60,6 +53,9 @@ func (a *App) handleDisplayModeChanged(msg messages.DisplayModeChangedMsg) (tea.
 			s.SetDisplayMode(msg.Mode)
 		}
 	}
+	// Only the tag panel needs a fetch on a mode switch. Labels are static and
+	// SetDisplayMode rebuilds the label panel synchronously from the plans the
+	// screen already holds.
 	if msg.Mode == claudeviewer.DisplayModeTagPlanContent {
 		return a, commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
 	}

@@ -13,6 +13,7 @@ var (
 	BorderColor     = lipgloss.Color("238") // Darker gray.
 	MutedColor      = lipgloss.Color("244") // Gray.
 	InactiveColor   = lipgloss.Color("240") // Dim gray.
+	SubtleColor     = lipgloss.Color("238") // Recessive gray for secondary lines under a row.
 	ForegroundColor = lipgloss.Color("250") // Light gray.
 
 	// Message colors.
@@ -48,6 +49,13 @@ var (
 
 	MutedStyle = lipgloss.NewStyle().
 			Foreground(MutedColor)
+
+	// SubtleStyle is for a secondary line rendered beneath the row it belongs to,
+	// e.g. a source path under a label. It sits one step below the row's own text
+	// in both themes so it never out-shouts the row.
+	SubtleStyle = lipgloss.NewStyle().
+			Foreground(SubtleColor).
+			Italic(true)
 
 	TitleStyle = lipgloss.NewStyle().
 			Foreground(AccentColor).

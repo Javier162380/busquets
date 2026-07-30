@@ -19,7 +19,7 @@ GENERAL:
 PLANS LIST (left panel):
   j/k, ↑/↓       Navigate plans list
   Tab            Switch to content panel (right)
-  Shift+Tab      Switch to tag panel (three-panel mode)
+  Shift+Tab      Switch to the tag / label panel (three-panel mode)
   /              Search plans
   T              Filter by tags
   Ctrl+L         Clear active search / tag filters
@@ -70,6 +70,12 @@ TAG PANEL (three-panel mode):
   n              Create a new tag
   Enter          Confirm new tag (while creating)
   Esc            Cancel new tag (while creating)
+
+LABEL PANEL (three-panel mode):
+  ↑/↓            Navigate sync labels (filters the plan list)
+                 Each label shows its source path beneath it
+  Tab            Switch to the plans list
+  /              Search plans
 
 MANAGE TAGS (m):
   Space          Toggle the selected tag on the plan
