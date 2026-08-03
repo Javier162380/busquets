@@ -89,7 +89,7 @@ var KnownSettings = []SettingDefinition{
 		Description:   "Markdown rendering theme",
 		Type:          claudeviewer.SettingTypeString,
 		Default:       claudeviewer.SettingValues{StringValue: new(claudeviewer.DefaultMarkdownTheme)},
-		AllowedValues: []string{claudeviewer.MarkdownThemeDark, claudeviewer.MarkdownThemeLight, claudeviewer.MarkdownThemeTokyoNight, claudeviewer.MarkdownThemeASCII, claudeviewer.MarkdownThemeDracula, claudeviewer.MarkdownThemeNoTTYStyle, claudeviewer.MarkdownThemeNoTTYStyle, claudeviewer.MarkdownThemePinkStyle},
+		AllowedValues: []string{claudeviewer.MarkdownThemeDark, claudeviewer.MarkdownThemeLight, claudeviewer.MarkdownThemeTokyoNight, claudeviewer.MarkdownThemeASCII, claudeviewer.MarkdownThemeDracula, claudeviewer.MarkdownThemeNoTTYStyle, claudeviewer.MarkdownThemePinkStyle},
 	},
 }
 
