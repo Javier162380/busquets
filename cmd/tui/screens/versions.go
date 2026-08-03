@@ -41,13 +41,13 @@ type VersionsScreen struct {
 }
 
 // NewVersionsScreen creates a new versions screen.
-func NewVersionsScreen(planName string, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
+func NewVersionsScreen(planName, markdownRenderedTheme string, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
 	panelWidth := (width - 3) / 2
 	contentHeight := height - 4
 
 	v := &VersionsScreen{
 		list:      components.NewList(nil, panelWidth, contentHeight, true),
-		viewer:    components.NewViewer(panelWidth, contentHeight),
+		viewer:    components.NewViewer(panelWidth, contentHeight, markdownRenderedTheme),
 		searchBar: components.NewSearchBar(panelWidth),
 		layout:    types.LayoutSplit,
 		focus:     types.FocusList,
@@ -68,14 +68,14 @@ func NewVersionsScreen(planName string, width, height int, isDarkModeEnabled, re
 }
 
 // NewVersionsScreenWithData creates a versions screen with pre-loaded data.
-func NewVersionsScreenWithData(planName string, versions []claudeviewer.PlanVersionDetail, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
-	s := NewVersionsScreen(planName, width, height, isDarkModeEnabled, renderMarkdownByDefault)
+func NewVersionsScreenWithData(planName, markdownRenderedTheme string, versions []claudeviewer.PlanVersionDetail, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
+	s := NewVersionsScreen(planName, markdownRenderedTheme, width, height, isDarkModeEnabled, renderMarkdownByDefault)
 	s.versions = versions
 	s.updateListItems()
 	if len(versions) > 0 {
 		s.current = &s.versions[0]
 		viewerWidth := s.getViewerWidth()
-		s.viewer.SetContent(content.NewVersionContent(s.current, isDarkModeEnabled, s.focus, viewerWidth))
+		s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 	}
 	return s
 }
@@ -103,7 +103,7 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		if len(s.versions) > 0 {
 			s.current = &s.versions[0]
 			viewerWidth := s.getViewerWidth()
-			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
+			s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 		}
 		return s, nil
 
@@ -113,6 +113,10 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 
 	case messages.RenderMarkDownByDefaultMsg:
 		s.RenderedMarkdownByDefault(msg.Enabled)
+		return s, nil
+
+	case messages.MarkdownRenderedThemeChangedMsg:
+		s.RenderedMarkdownTheme(msg.Theme)
 		return s, nil
 	}
 
@@ -185,7 +189,7 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 			s.focus = types.FocusContent
 			// Regenerate content with fullscreen width
 			viewerWidth := s.getViewerWidth()
-			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
+			s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 		}
 		return s, nil
 	case "R":
@@ -204,7 +208,7 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 			if version, ok := item.Data().(claudeviewer.PlanVersionDetail); ok {
 				s.current = &version
 				viewerWidth := s.getViewerWidth()
-				s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
+				s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 			}
 		}
 		return s, cmd
@@ -223,7 +227,7 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 		// Regenerate content with split view width
 		if s.current != nil {
 			viewerWidth := s.getViewerWidth()
-			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
+			s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 		}
 		return s, nil
 	case "tab":
@@ -366,7 +370,7 @@ func (s *VersionsScreen) UpdateDarkMode(enabled bool) {
 	// Regenerate current content with new theme
 	if s.current != nil {
 		viewerWidth := s.getViewerWidth()
-		s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
+		s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 	}
 }
 
@@ -378,10 +382,16 @@ func (s *VersionsScreen) RenderedMarkdownByDefault(enabled bool) {
 	}
 
 	if s.viewer.RenderMode() != renderMode {
-		viewerWidth := s.getViewerWidth()
 		s.viewer.SetRenderMode(renderMode)
-		s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth))
+		if s.current != nil {
+			s.viewer.SetContent(content.NewVersionContent(s.current, s.getViewerWidth()))
+		}
 	}
+}
+
+// RenderedMarkdownTheme modifies a markdown rendered theme.
+func (s *VersionsScreen) RenderedMarkdownTheme(theme string) {
+	s.viewer.SetMarkdownTheme(theme)
 }
 
 // getViewerWidth calculates the current viewer width based on layout.

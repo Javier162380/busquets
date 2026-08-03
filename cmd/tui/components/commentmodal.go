@@ -32,6 +32,7 @@ type CommentModal struct {
 	active          bool
 	darkModeEnabled bool
 	renderMarkdown  bool
+	markdownTheme   string
 }
 
 // NewCommentModal creates an inactive comment modal ready to be opened.
@@ -49,7 +50,7 @@ func NewCommentModal() *CommentModal {
 }
 
 // Open activates the modal for the given plan and populates it with comments.
-func (m *CommentModal) Open(fileName, syncSource string, comments []claudeviewer.Comment) {
+func (m *CommentModal) Open(fileName, syncSource, markdownTheme string, comments []claudeviewer.Comment) {
 	m.fileName = fileName
 	m.syncSource = syncSource
 	m.comments = comments
@@ -59,6 +60,13 @@ func (m *CommentModal) Open(fileName, syncSource string, comments []claudeviewer
 	m.input.Reset()
 	m.input.Focus()
 	m.confirm.Close()
+	m.markdownTheme = markdownTheme
+	m.refreshViewport()
+}
+
+// SetMarkdownTheme updates the theme used to render comment bodies and re-renders.
+func (m *CommentModal) SetMarkdownTheme(theme string) {
+	m.markdownTheme = theme
 	m.refreshViewport()
 }
 
@@ -296,7 +304,7 @@ func (m *CommentModal) refreshViewport() {
 
 		var body string
 		if m.renderMarkdown {
-			body = strings.TrimSpace(content.RenderMarkdown(c.Content, m.darkModeEnabled, maxWidth))
+			body = strings.TrimSpace(content.RenderMarkdown(c.Content, m.markdownTheme, maxWidth))
 		} else {
 			body = lipgloss.NewStyle().Width(maxWidth).Render(c.Content)
 		}

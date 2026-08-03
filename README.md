@@ -51,8 +51,8 @@ Claude Plan Viewer provides a centralized solution for managing Claude Code plan
 - **Automatic Migrations**: Database schema managed automatically
 
 ### Additional Features
-- **Connector System**: Extensible notification system (includes Telegram integration)
-- **Markdown Rendering**: Beautiful plan display with code syntax highlighting
+- **Connector System**: Extensible plugin system with two roles — a *transmit* connector for sending plans out (Telegram) and a *summary* connector for generating plan TL;DRs (Ollama, against a local LLM)
+- **Markdown Rendering**: Beautiful plan display with code syntax highlighting and a selectable colour theme
 - **Pagination**: Efficient browsing of large plan collections
 
 ## Prerequisites
@@ -231,10 +231,22 @@ DEBUG=1 ./bin/plan-viewer tui
 - Real-time search
 - Version viewing
 - Settings configuration
-- Connector management (Telegram notifications)
+- Connector management (Telegram notifications, Ollama summaries)
 - Watch mode with automatic sync
 
 **Keyboard Shortcuts:** Press `?` in the TUI for help.
+
+#### Markdown Rendering
+
+Press `r` in the content pane to switch between raw markdown and rendered
+markdown, or set `render_markdown_by_default` in the settings screen to start in
+rendered mode.
+
+The `markdown_theme` setting picks the colour theme used for rendered markdown —
+`dark`, `light`, `tokyo-night` (default), `ascii`, `dracula`, or `pink`. It
+applies to plan content, version content, comments, and TL;DR summaries. The
+theme only affects rendered markdown, so it has no visible effect while the
+viewer is in raw mode.
 
 ### MCP Server
 
@@ -316,6 +328,7 @@ claude-plan-viewer/
     ├── config/                 # Configuration management
     ├── storage/                # Database setup & migrations
     └── connectors/             # Notification connectors
+        ├── ollama/             # Local LLM summaries
         └── telegram/           # Telegram integration
 ```
 
@@ -344,7 +357,7 @@ claude-plan-viewer/
 **Connectors** (`internal/connectors/`)
 - Extensible notification system
 - Plugin-style architecture
-- Currently supports Telegram
+- Telegram (transmit role) and Ollama (summary role)
 
 ## Development
 

@@ -46,6 +46,15 @@ func (a *App) handleRenderMarkdownChanged(msg messages.RenderMarkDownByDefaultMs
 	return a, nil
 }
 
+func (a *App) handleMarkdownRenderedThemeChanged(msg messages.MarkdownRenderedThemeChangedMsg) (tea.Model, tea.Cmd) {
+	a.markdownRenderedTheme = msg.Theme
+	for i, screen := range a.stack {
+		updated, _ := screen.Update(msg)
+		a.stack[i] = updated
+	}
+	return a, nil
+}
+
 func (a *App) handleDisplayModeChanged(msg messages.DisplayModeChangedMsg) (tea.Model, tea.Cmd) {
 	a.displayMode = msg.Mode
 	for _, screen := range a.stack {

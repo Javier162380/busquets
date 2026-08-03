@@ -21,23 +21,25 @@ const (
 
 // Viewer displays scrollable content.
 type Viewer struct {
-	viewport   viewport.Model
-	content    content.Displayable
-	renderMode RenderMode
-	width      int
-	height     int
+	viewport      viewport.Model
+	content       content.Displayable
+	renderMode    RenderMode
+	markdownTheme string
+	width         int
+	height        int
 }
 
 // NewViewer creates a new viewer component.
-func NewViewer(width, height int) *Viewer {
+func NewViewer(width, height int, markdownRenderedTheme string) *Viewer {
 	vp := viewport.New(width, height)
 	vp.SetContent("")
 
 	return &Viewer{
-		viewport:   vp,
-		width:      width,
-		height:     height,
-		renderMode: RenderModeRaw,
+		viewport:      vp,
+		width:         width,
+		height:        height,
+		renderMode:    RenderModeRaw,
+		markdownTheme: markdownRenderedTheme,
 	}
 }
 
@@ -47,12 +49,16 @@ func (v *Viewer) SetContent(c content.Displayable) {
 	v.updateViewportContent()
 }
 
-func (v *Viewer) SetRenderMode(m RenderMode) {
-	v.renderMode = m
-}
+func (v *Viewer) SetRenderMode(m RenderMode) { v.renderMode = m }
 
 func (v *Viewer) GetRenderMode() RenderMode {
 	return v.renderMode
+}
+
+// SetMarkdownTheme changes the glamour theme and re-renders.
+func (v *Viewer) SetMarkdownTheme(theme string) {
+	v.markdownTheme = theme
+	v.updateViewportContent()
 }
 
 // SetSize updates the viewer dimensions.
@@ -143,7 +149,7 @@ func (v *Viewer) updateViewportContent() {
 	// Add content based on render mode.
 	var contentText string
 	if v.renderMode == RenderModeGlamour {
-		contentText = stripHTMLTags(v.content.GetRenderedHTML())
+		contentText = stripHTMLTags(v.content.GetRenderedHTML(v.markdownTheme))
 	} else {
 		contentText = v.content.GetContent()
 	}
