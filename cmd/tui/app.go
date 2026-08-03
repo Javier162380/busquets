@@ -37,6 +37,7 @@ type App struct {
 	isDarkModeEnabled       bool
 	renderMarkDownByDefault bool
 	displayMode             string
+	markdownRenderedTheme   string
 }
 
 // New creates a new TUI application.
@@ -78,8 +79,14 @@ func (a *App) Init() tea.Cmd {
 	}
 	a.displayMode = displayMode
 
+	setting, exists, _ = a.service.GetSetting(a.ctx, claudeviewer.SettingMarkdownTheme)
+	markdownRenderedTheme := claudeviewer.DefaultMarkdownTheme
+	if exists && setting.IsString() {
+		markdownRenderedTheme = setting.GetStringValue()
+	}
+
 	// Create initial plans screen.
-	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault, displayMode == claudeviewer.DisplayModePlanContent, displayMode)
+	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault, displayMode == claudeviewer.DisplayModePlanContent, displayMode, markdownRenderedTheme)
 	a.stack = append(a.stack, plansScreen)
 
 	// Start watching for watch results and load initial plans.
@@ -217,6 +224,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleThemeChanged(msg)
 	case messages.RenderMarkDownByDefaultMsg:
 		return a.handleRenderMarkdownChanged(msg)
+	case messages.MarkdownRenderedThemeChangedMsg:
+		return a.handleMarkdownRenderedThemeChanged(msg)
 	case messages.DisplayModeChangedMsg:
 		return a.handleDisplayModeChanged(msg)
 	case messages.PlansSortKeyChangedMsg, messages.PlansSortDirChangedMsg:
@@ -351,7 +360,7 @@ func (a *App) popScreen() tea.Cmd { //nolint:unparam // ok for now.
 }
 
 func (a *App) pushVersionsScreenWithData(planName string, versions []claudeviewer.PlanVersionDetail) tea.Cmd {
-	versionsScreen := screens.NewVersionsScreenWithData(planName, versions, a.width, a.height, a.isDarkModeEnabled, a.renderMarkDownByDefault)
+	versionsScreen := screens.NewVersionsScreenWithData(planName, a.markdownRenderedTheme, versions, a.width, a.height, a.isDarkModeEnabled, a.renderMarkDownByDefault)
 	a.stack = append(a.stack, versionsScreen)
 	return versionsScreen.Init()
 }

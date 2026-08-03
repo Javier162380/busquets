@@ -44,11 +44,12 @@ type PlanContent struct {
 	darkModeEnabled bool
 	focus           types.Focus
 	width           int
+	markdownTheme   string
 }
 
 // NewPlanContent creates a new PlanContent from a PlanDetail.
-func NewPlanContent(plan *claudeviewer.PlanDetail, darkModeEnabled bool, focus types.Focus, width int) *PlanContent {
-	return &PlanContent{PlanDetail: plan, darkModeEnabled: darkModeEnabled, focus: focus, width: width}
+func NewPlanContent(plan *claudeviewer.PlanDetail, darkModeEnabled bool, focus types.Focus, width int, markdownTheme string) *PlanContent {
+	return &PlanContent{PlanDetail: plan, darkModeEnabled: darkModeEnabled, focus: focus, width: width, markdownTheme: markdownTheme}
 }
 
 func (p *PlanContent) GetTitle() string {
@@ -60,7 +61,7 @@ func (p *PlanContent) GetContent() string {
 }
 
 func (p *PlanContent) GetRenderedHTML() string {
-	return renderMarkdown(p.Content, p.darkModeEnabled, p.width)
+	return renderMarkdown(p.Content, p.markdownTheme, p.width)
 }
 
 func (p *PlanContent) GetReadingTime() int {
@@ -92,11 +93,12 @@ type VersionContent struct {
 	darkModeEnabled bool
 	focus           types.Focus
 	width           int
+	markdownTheme   string
 }
 
 // NewVersionContent creates a new VersionContent from a PlanVersionDetail.
-func NewVersionContent(version *claudeviewer.PlanVersionDetail, darkModeEnabled bool, focus types.Focus, width int) *VersionContent {
-	return &VersionContent{PlanVersionDetail: version, darkModeEnabled: darkModeEnabled, focus: focus, width: width}
+func NewVersionContent(version *claudeviewer.PlanVersionDetail, darkModeEnabled bool, focus types.Focus, width int, markdownTheme string) *VersionContent {
+	return &VersionContent{PlanVersionDetail: version, darkModeEnabled: darkModeEnabled, focus: focus, width: width, markdownTheme: markdownTheme}
 }
 
 func (v *VersionContent) GetTitle() string {
@@ -108,7 +110,7 @@ func (v *VersionContent) GetContent() string {
 }
 
 func (v *VersionContent) GetRenderedHTML() string {
-	return renderMarkdown(v.Content, v.darkModeEnabled, v.width)
+	return renderMarkdown(v.Content, v.markdownTheme, v.width)
 }
 
 func (v *VersionContent) GetReadingTime() int {
@@ -134,22 +136,18 @@ func (v *VersionContent) GetIdentifier() string {
 }
 
 // RenderMarkdown renders markdown text using glamour with the current theme.
-func RenderMarkdown(content string, darkModeEnabled bool, width int) string {
-	return renderMarkdown(content, darkModeEnabled, width)
+func RenderMarkdown(content, markdownTheme string, width int) string {
+	return renderMarkdown(content, markdownTheme, width)
 }
 
-func renderMarkdown(content string, darkModeEnabled bool, width int) string {
-	style := GlamourDarkMode
-	if darkModeEnabled {
-		style = GlamourTokyoMode
-	}
+func renderMarkdown(content, markdownTheme string, width int) string {
 	// Use the actual width provided, or default to 40 if width is too small
 	wordWidth := width
 	if wordWidth < 40 {
 		wordWidth = 40
 	}
 	r, _ := glamour.NewTermRenderer(
-		glamour.WithStandardStyle(style),
+		glamour.WithStandardStyle(markdownTheme),
 		glamour.WithWordWrap(wordWidth),
 	)
 	rendered, _ := r.Render(content)

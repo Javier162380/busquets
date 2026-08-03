@@ -84,6 +84,13 @@ var KnownSettings = []SettingDefinition{
 		Default:       claudeviewer.SettingValues{StringValue: new(claudeviewer.DefaultClipboardMode)},
 		AllowedValues: []string{claudeviewer.ClipboardModeAuto, claudeviewer.ClipboardModeNative, claudeviewer.ClipboardModeOSC52},
 	},
+	{
+		Name:          claudeviewer.SettingMarkdownTheme,
+		Description:   "Markdown rendering theme",
+		Type:          claudeviewer.SettingTypeString,
+		Default:       claudeviewer.SettingValues{StringValue: new(claudeviewer.DefaultMarkdownTheme)},
+		AllowedValues: []string{claudeviewer.MarkdownThemeDark, claudeviewer.MarkdownThemeLight, claudeviewer.MarkdownThemeTokyoNight, claudeviewer.MarkdownThemeASCII, claudeviewer.MarkdownThemeDracula, claudeviewer.MarkdownThemeNoTTYStyle, claudeviewer.MarkdownThemeNoTTYStyle, claudeviewer.MarkdownThemePinkStyle},
+	},
 }
 
 type SettingItem struct {
@@ -179,6 +186,12 @@ func (s *SettingsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				newVal = *s.settings[s.cursor].Value.StringValue
 			}
 			return s, func() tea.Msg { return messages.PlansSortDirChangedMsg{SortDir: newVal} }
+		case claudeviewer.SettingMarkdownTheme:
+			newVal := claudeviewer.DefaultMarkdownTheme
+			if s.settings[s.cursor].Value.StringValue != nil {
+				newVal = *s.settings[s.cursor].Value.StringValue
+			}
+			return s, func() tea.Msg { return messages.MarkdownRenderedThemeChangedMsg{Theme: newVal} }
 		}
 
 		return s, nil

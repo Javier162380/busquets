@@ -8,6 +8,8 @@ import (
 	planviewer "github.com/Javier162380/claude-plan-viewer"
 	"github.com/Javier162380/claude-plan-viewer/internal/clipboard"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+
+	"charm.land/glamour/v2/styles"
 )
 
 // Setting type constants.
@@ -30,6 +32,7 @@ const (
 	SettingPlansSortDir            = "plans_sort_dir"
 	SettingSearchOver              = "search_over"
 	SettingClipboardMode           = "clipboard_mode"
+	SettingMarkdownTheme           = "markdown_theme"
 )
 
 // Clipboard mode values for SettingClipboardMode. These mirror the modes in
@@ -74,6 +77,17 @@ const (
 	SortDirDesc    = "desc"
 	SortDirAsc     = "asc"
 	DefaultSortDir = SortDirDesc
+)
+
+const (
+	MarkdownThemeDark       = styles.DarkStyle
+	MarkdownThemeLight      = styles.LightStyle
+	MarkdownThemeDracula    = styles.DraculaStyle
+	MarkdownThemeTokyoNight = styles.TokyoNightStyle
+	MarkdownThemeNoTTYStyle = styles.NoTTYStyle
+	MarkdownThemePinkStyle  = styles.PinkStyle
+	MarkdownThemeASCII      = styles.AsciiStyle
+	DefaultMarkdownTheme    = MarkdownThemeTokyoNight
 )
 
 // sortKeyToColumn maps a sort key setting value to the corresponding DB column name.

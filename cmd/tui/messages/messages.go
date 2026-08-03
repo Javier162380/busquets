@@ -351,6 +351,8 @@ type PlansSortKeyChangedMsg struct{ SortKey string }
 // PlansSortDirChangedMsg signals a plans sort direction change.
 type PlansSortDirChangedMsg struct{ SortDir string }
 
+type MarkdownRenderedThemeChangedMsg struct{ Theme string }
+
 // WatchModeApplyMsg signals that the watcher should be started or stopped.
 type WatchModeApplyMsg struct {
 	Enabled  bool
