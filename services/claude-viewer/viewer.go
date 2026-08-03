@@ -1,7 +1,6 @@
 package claudeviewer
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -24,22 +23,8 @@ func (s *Service) GetPlanByFileName(ctx context.Context, fileName, syncSource st
 	return &plan, nil
 }
 
-func (s *Service) RenderMarkdown(content string) (string, error) {
-	var buf bytes.Buffer
-	if err := s.markdownHTMLRendered.Convert([]byte(content), &buf); err != nil {
-		return "", fmt.Errorf("failed to render markdown: %w", err)
-	}
-
-	return buf.String(), nil
-}
-
 func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName, syncSource string) (*PlanDetail, error) {
 	plan, err := s.GetPlanByFileName(ctx, fileName, syncSource)
-	if err != nil {
-		return nil, err
-	}
-
-	renderedHTML, err := s.RenderMarkdown(plan.Content)
 	if err != nil {
 		return nil, err
 	}
@@ -60,9 +45,8 @@ func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName, syncSou
 			ReadingTime: readingTime,
 			Tags:        toTags(plan.Tags),
 		},
-		FilePath:     plan.FilePath,
-		Content:      plan.Content,
-		RenderedHTML: renderedHTML,
+		FilePath: plan.FilePath,
+		Content:  plan.Content,
 	}, nil
 }
 

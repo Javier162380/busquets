@@ -64,6 +64,7 @@ type PlansScreen struct {
 
 	// Theme
 	isDarkModeEnabled bool
+	markdownTheme     string
 }
 
 // NewPlansScreen creates a new plans screen.
@@ -90,6 +91,7 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(styles.BorderColor),
 		isDarkModeEnabled: isDarkModeEnabled,
+		markdownTheme:     markdownRenderedTheme,
 	}
 
 	if renderMarkdownByDefault {
@@ -200,7 +202,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case messages.PlanDetailLoadedMsg:
 		s.current = msg.Detail
 		viewerWidth := s.getViewerWidth()
-		s.viewer.SetContent(content.NewPlanContent(msg.Detail, s.isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
+		s.viewer.SetContent(content.NewPlanContent(msg.Detail, viewerWidth))
 		s.editor.SetContent(msg.Detail.Content)
 		return s, nil
 
@@ -221,7 +223,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.tldrTitle = msg.PlanTitle
 		s.tldrSummary = msg.Summary
 		s.tldrViewport = viewport.New(popupWidth-4, popupHeight-4)
-		rendered := content.RenderMarkdown(msg.Summary, s.viewer.GetMarkdownTheme(), popupWidth-4)
+		rendered := content.RenderMarkdown(msg.Summary, s.markdownTheme, popupWidth-4)
 		s.tldrViewport.SetContent(rendered)
 		s.activeModal = types.ModalTLDR
 		return s, nil
@@ -532,7 +534,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 			s.focus = types.FocusContent
 			// Regenerate content with fullscreen width
 			viewerWidth := s.getViewerWidth()
-			s.viewer.SetContent(content.NewPlanContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
+			s.viewer.SetContent(content.NewPlanContent(s.current, viewerWidth))
 		}
 		return s, nil
 
@@ -678,7 +680,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 			// Regenerate content with split view width
 			if s.current != nil {
 				viewerWidth := s.getViewerWidth()
-				s.viewer.SetContent(content.NewPlanContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
+				s.viewer.SetContent(content.NewPlanContent(s.current, viewerWidth))
 			}
 		} else {
 			s.focus = types.FocusList
@@ -964,7 +966,7 @@ func (s *PlansScreen) handleCommentModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
 		if s.commentModal.IsActive() {
 			s.commentModal.SetComments(msg.Comments)
 		} else {
-			s.commentModal.Open(msg.FileName, msg.SyncSource, s.viewer.GetMarkdownTheme(), msg.Comments)
+			s.commentModal.Open(msg.FileName, msg.SyncSource, s.markdownTheme, msg.Comments)
 		}
 		return s, nil
 	case messages.AddCommentMsg, messages.DeleteCommentMsg:
@@ -1268,7 +1270,7 @@ func (s *PlansScreen) UpdateDarkMode(enabled bool) {
 	s.commentModal.SetDarkMode(enabled)
 	if s.current != nil {
 		viewerWidth := s.getViewerWidth()
-		s.viewer.SetContent(content.NewPlanContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
+		s.viewer.SetContent(content.NewPlanContent(s.current, viewerWidth))
 	}
 }
 
@@ -1282,19 +1284,18 @@ func (s *PlansScreen) RenderedMarkdownByDefault(enabled bool) {
 	s.commentModal.SetRenderMarkdown(enabled)
 
 	if s.viewer.RenderMode() != renderMode {
-		viewerWidth := s.getViewerWidth()
 		s.viewer.SetRenderMode(renderMode)
-		s.viewer.SetContent(content.NewPlanContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
+		if s.current != nil {
+			s.viewer.SetContent(content.NewPlanContent(s.current, s.getViewerWidth()))
+		}
 	}
 }
 
 // RenderedMarkdownTheme updates the markdown theme.
 func (s *PlansScreen) RenderedMarkdownTheme(theme string) {
+	s.markdownTheme = theme
 	s.viewer.SetMarkdownTheme(theme)
-	if s.current != nil {
-		viewerWidth := s.getViewerWidth()
-		s.viewer.SetContent(content.NewPlanContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
-	}
+	s.commentModal.SetMarkdownTheme(theme)
 }
 
 // getViewerWidth calculates the current viewer width based on layout.

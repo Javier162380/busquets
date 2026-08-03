@@ -61,7 +61,7 @@ Service → ConnectorManager → Registry + SettingGetter
     ConfigurableConnector (LoadConfig for dynamic settings)
 ```
 
-**Implementations**: Telegram connector stores settings in database, loaded via `SettingGetter`.
+**Implementations**: Telegram (transmit role — sends plans out) and Ollama (summary role — generates TL;DRs via a local LLM). Both store their settings in the database, loaded via `SettingGetter`.
 
 ### Dynamic SQL (go-sqlbuilder)
 
@@ -91,7 +91,10 @@ Central orchestrator with injected dependencies:
 - `db dto.Repository` - database operations
 - `connectorManager *connectors.Manager` - notifications
 - `nowProvider NowProvider` - testable time injection
-- `markdown goldmark.Markdown` - rendering
+- `clipboard clipboard.Clipboard` - testable clipboard writes
+
+Markdown rendering is **not** a service concern. The service returns raw
+`Content`; the TUI renders it with glamour in `cmd/tui/content`.
 
 ## Project Structure
 

@@ -60,8 +60,14 @@ func (m *CommentModal) Open(fileName, syncSource, markdownTheme string, comments
 	m.input.Reset()
 	m.input.Focus()
 	m.confirm.Close()
-	m.refreshViewport()
 	m.markdownTheme = markdownTheme
+	m.refreshViewport()
+}
+
+// SetMarkdownTheme updates the theme used to render comment bodies and re-renders.
+func (m *CommentModal) SetMarkdownTheme(theme string) {
+	m.markdownTheme = theme
+	m.refreshViewport()
 }
 
 // Close deactivates the modal.

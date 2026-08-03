@@ -17,10 +17,6 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
 	"github.com/Javier162380/claude-plan-viewer/internal/nowprovider"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
-
-	"github.com/yuin/goldmark"
-	"github.com/yuin/goldmark/extension"
-	"github.com/yuin/goldmark/renderer/html"
 )
 
 const (
@@ -30,17 +26,16 @@ const (
 
 // Service represents the Claude Plan Viewer service.
 type Service struct {
-	db                   dto.Repository
-	viewerDir            string
-	sourcePlansDirs      []config.SyncDir
-	indexFullContent     bool
-	markdownHTMLRendered goldmark.Markdown
-	nowProvider          nowprovider.NowProvider
-	connectorManager     *connectors.Manager
-	watchManager         *WatchManager
-	summaryCache         *cache.MuxCache[string]
-	logger               *slog.Logger
-	clipboard            clipboard.Clipboard
+	db               dto.Repository
+	viewerDir        string
+	sourcePlansDirs  []config.SyncDir
+	indexFullContent bool
+	nowProvider      nowprovider.NowProvider
+	connectorManager *connectors.Manager
+	watchManager     *WatchManager
+	summaryCache     *cache.MuxCache[string]
+	logger           *slog.Logger
+	clipboard        clipboard.Clipboard
 }
 
 // SetLogger replaces the logger used for non-fatal internal warnings.
@@ -63,21 +58,15 @@ func (s *Service) DB() dto.Repository {
 // New creates a new Claude Plan Viewer service instance.
 // The db parameter must implement dto.Repository (sqlite.Repository or postgres.Repository).
 func New(db dto.Repository, viewerDir string, syncDirs []config.SyncDir, indexFullContent bool) (*Service, error) {
-	md := goldmark.New(
-		goldmark.WithExtensions(extension.GFM),
-		goldmark.WithRendererOptions(html.WithUnsafe()),
-	)
-
 	svc := &Service{
-		db:                   db,
-		viewerDir:            viewerDir,
-		sourcePlansDirs:      syncDirs,
-		indexFullContent:     indexFullContent,
-		markdownHTMLRendered: md,
-		nowProvider:          nowprovider.SystemTimeProvider{},
-		summaryCache:         cache.New[string](summaryCacheTTL, summaryCacheGCPeriod),
-		logger:               slog.New(slog.NewTextHandler(io.Discard, nil)),
-		clipboard:            clipboard.SystemClipboard{},
+		db:               db,
+		viewerDir:        viewerDir,
+		sourcePlansDirs:  syncDirs,
+		indexFullContent: indexFullContent,
+		nowProvider:      nowprovider.SystemTimeProvider{},
+		summaryCache:     cache.New[string](summaryCacheTTL, summaryCacheGCPeriod),
+		logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
+		clipboard:        clipboard.SystemClipboard{},
 	}
 
 	// Initialize watch manager

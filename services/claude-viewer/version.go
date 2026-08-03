@@ -95,16 +95,10 @@ func (s *Service) GetPlanVersionHistory(ctx context.Context, planName, syncSourc
 			WordCount:     version.WordCount,
 			CreatedAt:     version.CreatedAt,
 		}
-		renderedHTML, err := s.RenderMarkdown(version.Content)
-		if err != nil {
-			return nil, err
-		}
-
 		planVersionsDetail[i] = PlanVersionDetail{
-			PlanVersion:  planVersion,
-			RenderedHTML: renderedHTML,
-			ReadingTime:  s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM),
-			Tags:         toTags(tags),
+			PlanVersion: planVersion,
+			ReadingTime: s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM),
+			Tags:        toTags(tags),
 		}
 	}
 
@@ -128,11 +122,6 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName, syncSource strin
 		return nil, fmt.Errorf("failed to get plan tags: %w", err)
 	}
 
-	renderedHTML, err := s.RenderMarkdown(version.Content)
-	if err != nil {
-		return nil, err
-	}
-
 	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
 	readingTime := s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM)
 
@@ -147,10 +136,9 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName, syncSource strin
 	}
 
 	return &PlanVersionDetail{
-		PlanVersion:  planVersion,
-		RenderedHTML: renderedHTML,
-		ReadingTime:  readingTime,
-		Tags:         toTags(tags),
+		PlanVersion: planVersion,
+		ReadingTime: readingTime,
+		Tags:        toTags(tags),
 	}, nil
 }
 
@@ -351,16 +339,10 @@ func (s *Service) SearchVersions(ctx context.Context, planName, syncSource, quer
 			WordCount:     version.WordCount,
 			CreatedAt:     version.CreatedAt,
 		}
-		renderedHTML, err := s.RenderMarkdown(version.Content)
-		if err != nil {
-			return nil, err
-		}
-
 		planVersionsDetail[i] = PlanVersionDetail{
-			PlanVersion:  planVersion,
-			RenderedHTML: renderedHTML,
-			ReadingTime:  s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM),
-			Tags:         toTags(tags),
+			PlanVersion: planVersion,
+			ReadingTime: s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM),
+			Tags:        toTags(tags),
 		}
 	}
 

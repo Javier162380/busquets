@@ -84,6 +84,7 @@ func (a *App) Init() tea.Cmd {
 	if exists && setting.IsString() {
 		markdownRenderedTheme = setting.GetStringValue()
 	}
+	a.markdownRenderedTheme = markdownRenderedTheme
 
 	// Create initial plans screen.
 	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault, displayMode == claudeviewer.DisplayModePlanContent, displayMode, markdownRenderedTheme)

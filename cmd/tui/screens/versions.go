@@ -75,7 +75,7 @@ func NewVersionsScreenWithData(planName, markdownRenderedTheme string, versions 
 	if len(versions) > 0 {
 		s.current = &s.versions[0]
 		viewerWidth := s.getViewerWidth()
-		s.viewer.SetContent(content.NewVersionContent(s.current, isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
+		s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 	}
 	return s
 }
@@ -103,7 +103,7 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		if len(s.versions) > 0 {
 			s.current = &s.versions[0]
 			viewerWidth := s.getViewerWidth()
-			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
+			s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 		}
 		return s, nil
 
@@ -189,7 +189,7 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 			s.focus = types.FocusContent
 			// Regenerate content with fullscreen width
 			viewerWidth := s.getViewerWidth()
-			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
+			s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 		}
 		return s, nil
 	case "R":
@@ -208,7 +208,7 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 			if version, ok := item.Data().(claudeviewer.PlanVersionDetail); ok {
 				s.current = &version
 				viewerWidth := s.getViewerWidth()
-				s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
+				s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 			}
 		}
 		return s, cmd
@@ -227,7 +227,7 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 		// Regenerate content with split view width
 		if s.current != nil {
 			viewerWidth := s.getViewerWidth()
-			s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
+			s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 		}
 		return s, nil
 	case "tab":
@@ -370,7 +370,7 @@ func (s *VersionsScreen) UpdateDarkMode(enabled bool) {
 	// Regenerate current content with new theme
 	if s.current != nil {
 		viewerWidth := s.getViewerWidth()
-		s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
+		s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 	}
 }
 
@@ -382,20 +382,16 @@ func (s *VersionsScreen) RenderedMarkdownByDefault(enabled bool) {
 	}
 
 	if s.viewer.RenderMode() != renderMode {
-		viewerWidth := s.getViewerWidth()
 		s.viewer.SetRenderMode(renderMode)
-		s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
+		if s.current != nil {
+			s.viewer.SetContent(content.NewVersionContent(s.current, s.getViewerWidth()))
+		}
 	}
 }
 
 // RenderedMarkdownTheme modifies a markdown rendered theme.
 func (s *VersionsScreen) RenderedMarkdownTheme(theme string) {
 	s.viewer.SetMarkdownTheme(theme)
-
-	if s.current != nil {
-		viewerWidth := s.getViewerWidth()
-		s.viewer.SetContent(content.NewVersionContent(s.current, s.isDarkModeEnabled, s.focus, viewerWidth, s.viewer.GetMarkdownTheme()))
-	}
 }
 
 // getViewerWidth calculates the current viewer width based on layout.

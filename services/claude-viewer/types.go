@@ -51,9 +51,8 @@ type PlanDetail struct {
 	// FilePath is the absolute path of the plan's mirror copy in the viewer
 	// directory (as stored in the DB). Used by delete so the caller sends the
 	// authoritative path rather than the service re-deriving it.
-	FilePath     string
-	Content      string
-	RenderedHTML string
+	FilePath string
+	Content  string
 }
 
 // SettingValues holds all possible value types for a setting.
@@ -76,9 +75,8 @@ type PlanVersion struct {
 
 type PlanVersionDetail struct {
 	PlanVersion
-	ReadingTime  int
-	RenderedHTML string
-	Tags         []Tag
+	ReadingTime int
+	Tags        []Tag
 }
 
 func CalculateReadingTime(wordCount int) int {

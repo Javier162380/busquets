@@ -55,9 +55,11 @@ func (v *Viewer) GetRenderMode() RenderMode {
 	return v.renderMode
 }
 
-func (v *Viewer) SetMarkdownTheme(s string) { v.markdownTheme = s }
-
-func (v *Viewer) GetMarkdownTheme() string { return v.markdownTheme }
+// SetMarkdownTheme changes the glamour theme and re-renders.
+func (v *Viewer) SetMarkdownTheme(theme string) {
+	v.markdownTheme = theme
+	v.updateViewportContent()
+}
 
 // SetSize updates the viewer dimensions.
 func (v *Viewer) SetSize(width, height int) {
@@ -147,7 +149,7 @@ func (v *Viewer) updateViewportContent() {
 	// Add content based on render mode.
 	var contentText string
 	if v.renderMode == RenderModeGlamour {
-		contentText = stripHTMLTags(v.content.GetRenderedHTML())
+		contentText = stripHTMLTags(v.content.GetRenderedHTML(v.markdownTheme))
 	} else {
 		contentText = v.content.GetContent()
 	}

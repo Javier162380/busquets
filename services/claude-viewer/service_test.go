@@ -90,15 +90,6 @@ And a list:
 - Item 1
 - Item 2
 - Item 3`
-
-	sampleMarkdownTable = `# Plan with Table
-
-| Header 1 | Header 2 |
-|----------|----------|
-| Cell 1   | Cell 2   |
-| Cell 3   | Cell 4   |
-
-Some ~~strikethrough~~ text.`
 )
 
 // newServiceFromRepo creates a Service from an existing repository.
@@ -350,63 +341,6 @@ func TestUtilityFunctions(t *testing.T) {
 		content := "## Second Level\n\nContent"
 		title := extractTitle(content)
 		require.Equal(t, "Untitled Plan", title)
-	})
-}
-
-func TestMarkdownRendering(t *testing.T) {
-	for _, b := range registeredBackends {
-		t.Run(b.name, func(t *testing.T) {
-			service, _, _, cleanup := b.setupFn(t)
-			defer cleanup()
-			testMarkdownRendering(t, service)
-		})
-	}
-}
-
-func testMarkdownRendering(t *testing.T, service *Service) {
-	t.Helper()
-
-	t.Run("RenderMarkdown renders plain text", func(t *testing.T) {
-		html, err := service.RenderMarkdown("Hello world")
-		require.NoError(t, err)
-		require.Contains(t, html, "Hello world")
-	})
-
-	t.Run("RenderMarkdown renders headings", func(t *testing.T) {
-		html, err := service.RenderMarkdown("# Heading 1\n## Heading 2")
-		require.NoError(t, err)
-		require.Contains(t, html, "<h1>Heading 1</h1>")
-		require.Contains(t, html, "<h2>Heading 2</h2>")
-	})
-
-	t.Run("RenderMarkdown renders lists", func(t *testing.T) {
-		markdown := "- Item 1\n- Item 2\n- Item 3"
-		html, err := service.RenderMarkdown(markdown)
-		require.NoError(t, err)
-		require.Contains(t, html, "<ul>")
-		require.Contains(t, html, "<li>Item 1</li>")
-		require.Contains(t, html, "<li>Item 2</li>")
-	})
-
-	t.Run("RenderMarkdown renders code blocks", func(t *testing.T) {
-		html, err := service.RenderMarkdown(sampleMarkdownWithCode)
-		require.NoError(t, err)
-		require.Contains(t, html, "<code")
-		require.Contains(t, html, "main()")
-	})
-
-	t.Run("RenderMarkdown handles GFM tables", func(t *testing.T) {
-		html, err := service.RenderMarkdown(sampleMarkdownTable)
-		require.NoError(t, err)
-		require.Contains(t, html, "<table>")
-		require.Contains(t, html, "<th>Header 1</th>")
-		require.Contains(t, html, "<td>Cell 1</td>")
-	})
-
-	t.Run("RenderMarkdown handles GFM strikethrough", func(t *testing.T) {
-		html, err := service.RenderMarkdown(sampleMarkdownTable)
-		require.NoError(t, err)
-		require.Contains(t, html, "<del>strikethrough</del>")
 	})
 }
 
@@ -912,7 +846,7 @@ func testPlanRetrieval(t *testing.T, setup serviceSetupFn) {
 		require.Error(t, err)
 	})
 
-	t.Run("GetPlanDetailByFileName returns plan with rendered HTML", func(t *testing.T) {
+	t.Run("GetPlanDetailByFileName returns plan detail", func(t *testing.T) {
 		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
 		ctx := context.Background()
@@ -925,8 +859,7 @@ func testPlanRetrieval(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, err)
 		require.NotNil(t, detail)
 		require.Equal(t, "Test Plan", detail.Title)
-		require.Contains(t, detail.RenderedHTML, "<h1>Test Plan</h1>")
-		require.Contains(t, detail.RenderedHTML, "<h2>Section 1</h2>")
+		require.Equal(t, sampleMarkdown, detail.Content)
 		require.Greater(t, detail.ReadingTime, 0)
 	})
 

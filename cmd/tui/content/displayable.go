@@ -6,15 +6,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
 	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
 
 	"charm.land/glamour/v2"
-)
-
-const (
-	GlamourDarkMode  = "dark"
-	GlamourTokyoMode = "tokyo-night"
 )
 
 // Displayable is the interface for content that can be displayed in the viewer.
@@ -22,7 +16,7 @@ const (
 type Displayable interface {
 	GetTitle() string
 	GetContent() string
-	GetRenderedHTML() string
+	GetRenderedHTML(markdownTheme string) string
 	GetReadingTime() int
 	GetMetadata() Metadata
 	GetIdentifier() string
@@ -41,15 +35,12 @@ type Metadata struct {
 // PlanContent wraps PlanDetail to implement Displayable.
 type PlanContent struct {
 	*claudeviewer.PlanDetail
-	darkModeEnabled bool
-	focus           types.Focus
-	width           int
-	markdownTheme   string
+	width int
 }
 
 // NewPlanContent creates a new PlanContent from a PlanDetail.
-func NewPlanContent(plan *claudeviewer.PlanDetail, darkModeEnabled bool, focus types.Focus, width int, markdownTheme string) *PlanContent {
-	return &PlanContent{PlanDetail: plan, darkModeEnabled: darkModeEnabled, focus: focus, width: width, markdownTheme: markdownTheme}
+func NewPlanContent(plan *claudeviewer.PlanDetail, width int) *PlanContent {
+	return &PlanContent{PlanDetail: plan, width: width}
 }
 
 func (p *PlanContent) GetTitle() string {
@@ -60,8 +51,8 @@ func (p *PlanContent) GetContent() string {
 	return p.Content
 }
 
-func (p *PlanContent) GetRenderedHTML() string {
-	return renderMarkdown(p.Content, p.markdownTheme, p.width)
+func (p *PlanContent) GetRenderedHTML(markdownTheme string) string {
+	return renderMarkdown(p.Content, markdownTheme, p.width)
 }
 
 func (p *PlanContent) GetReadingTime() int {
@@ -90,15 +81,12 @@ func (p *PlanContent) GetIdentifier() string {
 // VersionContent wraps PlanVersionDetail to implement Displayable.
 type VersionContent struct {
 	*claudeviewer.PlanVersionDetail
-	darkModeEnabled bool
-	focus           types.Focus
-	width           int
-	markdownTheme   string
+	width int
 }
 
 // NewVersionContent creates a new VersionContent from a PlanVersionDetail.
-func NewVersionContent(version *claudeviewer.PlanVersionDetail, darkModeEnabled bool, focus types.Focus, width int, markdownTheme string) *VersionContent {
-	return &VersionContent{PlanVersionDetail: version, darkModeEnabled: darkModeEnabled, focus: focus, width: width, markdownTheme: markdownTheme}
+func NewVersionContent(version *claudeviewer.PlanVersionDetail, width int) *VersionContent {
+	return &VersionContent{PlanVersionDetail: version, width: width}
 }
 
 func (v *VersionContent) GetTitle() string {
@@ -109,8 +97,8 @@ func (v *VersionContent) GetContent() string {
 	return v.Content
 }
 
-func (v *VersionContent) GetRenderedHTML() string {
-	return renderMarkdown(v.Content, v.markdownTheme, v.width)
+func (v *VersionContent) GetRenderedHTML(markdownTheme string) string {
+	return renderMarkdown(v.Content, markdownTheme, v.width)
 }
 
 func (v *VersionContent) GetReadingTime() int {
@@ -135,21 +123,40 @@ func (v *VersionContent) GetIdentifier() string {
 	return fmt.Sprintf("%s@v%d", v.FilePath, v.VersionNumber)
 }
 
-// RenderMarkdown renders markdown text using glamour with the current theme.
+// RenderMarkdown renders markdown text using glamour with the given theme.
 func RenderMarkdown(content, markdownTheme string, width int) string {
 	return renderMarkdown(content, markdownTheme, width)
 }
 
+// renderMarkdown renders content with the named glamour style, falling back to
+// the default theme and then to the unrendered text. glamour returns a nil
+// renderer alongside its error for an empty or unknown style name, so these
+// errors cannot be discarded.
 func renderMarkdown(content, markdownTheme string, width int) string {
 	// Use the actual width provided, or default to 40 if width is too small
 	wordWidth := width
 	if wordWidth < 40 {
 		wordWidth = 40
 	}
-	r, _ := glamour.NewTermRenderer(
+
+	r, err := newTermRenderer(markdownTheme, wordWidth)
+	if err != nil {
+		r, err = newTermRenderer(claudeviewer.DefaultMarkdownTheme, wordWidth)
+		if err != nil {
+			return content
+		}
+	}
+
+	rendered, err := r.Render(content)
+	if err != nil {
+		return content
+	}
+	return rendered
+}
+
+func newTermRenderer(markdownTheme string, wordWidth int) (*glamour.TermRenderer, error) {
+	return glamour.NewTermRenderer(
 		glamour.WithStandardStyle(markdownTheme),
 		glamour.WithWordWrap(wordWidth),
 	)
-	rendered, _ := r.Render(content)
-	return rendered
 }

@@ -85,11 +85,13 @@ var KnownSettings = []SettingDefinition{
 		AllowedValues: []string{claudeviewer.ClipboardModeAuto, claudeviewer.ClipboardModeNative, claudeviewer.ClipboardModeOSC52},
 	},
 	{
-		Name:          claudeviewer.SettingMarkdownTheme,
-		Description:   "Markdown rendering theme",
-		Type:          claudeviewer.SettingTypeString,
-		Default:       claudeviewer.SettingValues{StringValue: new(claudeviewer.DefaultMarkdownTheme)},
-		AllowedValues: []string{claudeviewer.MarkdownThemeDark, claudeviewer.MarkdownThemeLight, claudeviewer.MarkdownThemeTokyoNight, claudeviewer.MarkdownThemeASCII, claudeviewer.MarkdownThemeDracula, claudeviewer.MarkdownThemeNoTTYStyle, claudeviewer.MarkdownThemePinkStyle},
+		Name:        claudeviewer.SettingMarkdownTheme,
+		Description: "Markdown rendering theme (only visible while markdown rendering is on)",
+		Type:        claudeviewer.SettingTypeString,
+		Default:     claudeviewer.SettingValues{StringValue: new(claudeviewer.DefaultMarkdownTheme)},
+		// MarkdownThemeNoTTYStyle is omitted: glamour renders it identically to
+		// MarkdownThemeASCII, so offering both is a dead step in the cycle.
+		AllowedValues: []string{claudeviewer.MarkdownThemeDark, claudeviewer.MarkdownThemeLight, claudeviewer.MarkdownThemeTokyoNight, claudeviewer.MarkdownThemeASCII, claudeviewer.MarkdownThemeDracula, claudeviewer.MarkdownThemePinkStyle},
 	},
 }
 
