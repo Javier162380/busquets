@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -22,6 +24,80 @@ func TestSlugify(t *testing.T) {
 			require.Equal(t, tc.want, Slugify(tc.input))
 		})
 	}
+}
+
+func TestLoadConfig(t *testing.T) {
+	t.Run("env overrides apply with no config file present", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		t.Setenv("PLAN_VIEWER_DB_BACKEND", "postgres")
+		t.Setenv("PLAN_VIEWER_POSTGRES_URL", "postgres://u:p@h:5432/db")
+
+		cfg, err := LoadConfig()
+		require.NoError(t, err)
+		require.Equal(t, BackendPostgres, cfg.Database.Backend)
+		require.Equal(t, "postgres://u:p@h:5432/db", cfg.Database.Postgres.ConnectionString)
+	})
+
+	t.Run("env overrides apply with a config file present", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(
+			filepath.Join(dir, ConfigFileName),
+			[]byte("[database]\nbackend = \"sqlite\"\n"),
+			0o600,
+		))
+		t.Chdir(dir)
+		t.Setenv("PLAN_VIEWER_DB_BACKEND", "postgres")
+		t.Setenv("PLAN_VIEWER_POSTGRES_URL", "postgres://u:p@h:5432/db")
+
+		cfg, err := LoadConfig()
+		require.NoError(t, err)
+		require.Equal(t, BackendPostgres, cfg.Database.Backend)
+	})
+
+	t.Run("defaults are applied with no config file present", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+
+		cfg, err := LoadConfig()
+		require.NoError(t, err)
+		require.Equal(t, BackendSQLite, cfg.Database.Backend)
+		require.NotEmpty(t, cfg.Database.SQLite.Path)
+		require.NotEmpty(t, cfg.Paths.ViewerDir)
+		require.Len(t, cfg.Paths.PlansDirs, 1)
+		require.Equal(t, 10, cfg.Database.Postgres.MaxOpenConns)
+		require.Equal(t, "claude-plan-viewer", cfg.MCP.ServerName)
+	})
+
+	t.Run("validation runs with no config file present", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		t.Setenv("PLAN_VIEWER_DB_BACKEND", "mysql")
+
+		_, err := LoadConfig()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "invalid database backend")
+	})
+
+	t.Run("postgres backend via env without a URL is rejected", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		t.Setenv("PLAN_VIEWER_DB_BACKEND", "postgres")
+
+		_, err := LoadConfig()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "postgres connection_string is required")
+	})
+
+	t.Run("malformed config file is an error", func(t *testing.T) {
+		dir := t.TempDir()
+		require.NoError(t, os.WriteFile(
+			filepath.Join(dir, ConfigFileName),
+			[]byte("[database\nbackend =\n"),
+			0o600,
+		))
+		t.Chdir(dir)
+
+		_, err := LoadConfig()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "failed to parse config file")
+	})
 }
 
 func TestValidate(t *testing.T) {

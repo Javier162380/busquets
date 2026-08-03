@@ -53,37 +53,49 @@ type MCPConfig struct {
 }
 
 // LoadConfig loads configuration from the current working directory.
-// If no config file exists, returns default configuration.
+// A missing config file is not an error — defaults plus environment overrides
+// are a complete configuration, so overrides, validation, and defaults run on
+// every path. A config file only supplies an extra layer of values.
 func LoadConfig() (*Config, error) {
 	cfg := DefaultConfig()
 
-	// Look for config in current working directory
-	cwd, err := os.Getwd()
+	configPath, err := configFilePath()
 	if err != nil {
-		return cfg, nil // Return defaults if can't get CWD
+		return nil, err
+	}
+	if configPath != "" {
+		if _, err := toml.DecodeFile(configPath, cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse config file %s: %w", configPath, err)
+		}
 	}
 
-	configPath := filepath.Join(cwd, ConfigFileName)
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return cfg, nil // Config doesn't exist, use defaults
-	}
-
-	if _, err := toml.DecodeFile(configPath, cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file %s: %w", configPath, err)
-	}
-
-	// Apply environment variable overrides
 	cfg.applyEnvOverrides()
 
-	// Validate configuration
 	if err := cfg.Validate(); err != nil {
 		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
 
-	// Apply defaults for empty values
 	cfg.applyDefaults()
 
 	return cfg, nil
+}
+
+// configFilePath returns the config file path in the current working directory,
+// or "" if there is none. An undeterminable CWD counts as "no config file".
+func configFilePath() (string, error) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", nil
+	}
+
+	path := filepath.Join(cwd, ConfigFileName)
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to stat config file %s: %w", path, err)
+	}
+	return path, nil
 }
 
 // DefaultConfig returns the default configuration.

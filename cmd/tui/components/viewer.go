@@ -146,10 +146,11 @@ func (v *Viewer) updateViewportContent() {
 
 	lines = append(lines, "")
 
-	// Add content based on render mode.
+	// Glamour output is ANSI, not HTML — used verbatim. Stripping "tags" from it
+	// would eat literal angle brackets it preserved (`Vec<String>`, `a < b`).
 	var contentText string
 	if v.renderMode == RenderModeGlamour {
-		contentText = stripHTMLTags(v.content.GetRenderedHTML(v.markdownTheme))
+		contentText = v.content.GetRenderedHTML(v.markdownTheme)
 	} else {
 		contentText = v.content.GetContent()
 	}
@@ -157,93 +158,4 @@ func (v *Viewer) updateViewportContent() {
 	lines = append(lines, strings.Split(contentText, "\n")...)
 
 	v.viewport.SetContent(strings.Join(lines, "\n"))
-}
-
-// stripHTMLTags removes HTML tags from a string, leaving only the content.
-func stripHTMLTags(html string) string {
-	replacements := map[string]string{
-		"<p>":           "",
-		"</p>":          "\n",
-		"<br>":          "\n",
-		"<br/>":         "\n",
-		"<br />":        "\n",
-		"<strong>":      "",
-		"</strong>":     "",
-		"<b>":           "",
-		"</b>":          "",
-		"<em>":          "",
-		"</em>":         "",
-		"<i>":           "",
-		"</i>":          "",
-		"<u>":           "",
-		"</u>":          "",
-		"<code>":        "",
-		"</code>":       "",
-		"<pre>":         "",
-		"</pre>":        "",
-		"<h1>":          "\n",
-		"</h1>":         "\n",
-		"<h2>":          "\n",
-		"</h2>":         "\n",
-		"<h3>":          "\n",
-		"</h3>":         "\n",
-		"<h4>":          "\n",
-		"</h4>":         "\n",
-		"<h5>":          "\n",
-		"</h5>":         "\n",
-		"<h6>":          "\n",
-		"</h6>":         "\n",
-		"<ul>":          "",
-		"</ul>":         "",
-		"<ol>":          "",
-		"</ol>":         "",
-		"<li>":          "  - ",
-		"</li>":         "\n",
-		"<table>":       "",
-		"</table>":      "",
-		"<tr>":          "",
-		"</tr>":         "\n",
-		"<td>":          "",
-		"</td>":         " | ",
-		"<th>":          "",
-		"</th>":         " | ",
-		"<thead>":       "",
-		"</thead>":      "",
-		"<tbody>":       "",
-		"</tbody>":      "",
-		"<blockquote>":  "> ",
-		"</blockquote>": "\n",
-		"<div>":         "",
-		"</div>":        "\n",
-		"<span>":        "",
-		"</span>":       "",
-		"</a>":          "",
-		"&lt;":          "<",
-		"&gt;":          ">",
-		"&amp;":         "&",
-		"&quot;":        "\"",
-		"&#39;":         "'",
-		"<hr>":          "---",
-		"<hr/>":         "---",
-		"<hr />":        "---",
-	}
-
-	result := html
-	for tag, replacement := range replacements {
-		result = strings.ReplaceAll(result, tag, replacement)
-	}
-
-	// Remove any remaining tags (like <a href="...">).
-	// Simple approach: just remove them.
-	for strings.Contains(result, "<") && strings.Contains(result, ">") {
-		start := strings.Index(result, "<")
-		end := strings.Index(result, ">")
-		if start < end {
-			result = result[:start] + result[end+1:]
-		} else {
-			break
-		}
-	}
-
-	return result
 }
