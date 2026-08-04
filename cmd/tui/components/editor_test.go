@@ -1,6 +1,7 @@
 package components
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -17,6 +18,7 @@ func TestEditorJumpToLine(t *testing.T) {
 		t.Helper()
 		e := NewEditor(80, 10)
 		e.SetContent(content)
+		e.Focus() // matches the real FocusAtLine call path; JumpToLine's viewport reposition is a no-op while unfocused
 		e.JumpToLine(startLine)
 		require.Equal(t, startLine-1, e.textarea.Line())
 		return e
@@ -51,4 +53,37 @@ func TestEditorJumpToLine(t *testing.T) {
 		e.JumpToLine(0)
 		require.Equal(t, 0, e.textarea.Line())
 	})
+
+	t.Run("CurrentLine round-trips with JumpToLine", func(t *testing.T) {
+		e := newEditorAt(t, 1)
+		e.JumpToLine(6)
+		require.Equal(t, 6, e.CurrentLine())
+	})
+}
+
+// TestEditorJumpToLineScrollsViewport guards against a regression where the
+// cursor's logical row (Line()) moved correctly but the textarea's own
+// rendered viewport never scrolled to show it — because bubbles' textarea
+// only populates its internal viewport line buffer as a side effect of
+// View(), never Update(), so a stale/empty buffer silently swallowed the
+// scroll. Line()-only assertions (like the rest of this file) can't catch
+// that; this checks the actual rendered output.
+func TestEditorJumpToLineScrollsViewport(t *testing.T) {
+	lines := make([]string, 40)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("content of line %02d", i+1)
+	}
+	body := strings.Join(lines, "\n")
+
+	e := NewEditor(40, 6) // viewport much shorter than the content
+	e.SetContent(body)
+	e.FocusAtLine(30)
+
+	want := "┃  25 content of line 25                \n" +
+		"┃  26 content of line 26                \n" +
+		"┃  27 content of line 27                \n" +
+		"┃  28 content of line 28                \n" +
+		"┃  29 content of line 29                \n" +
+		"┃  30 content of line 30                "
+	require.Equal(t, want, e.View())
 }

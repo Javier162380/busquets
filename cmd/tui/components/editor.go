@@ -63,6 +63,14 @@ func (e *Editor) Focus() tea.Cmd {
 	return nil
 }
 
+// FocusAtLine gives focus to the editor and moves the cursor to the given
+// 1-indexed line instead of the beginning of the document.
+func (e *Editor) FocusAtLine(line int) tea.Cmd {
+	e.textarea.Focus()
+	e.JumpToLine(line)
+	return nil
+}
+
 // Blur removes focus from the editor.
 func (e *Editor) Blur() {
 	e.textarea.Blur()
@@ -95,6 +103,11 @@ func (e *Editor) View() string {
 func (e *Editor) Reset() {
 	e.textarea.SetValue(e.original)
 	e.modified = false
+}
+
+// CurrentLine returns the cursor's current 1-indexed line.
+func (e *Editor) CurrentLine() int {
+	return e.textarea.Line() + 1
 }
 
 // MoveCursorToFirstRow moves the cursor to the very beginning of the document (row 0, col 0).
@@ -133,8 +146,16 @@ func (e *Editor) moveCursorToEnd() {
 
 const maxJumpSteps = 100000
 
+// jumpNoOpMsg is sent through textarea.Update solely to trigger its internal
+// repositionView (which only runs inside Update, never from CursorUp/
+// CursorDown directly) so the textarea's own viewport scrolls to keep the
+// cursor visible after JumpToLine moves it. It's not a key or paste message,
+// so no binding matches it and no content is touched.
+type jumpNoOpMsg struct{}
+
 // JumpToLine moves the cursor to the start of the given 1-indexed line,
-// clamping out-of-range values to the first or last line.
+// clamping out-of-range values to the first or last line, and scrolls the
+// textarea's viewport to keep it visible.
 func (e *Editor) JumpToLine(line int) {
 	if line < 1 {
 		line = 1
@@ -153,6 +174,16 @@ func (e *Editor) JumpToLine(line int) {
 	}
 
 	e.textarea.CursorStart()
+
+	// textarea's internal viewport only populates its line buffer as a side
+	// effect of View() — never from Update(). If View() hasn't run yet since
+	// the last SetContent (e.g. jumping to a line right after loading a
+	// plan, before the editor has ever been drawn), repositionView below
+	// would clamp against a stale/empty buffer and silently fail to scroll.
+	// Calling View() here (result discarded) forces that buffer in sync
+	// first, in the same call, instead of relying on the app's next render.
+	_ = e.textarea.View()
+	e.textarea, _ = e.textarea.Update(jumpNoOpMsg{})
 }
 
 // LineCount returns the total number of lines in the editor content.

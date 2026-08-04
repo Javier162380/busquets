@@ -13,6 +13,8 @@ import (
 
 // Displayable is the interface for content that can be displayed in the viewer.
 // Both PlanDetail and PlanVersionDetail implement this interface.
+//
+//go:generate mockgen -package content_test -destination ./test/displayable_stub.go . Displayable
 type Displayable interface {
 	GetTitle() string
 	GetContent() string
