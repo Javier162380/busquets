@@ -33,4 +33,5 @@ const (
 	ModalComment               // comment modal
 	ModalTLDR                  // TLDR/summary popup
 	ModalRenameFile            // rename-plan-file modal
+	ModalTextInput             // generic single-field input modal (e.g. go-to-line)
 )

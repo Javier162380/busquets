@@ -50,6 +50,7 @@ PLAN CONTENT (right panel / fullscreen):
 
 EDITING:
   Ctrl+S         Save and sync changes
+  Ctrl+L         Jump to a specific line
   tt / bb        Jump to first / last line
   dd             Delete the current line
   oo             Insert a new line below
