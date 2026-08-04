@@ -11,6 +11,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activateConnectorRole = `-- name: ActivateConnectorRole :exec
+INSERT INTO connector_roles (connector_name, role, active)
+VALUES ($1, $2, TRUE)
+ON CONFLICT(connector_name, role) DO UPDATE SET active = TRUE
+`
+
+type ActivateConnectorRoleParams struct {
+	ConnectorName string `json:"connector_name"`
+	Role          string `json:"role"`
+}
+
+func (q *Queries) ActivateConnectorRole(ctx context.Context, arg ActivateConnectorRoleParams) error {
+	_, err := q.db.Exec(ctx, activateConnectorRole, arg.ConnectorName, arg.Role)
+	return err
+}
+
 const addTagToPlan = `-- name: AddTagToPlan :exec
 
 INSERT INTO plan_tags (plan_id, tag_id, assigned_at)
@@ -30,10 +46,10 @@ func (q *Queries) AddTagToPlan(ctx context.Context, arg AddTagToPlanParams) erro
 }
 
 const clearConnectorRole = `-- name: ClearConnectorRole :exec
-UPDATE connectors SET role = NULL, updated_at = NOW() WHERE role = $1
+UPDATE connector_roles SET active = FALSE WHERE role = $1
 `
 
-func (q *Queries) ClearConnectorRole(ctx context.Context, role pgtype.Text) error {
+func (q *Queries) ClearConnectorRole(ctx context.Context, role string) error {
 	_, err := q.db.Exec(ctx, clearConnectorRole, role)
 	return err
 }
@@ -47,6 +63,15 @@ func (q *Queries) CountPlans(ctx context.Context) (int64, error) {
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const deactivateConnectorRole = `-- name: DeactivateConnectorRole :exec
+UPDATE connector_roles SET active = FALSE WHERE role = $1
+`
+
+func (q *Queries) DeactivateConnectorRole(ctx context.Context, role string) error {
+	_, err := q.db.Exec(ctx, deactivateConnectorRole, role)
+	return err
 }
 
 const deleteAllConnectorSettings = `-- name: DeleteAllConnectorSettings :exec
@@ -157,7 +182,7 @@ func (q *Queries) DeleteVersionsOlderThan(ctx context.Context, arg DeleteVersion
 
 const getConnectorByName = `-- name: GetConnectorByName :one
 
-SELECT name, display_name, enabled, role, created_at, updated_at FROM connectors WHERE name = $1
+SELECT name, display_name, enabled, created_at, updated_at FROM connectors WHERE name = $1
 `
 
 // Connector queries
@@ -168,7 +193,6 @@ func (q *Queries) GetConnectorByName(ctx context.Context, name string) (Connecto
 		&i.Name,
 		&i.DisplayName,
 		&i.Enabled,
-		&i.Role,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -176,21 +200,14 @@ func (q *Queries) GetConnectorByName(ctx context.Context, name string) (Connecto
 }
 
 const getConnectorByRole = `-- name: GetConnectorByRole :one
-SELECT name, display_name, enabled, role, created_at, updated_at FROM connectors WHERE role = $1 LIMIT 1
+SELECT connector_name FROM connector_roles WHERE role = $1 AND active = TRUE LIMIT 1
 `
 
-func (q *Queries) GetConnectorByRole(ctx context.Context, role pgtype.Text) (Connector, error) {
+func (q *Queries) GetConnectorByRole(ctx context.Context, role string) (string, error) {
 	row := q.db.QueryRow(ctx, getConnectorByRole, role)
-	var i Connector
-	err := row.Scan(
-		&i.Name,
-		&i.DisplayName,
-		&i.Enabled,
-		&i.Role,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
+	var connector_name string
+	err := row.Scan(&connector_name)
+	return connector_name, err
 }
 
 const getConnectorSetting = `-- name: GetConnectorSetting :one
@@ -974,7 +991,7 @@ func (q *Queries) ListConnectorSettings(ctx context.Context, connectorName strin
 }
 
 const listConnectors = `-- name: ListConnectors :many
-SELECT name, display_name, enabled, role, created_at, updated_at FROM connectors ORDER BY name
+SELECT name, display_name, enabled, created_at, updated_at FROM connectors ORDER BY name
 `
 
 func (q *Queries) ListConnectors(ctx context.Context) ([]Connector, error) {
@@ -990,7 +1007,6 @@ func (q *Queries) ListConnectors(ctx context.Context) ([]Connector, error) {
 			&i.Name,
 			&i.DisplayName,
 			&i.Enabled,
-			&i.Role,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -1176,20 +1192,6 @@ func (q *Queries) SearchVersionsByContent(ctx context.Context, arg SearchVersion
 		return nil, err
 	}
 	return items, nil
-}
-
-const setConnectorRole = `-- name: SetConnectorRole :exec
-UPDATE connectors SET role = $1, updated_at = NOW() WHERE name = $2
-`
-
-type SetConnectorRoleParams struct {
-	Role pgtype.Text `json:"role"`
-	Name string      `json:"name"`
-}
-
-func (q *Queries) SetConnectorRole(ctx context.Context, arg SetConnectorRoleParams) error {
-	_, err := q.db.Exec(ctx, setConnectorRole, arg.Role, arg.Name)
-	return err
 }
 
 const updatePlan = `-- name: UpdatePlan :exec

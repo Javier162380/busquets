@@ -14,6 +14,7 @@ type ConnectorRole string
 const (
 	ConnectorRoleTransmit ConnectorRole = "transmit_connector"
 	ConnectorRoleSummary  ConnectorRole = "summary_connector"
+	ConnectorRoleDiff     ConnectorRole = "diff_connector"
 )
 
 // Store is the narrow database interface the connector Manager needs.
@@ -37,6 +38,7 @@ var (
 	ErrNoConnectorEnabled     = errors.New("no connector enabled")
 	ErrNoSummarizerConfigured = errors.New("no summarizer configured")
 	ErrConnectorResponseEmpty = errors.New("connector returned no response")
+	ErrNoDiffConfigured       = errors.New("no diff connector configured")
 )
 
 // IsConnectorNotFound reports whether err is a connector-not-found error.

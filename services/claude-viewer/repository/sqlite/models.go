@@ -10,12 +10,17 @@ import (
 )
 
 type Connector struct {
-	Name        string      `json:"name"`
-	DisplayName string      `json:"display_name"`
-	Enabled     bool        `json:"enabled"`
-	Role        interface{} `json:"role"`
-	CreatedAt   time.Time   `json:"created_at"`
-	UpdatedAt   time.Time   `json:"updated_at"`
+	Name        string    `json:"name"`
+	DisplayName string    `json:"display_name"`
+	Enabled     bool      `json:"enabled"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type ConnectorRole struct {
+	ConnectorName string `json:"connector_name"`
+	Role          string `json:"role"`
+	Active        int64  `json:"active"`
 }
 
 type ConnectorSetting struct {

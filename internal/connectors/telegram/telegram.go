@@ -99,10 +99,18 @@ func (c *Connector) Validate() error {
 	return nil
 }
 
-// Send transmits content to Telegram.
-func (c *Connector) Send(ctx context.Context, title, content string) (*connectors.SendResult, error) {
-	// Format message with title
-	message := fmt.Sprintf("*%s*\n\n%s", escapeMarkdown(title), escapeMarkdown(content))
+// SupportedRoles returns the roles this connector can handle.
+func (c *Connector) SupportedRoles() []connectors.ConnectorRole {
+	return []connectors.ConnectorRole{connectors.ConnectorRoleTransmit}
+}
+
+// Execute transmits content to Telegram.
+func (c *Connector) Execute(ctx context.Context, req connectors.ConnectorRequest) (*connectors.ConnectorResult, error) {
+	if req.Role != connectors.ConnectorRoleTransmit || req.Transmit == nil {
+		return nil, fmt.Errorf("telegram: unsupported role %q", req.Role)
+	}
+
+	message := fmt.Sprintf("*%s*\n\n%s", escapeMarkdown(req.Transmit.Title), escapeMarkdown(req.Transmit.Content))
 
 	// Truncate if necessary (Telegram has 4096 char limit)
 	if len(message) > maxMessageLen {
@@ -121,13 +129,13 @@ func (c *Connector) Send(ctx context.Context, title, content string) (*connector
 	}
 
 	url := fmt.Sprintf(telegramAPIURL, c.config.BotToken)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	req.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Content-Type", "application/json")
 
-	resp, err := c.client.Do(req)
+	resp, err := c.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
@@ -139,15 +147,13 @@ func (c *Connector) Send(ctx context.Context, title, content string) (*connector
 	}
 
 	if !result.OK {
-		return &connectors.SendResult{
-			Success: false,
-			Error:   fmt.Errorf("telegram API error: %s", result.Description),
-		}, nil
+		return &connectors.ConnectorResult{Role: connectors.ConnectorRoleTransmit}, fmt.Errorf("telegram API error: %s", result.Description)
 	}
 
-	return &connectors.SendResult{
-		Success:   true,
-		MessageID: new(fmt.Sprintf("%d", result.Result.MessageID)),
+	msgID := fmt.Sprintf("%d", result.Result.MessageID)
+	return &connectors.ConnectorResult{
+		Role:      connectors.ConnectorRoleTransmit,
+		MessageID: &msgID,
 	}, nil
 }
 

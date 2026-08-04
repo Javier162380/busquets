@@ -827,29 +827,30 @@ func (r *Repository) ListConnectors(ctx context.Context) ([]dto.Connector, error
 }
 
 func (r *Repository) GetConnectorForRole(ctx context.Context, role dto.ConnectorRole) (string, bool, error) {
-	c, err := r.q.GetConnectorByRole(ctx, pgtype.Text{String: string(role), Valid: true})
+	name, err := r.q.GetConnectorByRole(ctx, string(role))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", false, nil
 	}
 	if err != nil {
 		return "", false, err
 	}
-	return c.Name, true, nil
+	return name, true, nil
 }
 
 func (r *Repository) SetConnectorForRole(ctx context.Context, name string, role dto.ConnectorRole) error {
-	roleVal := pgtype.Text{String: string(role), Valid: true}
-	if err := r.q.ClearConnectorRole(ctx, roleVal); err != nil {
-		return err
-	}
-	return r.q.SetConnectorRole(ctx, SetConnectorRoleParams{
-		Role: roleVal,
-		Name: name,
+	return r.withTx(ctx, func(q *Queries) error {
+		if err := q.DeactivateConnectorRole(ctx, string(role)); err != nil {
+			return err
+		}
+		return q.ActivateConnectorRole(ctx, ActivateConnectorRoleParams{
+			ConnectorName: name,
+			Role:          string(role),
+		})
 	})
 }
 
 func (r *Repository) ClearConnectorForRole(ctx context.Context, role dto.ConnectorRole) error {
-	return r.q.ClearConnectorRole(ctx, pgtype.Text{String: string(role), Valid: true})
+	return r.q.ClearConnectorRole(ctx, string(role))
 }
 
 func (r *Repository) UpsertConnector(ctx context.Context, name, displayName string, enabled bool) error {

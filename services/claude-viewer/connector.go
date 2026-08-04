@@ -2,7 +2,10 @@ package claudeviewer
 
 import (
 	"context"
+	"errors"
 
+	planviewer "github.com/Javier162380/claude-plan-viewer"
+	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
 
@@ -34,7 +37,7 @@ type ConnectorSettingInfo struct {
 	Sensitive   bool
 }
 
-// SendToConnector sends a plan to the enabled connector.
+// SendToConnector sends a plan to the transmit connector.
 func (s *Service) SendToConnector(ctx context.Context, planFileName, syncSource string) error {
 	if s.connectorManager == nil {
 		return dto.ErrConnectorDisabled
@@ -45,16 +48,11 @@ func (s *Service) SendToConnector(ctx context.Context, planFileName, syncSource 
 		return err
 	}
 
-	// Send through connector manager
-	result, err := s.connectorManager.Send(ctx, plan.Title, plan.Content)
-	if err != nil {
-		return err
-	}
-	if !result.Success {
-		return result.Error
-	}
-
-	return nil
+	_, err = s.connectorManager.Execute(ctx, connectors.ConnectorRequest{
+		Role:     connectors.ConnectorRoleTransmit,
+		Transmit: &connectors.TransmitPayload{Title: plan.Title, Content: plan.Content},
+	})
+	return err
 }
 
 // GetEnabledConnector returns the currently enabled connector info.
@@ -182,12 +180,21 @@ func (s *Service) GenerateSummary(ctx context.Context, planFileName, syncSource 
 	if err != nil {
 		return "", err
 	}
-	summary, err := s.connectorManager.GenerateSummary(ctx, plan.Title, plan.Content)
+	result, err := s.connectorManager.Execute(ctx, connectors.ConnectorRequest{
+		Role:    connectors.ConnectorRoleSummary,
+		Summary: &connectors.SummaryPayload{Title: plan.Title, Content: plan.Content},
+	})
 	if err != nil {
+		if errors.Is(err, planviewer.ErrNoConnectorEnabled) {
+			return "", planviewer.ErrNoSummarizerConfigured
+		}
 		return "", err
 	}
-	s.summaryCache.Set(cacheKey, summary)
-	return summary, nil
+	if result.Text == nil {
+		return "", planviewer.ErrConnectorResponseEmpty
+	}
+	s.summaryCache.Set(cacheKey, *result.Text)
+	return *result.Text, nil
 }
 
 // RegenerateSummary bypasses the cache, calls the connector, and updates the cache entry.
@@ -199,13 +206,22 @@ func (s *Service) RegenerateSummary(ctx context.Context, planFileName, syncSourc
 	if err != nil {
 		return "", err
 	}
-	summary, err := s.connectorManager.GenerateSummary(ctx, plan.Title, plan.Content)
+	result, err := s.connectorManager.Execute(ctx, connectors.ConnectorRequest{
+		Role:    connectors.ConnectorRoleSummary,
+		Summary: &connectors.SummaryPayload{Title: plan.Title, Content: plan.Content},
+	})
 	if err != nil {
+		if errors.Is(err, planviewer.ErrNoConnectorEnabled) {
+			return "", planviewer.ErrNoSummarizerConfigured
+		}
 		return "", err
 	}
+	if result.Text == nil {
+		return "", planviewer.ErrConnectorResponseEmpty
+	}
 	cacheKey := planFileName + ":" + syncSource
-	s.summaryCache.Set(cacheKey, summary)
-	return summary, nil
+	s.summaryCache.Set(cacheKey, *result.Text)
+	return *result.Text, nil
 }
 
 // SetSummaryConnector assigns a connector to the summary slot.

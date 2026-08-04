@@ -9,6 +9,7 @@ import (
 	reflect "reflect"
 
 	connectors "github.com/Javier162380/claude-plan-viewer/internal/connectors"
+	planviewer "github.com/Javier162380/claude-plan-viewer"
 
 	gomock "github.com/golang/mock/gomock"
 )
@@ -50,6 +51,21 @@ func (mr *MockConnectorMockRecorder) DisplayName() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DisplayName", reflect.TypeOf((*MockConnector)(nil).DisplayName))
 }
 
+// Execute mocks base method.
+func (m *MockConnector) Execute(arg0 context.Context, arg1 connectors.ConnectorRequest) (*connectors.ConnectorResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Execute", arg0, arg1)
+	ret0, _ := ret[0].(*connectors.ConnectorResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Execute indicates an expected call of Execute.
+func (mr *MockConnectorMockRecorder) Execute(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockConnector)(nil).Execute), arg0, arg1)
+}
+
 // Name mocks base method.
 func (m *MockConnector) Name() string {
 	m.ctrl.T.Helper()
@@ -78,19 +94,18 @@ func (mr *MockConnectorMockRecorder) RequiredSettings() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RequiredSettings", reflect.TypeOf((*MockConnector)(nil).RequiredSettings))
 }
 
-// Send mocks base method.
-func (m *MockConnector) Send(arg0 context.Context, arg1, arg2 string) (*connectors.SendResult, error) {
+// SupportedRoles mocks base method.
+func (m *MockConnector) SupportedRoles() []planviewer.ConnectorRole {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Send", arg0, arg1, arg2)
-	ret0, _ := ret[0].(*connectors.SendResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "SupportedRoles")
+	ret0, _ := ret[0].([]planviewer.ConnectorRole)
+	return ret0
 }
 
-// Send indicates an expected call of Send.
-func (mr *MockConnectorMockRecorder) Send(arg0, arg1, arg2 interface{}) *gomock.Call {
+// SupportedRoles indicates an expected call of SupportedRoles.
+func (mr *MockConnectorMockRecorder) SupportedRoles() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Send", reflect.TypeOf((*MockConnector)(nil).Send), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SupportedRoles", reflect.TypeOf((*MockConnector)(nil).SupportedRoles))
 }
 
 // Validate mocks base method.
