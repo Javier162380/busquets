@@ -2,6 +2,7 @@ package components
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
@@ -21,12 +22,13 @@ const (
 
 // Viewer displays scrollable content.
 type Viewer struct {
-	viewport      viewport.Model
-	content       content.Displayable
-	renderMode    RenderMode
-	markdownTheme string
-	width         int
-	height        int
+	viewport        viewport.Model
+	content         content.Displayable
+	renderMode      RenderMode
+	markdownTheme   string
+	showLineNumbers bool
+	width           int
+	height          int
 }
 
 // NewViewer creates a new viewer component.
@@ -84,6 +86,17 @@ func (v *Viewer) ToggleRenderMode() {
 // RenderMode returns the current render mode.
 func (v *Viewer) RenderMode() RenderMode {
 	return v.renderMode
+}
+
+// ToggleLineNumbers switches the line-number gutter on/off.
+func (v *Viewer) ToggleLineNumbers() {
+	v.showLineNumbers = !v.showLineNumbers
+	v.updateViewportContent()
+}
+
+// ShowLineNumbers returns whether the line-number gutter is currently shown.
+func (v *Viewer) ShowLineNumbers() bool {
+	return v.showLineNumbers
 }
 
 // Update handles viewport updates.
@@ -149,101 +162,28 @@ func (v *Viewer) updateViewportContent() {
 	// Add content based on render mode.
 	var contentText string
 	if v.renderMode == RenderModeGlamour {
-		contentText = stripHTMLTags(v.content.GetRenderedHTML(v.markdownTheme))
+		contentText = v.content.GetRenderedHTML(v.markdownTheme)
 	} else {
 		contentText = v.content.GetContent()
 	}
 
-	lines = append(lines, strings.Split(contentText, "\n")...)
+	contentLines := strings.Split(contentText, "\n")
+	if v.showLineNumbers {
+		contentLines = numberLines(contentLines)
+	}
+	lines = append(lines, contentLines...)
 
 	v.viewport.SetContent(strings.Join(lines, "\n"))
 }
 
-// stripHTMLTags removes HTML tags from a string, leaving only the content.
-func stripHTMLTags(html string) string {
-	replacements := map[string]string{
-		"<p>":           "",
-		"</p>":          "\n",
-		"<br>":          "\n",
-		"<br/>":         "\n",
-		"<br />":        "\n",
-		"<strong>":      "",
-		"</strong>":     "",
-		"<b>":           "",
-		"</b>":          "",
-		"<em>":          "",
-		"</em>":         "",
-		"<i>":           "",
-		"</i>":          "",
-		"<u>":           "",
-		"</u>":          "",
-		"<code>":        "",
-		"</code>":       "",
-		"<pre>":         "",
-		"</pre>":        "",
-		"<h1>":          "\n",
-		"</h1>":         "\n",
-		"<h2>":          "\n",
-		"</h2>":         "\n",
-		"<h3>":          "\n",
-		"</h3>":         "\n",
-		"<h4>":          "\n",
-		"</h4>":         "\n",
-		"<h5>":          "\n",
-		"</h5>":         "\n",
-		"<h6>":          "\n",
-		"</h6>":         "\n",
-		"<ul>":          "",
-		"</ul>":         "",
-		"<ol>":          "",
-		"</ol>":         "",
-		"<li>":          "  - ",
-		"</li>":         "\n",
-		"<table>":       "",
-		"</table>":      "",
-		"<tr>":          "",
-		"</tr>":         "\n",
-		"<td>":          "",
-		"</td>":         " | ",
-		"<th>":          "",
-		"</th>":         " | ",
-		"<thead>":       "",
-		"</thead>":      "",
-		"<tbody>":       "",
-		"</tbody>":      "",
-		"<blockquote>":  "> ",
-		"</blockquote>": "\n",
-		"<div>":         "",
-		"</div>":        "\n",
-		"<span>":        "",
-		"</span>":       "",
-		"</a>":          "",
-		"&lt;":          "<",
-		"&gt;":          ">",
-		"&amp;":         "&",
-		"&quot;":        "\"",
-		"&#39;":         "'",
-		"<hr>":          "---",
-		"<hr/>":         "---",
-		"<hr />":        "---",
+// numberLines prefixes each line with a right-aligned line number, matching
+// the gutter style of the editor's textarea.
+func numberLines(contentLines []string) []string {
+	width := len(strconv.Itoa(len(contentLines)))
+	numbered := make([]string, len(contentLines))
+	for i, line := range contentLines {
+		gutter := styles.LineNumberStyle.Render(fmt.Sprintf("%*d │ ", width, i+1))
+		numbered[i] = gutter + line
 	}
-
-	result := html
-	for tag, replacement := range replacements {
-		result = strings.ReplaceAll(result, tag, replacement)
-	}
-
-	// Remove any remaining tags (like <a href="...">).
-	// Simple approach: just remove them.
-	for strings.Contains(result, "<") && strings.Contains(result, ">") {
-		start := strings.Index(result, "<")
-		end := strings.Index(result, ">")
-		if start < end {
-			result = result[:start] + result[end+1:]
-		} else {
-			break
-		}
-	}
-
-	return result
+	return numbered
 }
