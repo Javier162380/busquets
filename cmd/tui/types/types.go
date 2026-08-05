@@ -24,14 +24,16 @@ const (
 	FocusLabelPanel                // Left-side sync-label navigation panel.
 )
 
-// ModalState tracks which overlay is currently active on PlansScreen.
+// ModalState tracks which overlay is currently active on a screen
+// (PlansScreen and VersionsScreen both use it).
 type ModalState int
 
 const (
-	ModalNone       ModalState = iota
-	ModalTagManager            // tag management modal
-	ModalComment               // comment modal
-	ModalTLDR                  // TLDR/summary popup
-	ModalRenameFile            // rename-plan-file modal
-	ModalTextInput             // generic single-field input modal (e.g. go-to-line)
+	ModalNone          ModalState = iota
+	ModalTagManager               // tag management modal
+	ModalComment                  // comment modal
+	ModalTLDR                     // TLDR/summary popup
+	ModalRenameFile               // rename-plan-file modal
+	ModalTextInput                // generic single-field input modal (e.g. go-to-line)
+	ModalContentSearch            // content search modal (viewer search)
 )

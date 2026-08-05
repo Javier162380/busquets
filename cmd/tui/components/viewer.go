@@ -10,6 +10,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // RenderMode determines how content is displayed.
@@ -31,6 +33,7 @@ type Viewer struct {
 	totalLineCount  int
 	width           int
 	height          int
+	search          *ContentSearch
 }
 
 // NewViewer creates a new viewer component.
@@ -44,12 +47,18 @@ func NewViewer(width, height int, markdownRenderedTheme string) *Viewer {
 		height:        height,
 		renderMode:    RenderModeRaw,
 		markdownTheme: markdownRenderedTheme,
+		search:        NewContentSearch(),
 	}
 }
 
-// SetContent sets the content to display.
+// SetContent sets the content to display. This is the only place the
+// content-search index is rebuilt — updateViewportContent (called from
+// several places that only re-render, e.g. SetSize, ToggleLineNumbers,
+// SearchNext) must never rebuild it, or an in-progress search's current
+// match would silently reset every time the viewer re-renders.
 func (v *Viewer) SetContent(c content.Displayable) {
 	v.content = c
+	v.search.SetContent(c.GetContent())
 	v.updateViewportContent()
 }
 
@@ -177,6 +186,51 @@ func (v *Viewer) ScrollToContentLine(line int) {
 	v.viewport.SetYOffset(int(percent*float64(maxOffset) + 0.5))
 }
 
+// Search runs a new content search query and, if it has any matches, jumps
+// to the first one at or after the current scroll position. Works
+// regardless of render mode — the index is always built from raw source
+// (see SetContent) — only the highlight rendering differs by mode.
+func (v *Viewer) Search(query string) {
+	v.search.SetQuery(query, v.CurrentContentLine())
+	if v.search.HasMatches() {
+		v.ScrollToContentLine(v.search.CurrentLine())
+	}
+	v.updateViewportContent()
+}
+
+// SearchNext advances to the next match, wrapping around, and scrolls to it.
+func (v *Viewer) SearchNext() {
+	if !v.search.HasMatches() {
+		return
+	}
+	v.ScrollToContentLine(v.search.Next())
+	v.updateViewportContent()
+}
+
+// SearchPrev moves to the previous match, wrapping around, and scrolls to it.
+func (v *Viewer) SearchPrev() {
+	if !v.search.HasMatches() {
+		return
+	}
+	v.ScrollToContentLine(v.search.Prev())
+	v.updateViewportContent()
+}
+
+// ClearSearch drops the active query and its highlight.
+func (v *Viewer) ClearSearch() {
+	v.search.SetQuery("", 1)
+	v.updateViewportContent()
+}
+
+// HasMatches reports whether the active search query has any matches.
+func (v *Viewer) HasMatches() bool { return v.search.HasMatches() }
+
+// SearchStatus returns the active match's 1-indexed position and the total
+// match count (e.g. for a "3/12" indicator), both 0 if there is no query.
+func (v *Viewer) SearchStatus() (current, total int) {
+	return v.search.CurrentIndex(), v.search.MatchCount()
+}
+
 // rawLineCount returns the number of lines in the underlying markdown
 // source, independent of how it's currently rendered.
 func (v *Viewer) rawLineCount() int {
@@ -240,6 +294,7 @@ func (v *Viewer) updateViewportContent() {
 	}
 
 	contentLines := strings.Split(contentText, "\n")
+	contentLines = v.applyHighlight(contentLines)
 	if v.showLineNumbers {
 		contentLines = numberLines(contentLines)
 	}
@@ -247,6 +302,79 @@ func (v *Viewer) updateViewportContent() {
 	v.totalLineCount = len(lines)
 
 	v.viewport.SetContent(strings.Join(lines, "\n"))
+}
+
+// applyHighlight wraps content-search matches in contentLines with a
+// highlight style. Operates before numberLines, so the gutter added later
+// is untouched by highlight ANSI codes.
+//
+// Raw mode is exact: MatchesOnLine gives byte-precise ranges, so the active
+// match gets its own style distinct from other matches on the same line.
+// Glamour mode can only be best-effort — the rendered text has already
+// reflowed relative to source lines (the same reason CurrentContentLine
+// only approximates position there), so there's no reliable byte-offset
+// mapping to highlight an exact span against. Instead: strip ANSI, check
+// each rendered line's plain text for the query, and highlight the whole
+// line if it matches. There's also no reliable way to tell which rendered
+// line holds the "active" match in this mode, so every matching line gets
+// the same style — no current/other distinction like raw mode has.
+func (v *Viewer) applyHighlight(contentLines []string) []string {
+	if !v.search.HasMatches() {
+		return contentLines
+	}
+
+	switch v.renderMode {
+	case RenderModeRaw:
+		currentLine, currentStart, _, hasCurrent := v.search.CurrentRange()
+		for i, line := range contentLines {
+			lineNo := i + 1
+			ranges := v.search.MatchesOnLine(lineNo)
+			if len(ranges) == 0 {
+				continue
+			}
+			styled := make([]styledRange, len(ranges))
+			for j, r := range ranges {
+				style := styles.SearchMatchStyle
+				if hasCurrent && lineNo == currentLine && r[0] == currentStart {
+					style = styles.SearchCurrentMatchStyle
+				}
+				styled[j] = styledRange{start: r[0], end: r[1], style: style}
+			}
+			contentLines[i] = applyStyledRanges(line, styled)
+		}
+
+	case RenderModeGlamour:
+		query := strings.ToLower(v.search.Query())
+		for i, line := range contentLines {
+			if strings.Contains(strings.ToLower(ansi.Strip(line)), query) {
+				contentLines[i] = styles.SearchMatchStyle.Render(line)
+			}
+		}
+	}
+
+	return contentLines
+}
+
+// styledRange is a [start,end) byte range within a line, paired with the
+// style to render it in.
+type styledRange struct {
+	start, end int
+	style      lipgloss.Style
+}
+
+// applyStyledRanges wraps each range in line with its style. ranges must be
+// in ascending, non-overlapping order (as MatchesOnLine returns them);
+// applied back-to-front so earlier byte offsets stay valid as each Render
+// call grows the string with ANSI escape codes.
+func applyStyledRanges(line string, ranges []styledRange) string {
+	for i := len(ranges) - 1; i >= 0; i-- {
+		r := ranges[i]
+		if r.start < 0 || r.end > len(line) || r.start >= r.end {
+			continue
+		}
+		line = line[:r.start] + r.style.Render(line[r.start:r.end]) + line[r.end:]
+	}
+	return line
 }
 
 // numberLines prefixes each line with a right-aligned line number, matching

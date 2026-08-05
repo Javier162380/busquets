@@ -8,8 +8,11 @@ import (
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
 	content_test "github.com/Javier162380/claude-plan-viewer/cmd/tui/content/test"
+	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/golang/mock/gomock"
+	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -142,4 +145,139 @@ func TestViewerContentLineSync(t *testing.T) {
 			require.Equal(t, tc.want, v.CurrentContentLine())
 		})
 	}
+}
+
+// TestViewerSearch covers the viewer-level search wrappers around
+// ContentSearch — ContentSearch's own matching/indexing logic is covered in
+// contentsearch_test.go, so these tests focus on what's specific to Viewer:
+// wiring Search/SearchNext/SearchPrev/ClearSearch to scroll position and
+// highlight rendering, and confirming search survives a re-render that
+// isn't a content change (the SetContent-vs-updateViewportContent split
+// this plan called out as a staleness risk).
+func TestViewerSearch(t *testing.T) {
+	// Padded with trailing filler lines so a height-5 viewport has scroll
+	// headroom to reach line 5 (bubbles' viewport clamps YOffset to
+	// totalLines-height; without padding, an 8-line total for a height-5
+	// viewport leaves too little room and every scroll silently clamps).
+	body := strings.Join([]string{
+		"line one", "target here", "line three",
+		"line four", "target again", "line six",
+		"line seven", "line eight", "line nine", "line ten",
+	}, "\n")
+
+	t.Run("Search jumps to the first match", func(t *testing.T) {
+		v := NewViewer(80, 5, "dark")
+		v.SetContent(newMockDisplayable(t, body, "", "", ""))
+
+		v.Search("target")
+		require.True(t, v.HasMatches())
+		current, total := v.SearchStatus()
+		require.Equal(t, 1, current)
+		require.Equal(t, 2, total)
+		require.Equal(t, 2, v.CurrentContentLine())
+	})
+
+	t.Run("SearchNext and SearchPrev cycle and wrap", func(t *testing.T) {
+		v := NewViewer(80, 5, "dark")
+		v.SetContent(newMockDisplayable(t, body, "", "", ""))
+		v.Search("target")
+
+		v.SearchNext()
+		require.Equal(t, 5, v.CurrentContentLine())
+		v.SearchNext()
+		require.Equal(t, 2, v.CurrentContentLine(), "SearchNext should wrap from the last match back to the first")
+
+		v.SearchPrev()
+		require.Equal(t, 5, v.CurrentContentLine(), "SearchPrev should wrap from the first match back to the last")
+	})
+
+	t.Run("query with no matches", func(t *testing.T) {
+		v := NewViewer(80, 5, "dark")
+		v.SetContent(newMockDisplayable(t, body, "", "", ""))
+
+		v.Search("nonexistent")
+		require.False(t, v.HasMatches())
+		current, total := v.SearchStatus()
+		require.Equal(t, 0, current)
+		require.Equal(t, 0, total)
+	})
+
+	t.Run("ClearSearch drops the highlight", func(t *testing.T) {
+		// Force a color profile that actually emits ANSI codes — lipgloss
+		// renders plain text with no codes at all outside a TTY, which is
+		// the default in `go test`, and would make every Render() call
+		// below indistinguishable from unstyled text (see
+		// TestLabelPanelFollowsTheTheme for the same pattern).
+		previousProfile := lipgloss.ColorProfile()
+		lipgloss.SetColorProfile(termenv.ANSI256)
+		t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+		v := NewViewer(80, 5, "dark")
+		v.SetContent(newMockDisplayable(t, body, "", "", ""))
+		// Match Search("target")'s eventual scroll position up front, so the
+		// only difference between captures below is the highlight itself,
+		// not scroll position (Search scrolls to the first match; ClearSearch
+		// does not scroll back).
+		v.ScrollToContentLine(2)
+		unstyledView := v.View()
+
+		v.Search("target")
+		require.True(t, v.HasMatches())
+		require.NotEqual(t, unstyledView, v.View(), "a highlighted match must render differently from the unstyled view")
+
+		v.ClearSearch()
+		require.False(t, v.HasMatches())
+		require.Equal(t, unstyledView, v.View(), "clearing the search must restore exactly the unstyled rendering")
+	})
+
+	t.Run("raw mode highlights the active match distinctly from other matches", func(t *testing.T) {
+		previousProfile := lipgloss.ColorProfile()
+		lipgloss.SetColorProfile(termenv.ANSI256)
+		t.Cleanup(func() { lipgloss.SetColorProfile(previousProfile) })
+
+		v := NewViewer(80, 5, "dark")
+		v.SetContent(newMockDisplayable(t, body, "", "", ""))
+		v.Search("target")
+
+		rendered := v.View()
+		require.Contains(t, rendered, styles.SearchCurrentMatchStyle.Render("target"))
+		require.Contains(t, rendered, styles.SearchMatchStyle.Render("target"))
+		require.NotEqual(t,
+			styles.SearchCurrentMatchStyle.Render("target"),
+			styles.SearchMatchStyle.Render("target"),
+			"the active and non-active match styles must actually differ, or this test can't tell them apart",
+		)
+	})
+
+	t.Run("search survives a re-render that is not a content change", func(t *testing.T) {
+		// Regression guard: updateViewportContent runs on SetSize too, and
+		// must not rebuild the search index (only SetContent may) or an
+		// in-progress SearchNext position would silently reset to the first
+		// match on every resize.
+		v := NewViewer(80, 5, "dark")
+		v.SetContent(newMockDisplayable(t, body, "", "", ""))
+		v.Search("target")
+		v.SearchNext()
+		require.Equal(t, 5, v.CurrentContentLine())
+
+		v.SetSize(100, 6)
+
+		require.True(t, v.HasMatches())
+		current, _ := v.SearchStatus()
+		require.Equal(t, 2, current, "SearchNext's position must survive a resize-triggered re-render")
+	})
+
+	t.Run("Glamour mode: search still finds matches and HasMatches is accurate", func(t *testing.T) {
+		// Exact line-jump isn't meaningful in Glamour mode (reflowed), but
+		// matching itself must still work since the index is built from raw
+		// content regardless of render mode.
+		v := NewViewer(80, 5, "dark")
+		v.SetContent(newMockDisplayable(t, body, renderedLinesFixture(6), "", ""))
+		v.ToggleRenderMode()
+
+		v.Search("target")
+		require.True(t, v.HasMatches())
+		_, total := v.SearchStatus()
+		require.Equal(t, 2, total)
+	})
 }
