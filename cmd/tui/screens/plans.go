@@ -213,6 +213,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 
 	case messages.SaveResultMsg:
 		if msg.Error == nil && msg.Result.Success && !msg.Result.HasConflict {
+			s.viewer.ScrollToContentLine(s.editor.CurrentLine())
 			s.focus = types.FocusContent
 			s.editor.Blur()
 			// Reload the plan.
@@ -693,10 +694,10 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		return s, nil
 
 	case "e":
-		// Enter edit mode.
+		// Enter edit mode, keeping the cursor near wherever the viewer was scrolled to.
 		if s.current != nil {
 			s.focus = types.FocusEditor
-			return s, s.editor.Focus()
+			return s, s.editor.FocusAtLine(s.viewer.CurrentContentLine())
 		}
 		return s, nil
 
@@ -765,10 +766,14 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
 	case "esc":
-		// Cancel editing, back to content view.
+		// Cancel editing, back to content view. Capture the cursor's line
+		// before Reset() rewinds it to the top, so the viewer can scroll to
+		// keep showing the same spot.
+		line := s.editor.CurrentLine()
 		s.focus = types.FocusContent
 		s.editor.Blur()
 		s.editor.Reset()
+		s.viewer.ScrollToContentLine(line)
 		s.lastKey = ""
 		return s, nil
 

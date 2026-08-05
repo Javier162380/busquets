@@ -27,6 +27,8 @@ type Viewer struct {
 	renderMode      RenderMode
 	markdownTheme   string
 	showLineNumbers bool
+	headerLineCount int
+	totalLineCount  int
 	width           int
 	height          int
 }
@@ -126,6 +128,75 @@ func (v *Viewer) ScrollPercent() float64 {
 	return v.viewport.ScrollPercent()
 }
 
+// CurrentContentLine returns the 1-indexed source line currently scrolled to
+// the top of the viewport. In raw mode this is exact — each viewer line maps
+// 1:1 to a line in the underlying markdown source. In Glamour mode, rendering
+// reflows the content (headers, lists, wrapping change line counts), so
+// there's no exact mapping back to source lines; this instead approximates
+// it from the viewport's scroll percentage against the raw line count.
+func (v *Viewer) CurrentContentLine() int {
+	if v.content == nil {
+		return 1
+	}
+	if v.renderMode == RenderModeRaw {
+		line := v.viewport.YOffset - v.headerLineCount + 1
+		if line < 1 {
+			line = 1
+		}
+		return line
+	}
+	return v.lineFromScrollPercent(v.viewport.ScrollPercent())
+}
+
+// ScrollToContentLine scrolls the viewport so the given 1-indexed source
+// line sits at the top, mirroring CurrentContentLine. In raw mode this is
+// exact. In Glamour mode, since there's no exact source-line mapping, it
+// approximates by converting the target line's fraction of the raw file into
+// the equivalent scroll position in the rendered view.
+func (v *Viewer) ScrollToContentLine(line int) {
+	if v.content == nil {
+		return
+	}
+	if line < 1 {
+		line = 1
+	}
+	if v.renderMode == RenderModeRaw {
+		v.viewport.SetYOffset(v.headerLineCount + line - 1)
+		return
+	}
+
+	total := v.rawLineCount()
+	percent := 0.0
+	if total > 1 {
+		percent = float64(line-1) / float64(total-1)
+	}
+	maxOffset := v.totalLineCount - v.viewport.Height
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	v.viewport.SetYOffset(int(percent*float64(maxOffset) + 0.5))
+}
+
+// rawLineCount returns the number of lines in the underlying markdown
+// source, independent of how it's currently rendered.
+func (v *Viewer) rawLineCount() int {
+	return len(strings.Split(v.content.GetContent(), "\n"))
+}
+
+// lineFromScrollPercent maps a viewport scroll percentage onto an
+// approximate 1-indexed line in the raw source.
+func (v *Viewer) lineFromScrollPercent(percent float64) int {
+	total := v.rawLineCount()
+	line := int(percent*float64(total-1)+0.5) + 1
+	if line < 1 {
+		line = 1
+	}
+	if line > total {
+		line = total
+	}
+	return line
+}
+
 // updateViewportContent updates the viewport with formatted content.
 func (v *Viewer) updateViewportContent() {
 	if v.content == nil {
@@ -158,6 +229,7 @@ func (v *Viewer) updateViewportContent() {
 	}
 
 	lines = append(lines, "")
+	v.headerLineCount = len(lines)
 
 	// Add content based on render mode.
 	var contentText string
@@ -172,6 +244,7 @@ func (v *Viewer) updateViewportContent() {
 		contentLines = numberLines(contentLines)
 	}
 	lines = append(lines, contentLines...)
+	v.totalLineCount = len(lines)
 
 	v.viewport.SetContent(strings.Join(lines, "\n"))
 }
