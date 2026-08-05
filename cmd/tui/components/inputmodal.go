@@ -96,6 +96,9 @@ func (m *InputModal[T]) Update(msg tea.Msg) tea.Cmd {
 					}
 				}
 			}
+		default:
+			// Everything else (arrows, backspace, ctrl-combos, etc.) falls
+			// through to the generic textinput handling below.
 		}
 	}
 
