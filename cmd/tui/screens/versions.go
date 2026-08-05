@@ -200,6 +200,8 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 		return s, nil
 	case "r":
 		s.viewer.ToggleRenderMode()
+	case "l":
+		s.viewer.ToggleLineNumbers()
 	case "j", "down", "k", "up":
 		// Navigate list.
 		cmd := s.list.Update(msg)
@@ -245,6 +247,9 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 		return s, nil
 	case "r":
 		s.viewer.ToggleRenderMode()
+		return s, nil
+	case "l":
+		s.viewer.ToggleLineNumbers()
 		return s, nil
 	case "c":
 		// Copy the selected version's content to the clipboard.
@@ -411,15 +416,19 @@ func (s *VersionsScreen) ShortHelp() string {
 	if s.viewer.RenderMode() == components.RenderModeGlamour {
 		mode = "RENDERED"
 	}
+	lines := "OFF"
+	if s.viewer.ShowLineNumbers() {
+		lines = "ON"
+	}
 	switch s.focus {
 	case types.FocusList:
 		searchHelp := "/: search"
 		if s.searchQuery != "" {
 			searchHelp = fmt.Sprintf("/: search | ctrl+l: clear [%s]", s.searchQuery)
 		}
-		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | r: render (%s) | c: copy | %s | esc: back | Versions: %d", mode, searchHelp, len(s.versions))
+		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back | Versions: %d", mode, lines, searchHelp, len(s.versions))
 	case types.FocusContent:
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | c: copy | esc: back", mode)
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | l: lines (%s) | c: copy | esc: back", mode, lines)
 	case types.FocusSearch:
 		return "enter: search | esc: cancel"
 	default:

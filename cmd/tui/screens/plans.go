@@ -700,6 +700,11 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		s.viewer.ToggleRenderMode()
 		return s, nil
 
+	case "l":
+		// Toggle line numbers.
+		s.viewer.ToggleLineNumbers()
+		return s, nil
+
 	case "c":
 		// Copy the plan's raw markdown to the clipboard.
 		if s.current != nil {
@@ -1484,10 +1489,14 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.viewer.RenderMode() == components.RenderModeGlamour {
 			mode = "RENDERED"
 		}
-		if s.layout != types.LayoutFullscreen {
-			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | c: copy | tab: list | esc: back", mode)
+		lines := "OFF"
+		if s.viewer.ShowLineNumbers() {
+			lines = "ON"
 		}
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | c: copy | e: edit | v: versions | t: transmit | esc: back", mode)
+		if s.layout != types.LayoutFullscreen {
+			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | tab: list | esc: back", mode, lines)
+		}
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | e: edit | v: versions | t: transmit | esc: back", mode, lines)
 	case types.FocusEditor:
 		modified := ""
 		if s.editor.IsModified() {

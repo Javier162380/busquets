@@ -64,6 +64,11 @@ var (
 	MetaStyle = lipgloss.NewStyle().
 			Foreground(ForegroundColor).
 			Italic(true)
+
+	// LineNumberStyle is the gutter style for line numbers in the viewer,
+	// matching the muted look of the editor's textarea gutter.
+	LineNumberStyle = lipgloss.NewStyle().
+			Foreground(InactiveColor)
 )
 
 // StatusStyle returns a style for the status bar.

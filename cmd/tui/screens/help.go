@@ -39,6 +39,7 @@ PLAN CONTENT (right panel / fullscreen):
   j/k, ↑/↓       Scroll up/down
   g / G          Jump to top / bottom
   r              Toggle markdown rendering (raw vs rendered)
+  l              Toggle line numbers
   c              Copy plan content to clipboard
   e              Edit the plan
   n              View / add comments
@@ -114,6 +115,7 @@ VERSION HISTORY (left panel):
   v              View the version fullscreen
   R              Restore the selected version
   r              Toggle markdown rendering (raw vs rendered)
+  l              Toggle line numbers
   c              Copy the version content to clipboard
   Esc            Back to the plan
 
@@ -123,6 +125,7 @@ VERSION VIEW (fullscreen):
   Tab            Switch to the versions list
   R              Restore this version
   r              Toggle markdown rendering (raw vs rendered)
+  l              Toggle line numbers
   c              Copy the version content to clipboard
   Esc            Back to the versions list
 
