@@ -3,6 +3,7 @@ package screens
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ type PlansScreen struct {
 	labelPanel    *components.LabelPanel
 	commentModal  *components.CommentModal
 	renameModal   *components.RenameModal
+	inputModal    *components.InputModal[int]
 
 	// State.
 	layout types.Layout
@@ -81,6 +83,7 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 		confirmDialog: components.NewConfirmModal(),
 		commentModal:  components.NewCommentModal(),
 		renameModal:   components.NewRenameModal(),
+		inputModal:    components.NewInputModal[int](),
 		tagFilter:     components.NewTagFilter(panelWidth),
 		layout:        types.LayoutSplit,
 		baseLayout:    types.LayoutSplit,
@@ -144,6 +147,8 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s.handleCommentModalUpdate(msg)
 	case types.ModalRenameFile:
 		return s.handleRenameModalUpdate(msg)
+	case types.ModalTextInput:
+		return s.handleInputModalUpdate(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -774,6 +779,24 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		}
 		return s, nil
 
+	case "ctrl+l":
+		// Jump to a specific line.
+		maxLine := s.editor.LineCount()
+		s.activeModal = types.ModalTextInput
+		s.inputModal.SetSize(min(40, s.width-4), min(8, s.height-2))
+		s.inputModal.Open(
+			fmt.Sprintf("Go to line (1-%d)", maxLine),
+			"line number",
+			func(r rune) bool { return r >= '0' && r <= '9' },
+			strconv.Atoi,
+			func(n int) {
+				if n > 0 {
+					s.editor.JumpToLine(n)
+				}
+			},
+		)
+		return s, nil
+
 	case "t", "b":
 		// Check for double-key press (tt = top, bb = bottom).
 		now := time.Now()
@@ -989,6 +1012,15 @@ func (s *PlansScreen) handleRenameModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
 	return s, cmd
 }
 
+// handleInputModalUpdate routes messages while the generic input modal is active.
+func (s *PlansScreen) handleInputModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
+	cmd := s.inputModal.Update(msg)
+	if !s.inputModal.IsActive() {
+		s.activeModal = types.ModalNone
+	}
+	return s, cmd
+}
+
 // View renders the screen.
 func (s *PlansScreen) View() string {
 	var mainContent string
@@ -1077,6 +1109,16 @@ func (s *PlansScreen) View() string {
 			lipgloss.Center,
 			lipgloss.Center,
 			s.renameModal.View(),
+		)
+		return s.overlayContent(mainContent, overlay)
+
+	case types.ModalTextInput:
+		overlay := lipgloss.Place(
+			s.width,
+			s.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			s.inputModal.View(),
 		)
 		return s.overlayContent(mainContent, overlay)
 	}
@@ -1502,7 +1544,7 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.editor.IsModified() {
 			modified = " [MODIFIED]"
 		}
-		return fmt.Sprintf("ctrl+s: save | tt/bb: top/bottom | dd: delete line | oo: new line | esc: cancel%s", modified)
+		return fmt.Sprintf("ctrl+s: save | ctrl+l: go to line | tt/bb: top/bottom | dd: delete line | oo: new line | esc: cancel%s", modified)
 	case types.FocusSearch:
 		return "enter: search | esc: cancel"
 	case types.FocusTagFilter:

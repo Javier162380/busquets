@@ -131,6 +131,35 @@ func (e *Editor) moveCursorToEnd() {
 	e.textarea, _ = e.textarea.Update(altGreaterThanMsg)
 }
 
+const maxJumpSteps = 100000
+
+// JumpToLine moves the cursor to the start of the given 1-indexed line,
+// clamping out-of-range values to the first or last line.
+func (e *Editor) JumpToLine(line int) {
+	if line < 1 {
+		line = 1
+	}
+	target := line - 1 // 0-indexed row
+
+	switch current := e.textarea.Line(); {
+	case target < current:
+		for i := 0; i < maxJumpSteps && e.textarea.Line() > target; i++ {
+			e.textarea.CursorUp()
+		}
+	case target > current:
+		for i := 0; i < maxJumpSteps && e.textarea.Line() < target; i++ {
+			e.textarea.CursorDown()
+		}
+	}
+
+	e.textarea.CursorStart()
+}
+
+// LineCount returns the total number of lines in the editor content.
+func (e *Editor) LineCount() int {
+	return e.textarea.LineCount()
+}
+
 // DeleteCurrentLine deletes the entire line where the cursor is positioned.
 func (e *Editor) DeleteCurrentLine() {
 	// Go to start of current line
