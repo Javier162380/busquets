@@ -4,13 +4,11 @@ Quick reference for understanding the codebase architecture and development work
 
 ## Project Overview
 
-Go application that syncs Claude AI plans from `~/.claude/plans/` to a searchable database, providing TUI, CLI, and MCP interfaces.
+Go application that syncs AI plans from different origins into a searchable database, providing TUI, CLI, and MCP interfaces.
 
-**Core Features**: Plan sync/search, version tracking, multi-database support (SQLite/PostgreSQL), connector system, markdown rendering, MCP integration
+**Core Features**: Plan sync/search, version tracking, tag assigment, multi-database support (SQLite/PostgreSQL), connector system, markdown rendering and editor, MCP integration
 
 **Main Commands**: `sync`, `dump`, `tui`, `mcp`, `migrate`
-
-**Tag model**: Tags are DB-only — created/assigned via `SetPlanTags`/`CreateTag`, never read from or written to plan file content. Sync (`SyncPlans`) does not extract or overwrite tags.
 
 ## Essential Workflow
 
@@ -111,10 +109,13 @@ services/claude-viewer/     # Business logic
   │   └── postgres/         # PostgreSQL + SQLC-generated
   └── sqlc/                 # SQL schemas and queries
 
-internal/
+internal/ (internal modules used on the service layer)
+  └── cache/                # cache module reuse accross the system
+  ..... modules    
   ├── config/               # TOML config + env vars
   ├── connectors/           # Connector system + implementations
   └── storage/              # DB setup + migrations
+  
 ```
 
 ## Code Conventions
