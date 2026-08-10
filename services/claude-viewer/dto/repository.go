@@ -17,6 +17,12 @@ type Repository interface {
 	// all atomically. If writeFile fails, the insert rolls back with it.
 	InsertPlan(ctx context.Context, params InsertPlanParams, writeFile func(id int64) (filePath string, err error)) (int64, error)
 	UpdatePlan(ctx context.Context, params UpdatePlanParams) (Plan, error)
+	UpdatePlanContent(
+		ctx context.Context,
+		params UpdatePlanContentParams,
+		writeContent func() (modifiedAt time.Time, fileSize int64, err error),
+		writeVersionFile func(planID, versionNumber int64) (filePath string, wordCount int64, err error),
+	) (Plan, error)
 	// UpdatePlanFilePath runs writeFile inside a transaction and only sets
 	// file_path if it succeeds — same atomicity guarantee as InsertPlan.
 	UpdatePlanFilePath(ctx context.Context, id int64, filePath string, writeFile func() error) error

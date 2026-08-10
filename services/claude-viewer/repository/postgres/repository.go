@@ -341,6 +341,73 @@ func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams
 	return planToDomain(p), nil
 }
 
+func (r *Repository) UpdatePlanContent(
+	ctx context.Context,
+	params dto.UpdatePlanContentParams,
+	writeContent func() (time.Time, int64, error),
+	writeVersionFile func(planID, versionNumber int64) (string, int64, error),
+) (dto.Plan, error) {
+	var plan dto.Plan
+	err := r.withTx(ctx, func(q *Queries) error {
+		modifiedAt, fileSize, err := writeContent()
+		if err != nil {
+			return err
+		}
+
+		p, err := q.UpdatePlan(ctx, UpdatePlanParams{
+			FileName:   params.Plan.FileName,
+			SyncSource: params.Plan.SyncSource,
+			Title:      params.Plan.Title,
+			Content:    params.Plan.Content,
+			ModifiedAt: timeToTimestamptz(modifiedAt),
+			IndexedAt:  timeToTimestamptz(params.Plan.IndexedAt),
+			FileSize:   fileSize,
+			WordCount:  params.Plan.WordCount,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to update plan: %w", err)
+		}
+		plan = planToDomain(p)
+
+		tagRows, err := q.GetPlanTags(ctx, plan.ID)
+		if err != nil {
+			return fmt.Errorf("failed to get plan tags: %w", err)
+		}
+		plan.Tags = make([]dto.Tag, len(tagRows))
+		for i, row := range tagRows {
+			plan.Tags[i] = tagToDomain(row)
+		}
+
+		lastVersionNum, err := q.GetLatestVersionNumber(ctx, plan.ID)
+		if err != nil {
+			return fmt.Errorf("failed to get latest version number: %w", err)
+		}
+		nextVersionNum := coalesceToInt64(lastVersionNum) + 1
+
+		versionFilePath, versionWordCount, err := writeVersionFile(plan.ID, nextVersionNum)
+		if err != nil {
+			return fmt.Errorf("failed to write version file: %w", err)
+		}
+
+		if err := q.InsertPlanVersion(ctx, InsertPlanVersionParams{
+			PlanID:        plan.ID,
+			VersionNumber: nextVersionNum,
+			FilePath:      versionFilePath,
+			Content:       params.VersionContent,
+			WordCount:     versionWordCount,
+			CreatedAt:     timeToTimestamptz(params.VersionCreatedAt),
+		}); err != nil {
+			return fmt.Errorf("failed to save version to database: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return dto.Plan{}, err
+	}
+	return plan, nil
+}
+
 func (r *Repository) InsertPlanWithTags(ctx context.Context, params dto.InsertPlanWithTagsParams) error {
 	return r.withTx(ctx, func(q *Queries) error {
 		if _, err := q.InsertPlan(ctx, InsertPlanParams{
@@ -743,11 +810,17 @@ func (r *Repository) GetLatestVersionNumber(ctx context.Context, planID int64) (
 	if err != nil {
 		return 0, err
 	}
-	// Handle the COALESCE result
-	if result == nil {
-		return 0, nil
+	return coalesceToInt64(result), nil
+}
+
+// coalesceToInt64 converts the interface{} SQLC generates for a COALESCE(...)
+// result into an int64. Shared by GetLatestVersionNumber and
+// UpdatePlanContent so the nil-check lives in one place.
+func coalesceToInt64(v any) int64 {
+	if v == nil {
+		return 0
 	}
-	return result.(int64), nil
+	return v.(int64)
 }
 
 func (r *Repository) GetVersionCount(ctx context.Context, planID int64) (int64, error) {

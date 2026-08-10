@@ -28,6 +28,16 @@ type UpdatePlanParams struct {
 	WordCount  int64
 }
 
+// UpdatePlanContentParams bundles a plan content update with its version
+// snapshot for UpdatePlanContent's atomic write. VersionContent is always
+// the full new content, independent of Plan.Content (which is truncated to
+// the title when the caller isn't indexing full content).
+type UpdatePlanContentParams struct {
+	Plan             UpdatePlanParams
+	VersionContent   string
+	VersionCreatedAt time.Time
+}
+
 // RenamePlanFileParams holds the writes for an atomic file rename: the plan row's
 // file_name/file_path. Versions live under a plan-id-keyed directory (see
 // versionsDirFor), so renaming a plan's file never needs to touch them.

@@ -940,6 +940,69 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		require.Equal(t, sampleMarkdownUpdated, string(viewerContent))
 	})
 
+	t.Run("UpdatePlan creates a version snapshot atomically with the content update", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		result, err := service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource:       sourcePlansDir,
+			FileName:         "test-plan.md",
+			NewContent:       sampleMarkdownUpdated,
+			LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+		require.True(t, result.Success)
+
+		versions, err := service.GetPlanVersionHistory(ctx, "test-plan.md", sourcePlansDir, 0, 10)
+		require.NoError(t, err)
+		require.Len(t, versions, 1)
+		require.Equal(t, int64(1), versions[0].VersionNumber)
+		require.Equal(t, sampleMarkdownUpdated, versions[0].Content)
+
+		versionFileContent, err := os.ReadFile(versions[0].FilePath)
+		require.NoError(t, err)
+		require.Equal(t, sampleMarkdownUpdated, string(versionFileContent))
+	})
+
+	t.Run("UpdatePlan returns the plan's current tags without a separate lookup", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, service.SetPlanTags(ctx, "test-plan.md", sourcePlansDir, []string{"api", "backend"}))
+
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		result, err := service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource:       sourcePlansDir,
+			FileName:         "test-plan.md",
+			NewContent:       sampleMarkdownUpdated,
+			LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+		require.True(t, result.Success)
+		require.NotNil(t, result.Plan)
+
+		tagNames := make([]string, len(result.Plan.Tags))
+		for i, tag := range result.Plan.Tags {
+			tagNames[i] = tag.Name
+		}
+		require.ElementsMatch(t, []string{"api", "backend"}, tagNames)
+	})
+
 	t.Run("UpdatePlan populates Plan.Content with full text even when indexFullContent is false", func(t *testing.T) {
 		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
