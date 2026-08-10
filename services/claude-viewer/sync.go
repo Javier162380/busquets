@@ -154,10 +154,23 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 	return int(rsyncPlans.Load()), nil
 }
 
-// DeletePlan removes a plan everywhere it lives. Filesystem artifacts are removed
-// first so a delete failure aborts before any DB mutation (and so a surviving source
-// file can never resurrect the plan on the next sync). The DB row, its tag/comment
-// associations, and all version rows are then removed in a single transaction.
+// trashDirName is the directory under viewerDir where a deleted plan's files are
+// parked between the delete transaction committing and the files being purged.
+// It sits beside plans/ rather than inside it so nothing that walks the plan
+// storage tree (MigrateStorageLayout) ever sees a half-deleted plan.
+const trashDirName = ".trash"
+
+// DeletePlan removes a plan everywhere it lives: the source file, the id-keyed
+// mirror directory (which holds both the mirror file and versions/), the plan row,
+// and its tag/comment/version associations.
+//
+// It is transaction-safe. The filesystem step runs inside the same DB transaction
+// as the row deletes, so a filesystem failure rolls the deletes back with it. That
+// only works because the step is *reversible*: the files are moved aside, never
+// unlinked, so a failed commit can be undone by moving them back. They are purged
+// for real only once the transaction has committed — at which point the DB no
+// longer knows the plan exists, so a failed purge leaves garbage under .trash
+// rather than an inconsistency.
 //
 // The plan's mirror path is looked up fresh from the DB rather than accepted as a
 // parameter — trusting a caller-supplied path would let a mismatched value delete
@@ -168,25 +181,76 @@ func (s *Service) DeletePlan(ctx context.Context, fileName, syncSource string) e
 		return fmt.Errorf("plan not found: %w", err)
 	}
 
-	paths := []string{
-		filepath.Join(syncSource, fileName), // source
-		plan.FilePath,                       // mirror
-	}
-	for _, p := range paths {
-		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to delete %s: %w", p, err)
-		}
-	}
-	// os.RemoveAll is a no-op if the dir is absent; only a real failure returns err.
-	// filepath.Dir(plan.FilePath) is the plan's id-scoped directory, so its "versions"
-	// sibling belongs to this plan alone — no cross-source collision risk.
-	versionsDir := filepath.Join(filepath.Dir(plan.FilePath), "versions")
-	if err := os.RemoveAll(versionsDir); err != nil {
-		return fmt.Errorf("failed to delete version files %s: %w", versionsDir, err)
+	trashRoot := filepath.Join(s.viewerDir, trashDirName)
+	if err := os.MkdirAll(trashRoot, 0o750); err != nil {
+		return fmt.Errorf("failed to create trash directory: %w", err)
 	}
 
-	if err := s.db.DeletePlan(ctx, fileName, syncSource); err != nil {
-		return err
+	// The source file is parked in its own directory, not under trashRoot: syncSource
+	// may live on a different filesystem than viewerDir, and os.Rename fails across
+	// devices (EXDEV). The parked name is dot-prefixed and does not end in ".md", so
+	// syncDirectory skips it and a leftover can never be re-indexed as a plan.
+	stamp := s.nowProvider.Now().UnixNano()
+	parkedSource := filepath.Join(syncSource, fmt.Sprintf(".%s.deleting-%d", fileName, plan.ID))
+
+	// The plan's id-scoped directory holds both the mirror file and its versions/
+	// sibling and belongs to this plan alone, so moving the whole directory disposes
+	// of both in a single rename with no cross-source collision risk. It lives under
+	// viewerDir, same filesystem as trashRoot.
+	//
+	// It is derived from the immutable plan id, NOT from filepath.Dir(plan.FilePath):
+	// a stored path that somehow points outside the plan storage tree would otherwise
+	// make this move that whole directory instead, which for a path in a source
+	// directory would park every plan the user owns.
+	planDir := s.planDirFor(plan.ID)
+	parkedPlanDir := filepath.Join(trashRoot, fmt.Sprintf("%d-%d", plan.ID, stamp))
+
+	pending := []fileMove{
+		{from: filepath.Join(syncSource, fileName), to: parkedSource},
+		{from: planDir, to: parkedPlanDir},
+	}
+
+	// Installs predating the id-keyed layout store the mirror somewhere else entirely
+	// (see MigrateStorageLayout). Park that file too, bounded to the single file the
+	// row names — never the directory containing it.
+	if plan.FilePath != "" && !strings.HasPrefix(plan.FilePath, planDir+string(filepath.Separator)) {
+		pending = append(pending, fileMove{
+			from: plan.FilePath,
+			to:   filepath.Join(trashRoot, fmt.Sprintf("%d-%d-legacy-%s", plan.ID, stamp, filepath.Base(plan.FilePath))),
+		})
+	}
+
+	var done []fileMove
+	err = s.db.DeletePlan(ctx, fileName, syncSource, func() error {
+		for _, m := range pending {
+			if renameErr := os.Rename(m.from, m.to); renameErr != nil {
+				// Already gone (source file deleted by hand, plan never mirrored):
+				// nothing to move, and nothing to undo.
+				if os.IsNotExist(renameErr) {
+					continue
+				}
+				return fmt.Errorf("failed to move %s aside: %w", m.from, renameErr)
+			}
+			done = append(done, m)
+		}
+		return nil
+	})
+	if err != nil {
+		// The transaction did not commit (a move failed, or the commit itself failed).
+		// Undo any moves that did happen so the filesystem matches the rolled-back DB.
+		for i := len(done) - 1; i >= 0; i-- {
+			_ = os.Rename(done[i].to, done[i].from)
+		}
+		return fmt.Errorf("failed to delete plan: %w", err)
+	}
+
+	// Committed: the plan no longer exists as far as the DB is concerned. Purge the
+	// parked files. A failure here is logged, not returned — it leaves orphaned bytes
+	// under .trash, which is garbage to collect, not an inconsistency to repair.
+	for _, m := range done {
+		if rmErr := os.RemoveAll(m.to); rmErr != nil {
+			s.logger.Warn("failed to purge deleted plan files", "path", m.to, "error", rmErr)
+		}
 	}
 
 	s.summaryCache.Delete(fileName)
@@ -194,7 +258,7 @@ func (s *Service) DeletePlan(ctx context.Context, fileName, syncSource string) e
 }
 
 // fileMove is a single filesystem rename (from -> to), tracked so a failed rename
-// partway through RenamePlanFile can undo the moves already performed.
+// partway through RenamePlanFile or DeletePlan can undo the moves already performed.
 type fileMove struct {
 	from string
 	to   string

@@ -501,7 +501,7 @@ func (r *Repository) UpdatePlanWithTags(ctx context.Context, params dto.UpdatePl
 	})
 }
 
-func (r *Repository) DeletePlan(ctx context.Context, fileName, syncSource string) error {
+func (r *Repository) DeletePlan(ctx context.Context, fileName, syncSource string, deleteFiles func() error) error {
 	return r.withTx(ctx, func(q *Queries) error {
 		plan, err := q.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
 			FileName:   fileName,
@@ -525,6 +525,15 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName, syncSource string
 
 		if err := q.DeletePlan(ctx, DeletePlanParams{FileName: fileName, SyncSource: syncSource}); err != nil {
 			return fmt.Errorf("failed to delete plan: %w", err)
+		}
+
+		// Dispose of the files while the transaction is still open. Returning an error
+		// here rolls the DB deletes above back with it, so the delete is atomic across
+		// DB and filesystem — no separate compensating write.
+		if deleteFiles != nil {
+			if err := deleteFiles(); err != nil {
+				return err
+			}
 		}
 		return nil
 	})

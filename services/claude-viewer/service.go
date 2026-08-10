@@ -109,16 +109,22 @@ func (s *Service) labelForSource(syncSource string) string {
 	return filepath.Base(syncSource)
 }
 
+// planDirFor returns a plan's id-scoped storage directory, which holds both its
+// mirror file and its versions/ subdirectory. Keyed by plan.id (immutable,
+// globally unique) — never depends on sync label or filename collisions across
+// sources, and never on a path read back out of the database.
+func (s *Service) planDirFor(planID int64) string {
+	return filepath.Join(s.viewerDir, "plans", strconv.FormatInt(planID, 10))
+}
+
 // mirrorPathFor returns the on-disk path for a plan's current-content mirror.
-// Keyed by plan.id (immutable, globally unique) — never depends on sync
-// label or filename collisions across sources.
 func (s *Service) mirrorPathFor(planID int64, fileName string) string {
-	return filepath.Join(s.viewerDir, "plans", strconv.FormatInt(planID, 10), fileName)
+	return filepath.Join(s.planDirFor(planID), fileName)
 }
 
 // versionsDirFor returns a plan's versions directory, keyed by plan.id.
 func (s *Service) versionsDirFor(planID int64) string {
-	return filepath.Join(s.viewerDir, "plans", strconv.FormatInt(planID, 10), "versions")
+	return filepath.Join(s.planDirFor(planID), "versions")
 }
 
 // Close stops background goroutines started by New (cache GC and watch manager).

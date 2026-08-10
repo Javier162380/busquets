@@ -3290,34 +3290,135 @@ func testDeletePlan(t *testing.T, service *Service, sourcePlansDir string) {
 		require.NotContains(t, commentCounts, plan.ID)
 	})
 
-	t.Run("file delete failure aborts before DB mutation (files-first ordering)", func(t *testing.T) {
-		// A non-empty directory at the source path makes os.Remove fail with a
-		// non-IsNotExist error, exercising the files-first abort path.
-		const fileName = "stubborn.md"
-		badPath := filepath.Join(sourcePlansDir, fileName)
-		require.NoError(t, os.MkdirAll(badPath, 0o750))
-		require.NoError(t, os.WriteFile(filepath.Join(badPath, "child"), []byte("x"), 0o600))
+	t.Run("successful delete leaves no trash behind", func(t *testing.T) {
+		const fileName = "purge-me.md"
+		require.NoError(t, os.WriteFile(filepath.Join(sourcePlansDir, fileName), []byte(sampleMarkdown), 0o600))
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, service.DeletePlan(ctx, fileName, sourcePlansDir))
+
+		// The parked files are purged once the transaction commits, so .trash is
+		// either absent or empty — never holding the plan we just deleted.
+		entries, err := os.ReadDir(filepath.Join(service.viewerDir, trashDirName))
+		if err == nil {
+			require.Empty(t, entries, "trash must be purged after a successful delete")
+		} else {
+			require.True(t, os.IsNotExist(err))
+		}
+	})
+
+	t.Run("filesystem failure rolls back the whole delete", func(t *testing.T) {
+		// Make the source directory unwritable so parking the source file fails with
+		// EACCES. The delete transaction must roll back and every artifact survive.
+		if os.Geteuid() == 0 {
+			t.Skip("running as root: directory permissions do not block renames")
+		}
+		const fileName = "rollback.md"
+		sourceFile := filepath.Join(sourcePlansDir, fileName)
+		require.NoError(t, os.WriteFile(sourceFile, []byte(sampleMarkdown), 0o600))
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, service.SavePlanVersion(ctx, fileName, sourcePlansDir, sampleMarkdown))
+		_, err = service.AddComment(ctx, fileName, sourcePlansDir, "keep me")
+		require.NoError(t, err)
+		require.NoError(t, service.SetPlanTags(ctx, fileName, sourcePlansDir, []string{"keep-tag"}))
+
+		plan, err := service.GetPlanByFileName(ctx, fileName, sourcePlansDir)
+		require.NoError(t, err)
+
+		info, err := os.Stat(sourcePlansDir)
+		require.NoError(t, err)
+		require.NoError(t, os.Chmod(sourcePlansDir, 0o500))
+		defer func() { _ = os.Chmod(sourcePlansDir, info.Mode().Perm()) }()
+
+		err = service.DeletePlan(ctx, fileName, sourcePlansDir)
+		require.Error(t, err, "delete must fail when the source file cannot be moved aside")
+
+		require.NoError(t, os.Chmod(sourcePlansDir, info.Mode().Perm()))
+
+		// Nothing may have been lost: row, files, versions, comments and tags.
+		survivor, err := service.GetPlanByFileName(ctx, fileName, sourcePlansDir)
+		require.NoError(t, err, "DB row must survive a rolled-back delete")
+		require.Equal(t, plan.ID, survivor.ID)
+		require.FileExists(t, sourceFile)
+		require.FileExists(t, service.mirrorPathFor(plan.ID, fileName))
+		require.DirExists(t, service.versionsDirFor(plan.ID))
+
+		versions, err := service.GetPlanVersionHistory(ctx, fileName, sourcePlansDir, 0, 10)
+		require.NoError(t, err)
+		require.Len(t, versions, 1)
+
+		comments, err := service.GetPlanComments(ctx, fileName, sourcePlansDir)
+		require.NoError(t, err)
+		require.Len(t, comments, 1)
+
+		tags, err := service.GetPlanTags(ctx, fileName, sourcePlansDir)
+		require.NoError(t, err)
+		require.Len(t, tags, 1)
+
+		// The rollback must also undo any move that did land.
+		entries, readErr := os.ReadDir(filepath.Join(service.viewerDir, trashDirName))
+		if readErr == nil {
+			require.Empty(t, entries, "rolled-back delete must leave nothing parked in trash")
+		}
+
+		require.NoError(t, service.DeletePlan(ctx, fileName, sourcePlansDir))
+	})
+
+	t.Run("delete succeeds when the source file is already gone", func(t *testing.T) {
+		const fileName = "vanished.md"
+		sourceFile := filepath.Join(sourcePlansDir, fileName)
+		require.NoError(t, os.WriteFile(sourceFile, []byte(sampleMarkdown), 0o600))
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plan, err := service.GetPlanByFileName(ctx, fileName, sourcePlansDir)
+		require.NoError(t, err)
+
+		// The user removed the source file by hand; the delete must still clean up.
+		require.NoError(t, os.Remove(sourceFile))
+
+		require.NoError(t, service.DeletePlan(ctx, fileName, sourcePlansDir))
+
+		_, err = service.GetPlanByFileName(ctx, fileName, sourcePlansDir)
+		require.Error(t, err)
+		require.NoFileExists(t, service.mirrorPathFor(plan.ID, fileName))
+		require.NoDirExists(t, service.planDirFor(plan.ID))
+	})
+
+	t.Run("delete never moves the directory a stored path points at", func(t *testing.T) {
+		// A row whose file_path points into the source directory must not cause that
+		// whole directory to be parked: the plan directory is derived from the id.
+		const fileName = "bogus-path.md"
+		decoy := filepath.Join(sourcePlansDir, "innocent-bystander.md")
+		require.NoError(t, os.WriteFile(decoy, []byte(sampleMarkdown), 0o600))
 
 		now := service.nowProvider.Now()
-		_, err := service.db.InsertPlan(ctx, dto.InsertPlanParams{
+		planID, err := service.db.InsertPlan(ctx, dto.InsertPlanParams{
 			FileName:   fileName,
 			SyncSource: sourcePlansDir,
-			Title:      "Stubborn",
+			Title:      "Bogus",
 			Content:    sampleMarkdown,
 			CreatedAt:  now,
 			ModifiedAt: now,
 			IndexedAt:  now,
 			FileSize:   1,
 			WordCount:  1,
-		}, func(int64) (string, error) { return badPath, nil })
+		}, func(int64) (string, error) {
+			// file_path points at a file directly inside the source directory.
+			return filepath.Join(sourcePlansDir, fileName), nil
+		})
 		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(filepath.Join(sourcePlansDir, fileName), []byte(sampleMarkdown), 0o600))
 
-		err = service.DeletePlan(ctx, fileName, sourcePlansDir)
-		require.Error(t, err)
+		require.NoError(t, service.DeletePlan(ctx, fileName, sourcePlansDir))
 
-		// DB row must survive the failed delete (files-first ordering).
-		_, err = service.GetPlanByFileName(ctx, fileName, sourcePlansDir)
-		require.NoError(t, err)
+		// The source directory and every unrelated plan file in it must still be there.
+		require.DirExists(t, sourcePlansDir)
+		require.FileExists(t, decoy)
+		require.NoDirExists(t, service.planDirFor(planID))
 	})
 }
 

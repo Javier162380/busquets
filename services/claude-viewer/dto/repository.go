@@ -33,7 +33,13 @@ type Repository interface {
 	UpdatePlanVersionFilePath(ctx context.Context, id int64, filePath string, writeFile func() error) error
 	InsertPlanWithTags(ctx context.Context, params InsertPlanWithTagsParams) error
 	UpdatePlanWithTags(ctx context.Context, params UpdatePlanWithTagsParams) error
-	DeletePlan(ctx context.Context, fileName, syncSource string) error
+	// DeletePlan removes the plan row, its tag/comment associations and all its
+	// version rows, and — while the transaction is open — invokes deleteFiles so
+	// the caller can dispose of the plan's files, all atomically. If deleteFiles
+	// fails, the deletes roll back with it. deleteFiles must be reversible (move
+	// aside, not unlink): a rollback can undo a rename but cannot restore deleted
+	// bytes. Pass nil to skip the filesystem step.
+	DeletePlan(ctx context.Context, fileName, syncSource string, deleteFiles func() error) error
 	RenamePlanFile(ctx context.Context, params RenamePlanFileParams, renameFiles func() error) error
 	ListAllPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]PlanSummary, error)
 	// ListAllPlansFull and ListPlanVersionsAll are used only by MigrateStorageLayout.
