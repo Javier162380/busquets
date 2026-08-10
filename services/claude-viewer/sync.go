@@ -185,23 +185,9 @@ func (s *Service) DeletePlan(ctx context.Context, fileName, syncSource string) e
 	if err := os.MkdirAll(trashRoot, 0o750); err != nil {
 		return fmt.Errorf("failed to create trash directory: %w", err)
 	}
-
-	// The source file is parked in its own directory, not under trashRoot: syncSource
-	// may live on a different filesystem than viewerDir, and os.Rename fails across
-	// devices (EXDEV). The parked name is dot-prefixed and does not end in ".md", so
-	// syncDirectory skips it and a leftover can never be re-indexed as a plan.
 	stamp := s.nowProvider.Now().UnixNano()
 	parkedSource := filepath.Join(syncSource, fmt.Sprintf(".%s.deleting-%d", fileName, plan.ID))
 
-	// The plan's id-scoped directory holds both the mirror file and its versions/
-	// sibling and belongs to this plan alone, so moving the whole directory disposes
-	// of both in a single rename with no cross-source collision risk. It lives under
-	// viewerDir, same filesystem as trashRoot.
-	//
-	// It is derived from the immutable plan id, NOT from filepath.Dir(plan.FilePath):
-	// a stored path that somehow points outside the plan storage tree would otherwise
-	// make this move that whole directory instead, which for a path in a source
-	// directory would park every plan the user owns.
 	planDir := s.planDirFor(plan.ID)
 	parkedPlanDir := filepath.Join(trashRoot, fmt.Sprintf("%d-%d", plan.ID, stamp))
 
