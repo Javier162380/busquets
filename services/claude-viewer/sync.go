@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/internal/config"
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
@@ -332,25 +333,27 @@ func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileNa
 	now := s.nowProvider.Now()
 
 	if planExists {
-		if _, err := s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
-			FileName:   fileName,
-			SyncSource: dir.Path,
-			Title:      title,
-			Content:    contentToStore,
-			ModifiedAt: sourceInfo.ModTime(),
-			IndexedAt:  now,
-			FileSize:   sourceInfo.Size(),
-			WordCount:  int64(wordCount),
-		}); err != nil {
-			return false, fmt.Errorf("failed to update plan: %w", err)
-		}
-
 		destPath := s.mirrorPathFor(existingPlan.ID, fileName)
-		if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
-			return false, fmt.Errorf("failed to create plan directory: %w", err)
-		}
-		if err := copyFile(sourcePath, destPath); err != nil {
-			return false, fmt.Errorf("failed to copy file: %w", err)
+
+		if _, err := s.db.UpdatePlanContent(ctx, dto.UpdatePlanContentParams{
+			Plan: dto.UpdatePlanParams{
+				FileName:   fileName,
+				SyncSource: dir.Path,
+				Title:      title,
+				Content:    contentToStore,
+				IndexedAt:  now,
+				WordCount:  int64(wordCount),
+			},
+		}, func() (time.Time, int64, error) {
+			if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
+				return time.Time{}, 0, fmt.Errorf("failed to create plan directory: %w", err)
+			}
+			if err := copyFile(sourcePath, destPath); err != nil {
+				return time.Time{}, 0, fmt.Errorf("failed to copy file: %w", err)
+			}
+			return sourceInfo.ModTime(), sourceInfo.Size(), nil
+		}, nil); err != nil {
+			return false, fmt.Errorf("failed to update plan: %w", err)
 		}
 		return true, nil
 	}

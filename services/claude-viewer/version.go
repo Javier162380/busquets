@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
 )
@@ -142,15 +143,10 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName, syncSource strin
 	}, nil
 }
 
-// rollbackFiles restores source and viewer files to their previous content after a failed restore.
-func rollbackFiles(sourcePath string, oldSource []byte, viewerPath string, oldViewer []byte) {
-	//nolint:gosec // G703: paths are constructed by the application from trusted config, not user input
-	_ = os.WriteFile(sourcePath, oldSource, 0o600)
-	//nolint:gosec // G703: paths are constructed by the application from trusted config, not user input
-	_ = os.WriteFile(viewerPath, oldViewer, 0o600)
-}
-
-// RestorePlanVersion restores a plan to a previous version.
+// RestorePlanVersion restores a plan to a previous version: writes that
+// version's content back to the source and viewer files, updates the plan
+// row, and records the restore itself as a new version — atomically via
+// UpdatePlanContent, same as UpdatePlan/SavePlanLocal.
 func (s *Service) RestorePlanVersion(ctx context.Context, planName, syncSource string, versionNumber int64) error {
 	plan, err := s.db.GetPlanByFileName(ctx, planName, syncSource)
 	if err != nil {
@@ -165,86 +161,41 @@ func (s *Service) RestorePlanVersion(ctx context.Context, planName, syncSource s
 	sourcePath := filepath.Join(syncSource, planName)
 	viewerPath := plan.FilePath
 
-	//nolint:gosec // G304: path is constructed by the application from trusted config, not user input
-	oldSource, err := os.ReadFile(sourcePath)
-	if err != nil {
-		return fmt.Errorf("failed to read source file: %w", err)
-	}
-	//nolint:gosec // G304: path is constructed by the application from trusted config, not user input
-	oldViewer, err := os.ReadFile(viewerPath)
-	if err != nil {
-		return fmt.Errorf("failed to read viewer file: %w", err)
-	}
-
-	restoredContent := []byte(version.Content)
-
-	if err := os.WriteFile(sourcePath, restoredContent, 0o600); err != nil {
-		return fmt.Errorf("failed to write source file: %w", err)
-	}
-	if err := os.WriteFile(viewerPath, restoredContent, 0o600); err != nil {
-		rollbackFiles(sourcePath, oldSource, viewerPath, oldViewer)
-		return fmt.Errorf("failed to write viewer file: %w", err)
-	}
-
-	info, err := os.Stat(viewerPath)
-	if err != nil {
-		rollbackFiles(sourcePath, oldSource, viewerPath, oldViewer)
-		return fmt.Errorf("failed to stat restored file: %w", err)
-	}
-
 	title := extractTitle(version.Content)
 	wordCount := CountWords(version.Content)
-	now := s.nowProvider.Now()
 
 	contentToStore := version.Content
 	if !s.indexFullContent {
 		contentToStore = title
 	}
 
-	lastVersionNum, err := s.db.GetLatestVersionNumber(ctx, plan.ID)
-	if err != nil {
-		rollbackFiles(sourcePath, oldSource, viewerPath, oldViewer)
-		return fmt.Errorf("failed to get latest version number: %w", err)
-	}
+	now := s.nowProvider.Now()
 
-	nextVersionNum := lastVersionNum + 1
-	timestamp := strconv.FormatInt(now.Unix(), 10)
-	versionsDir := s.versionsDirFor(plan.ID)
-
-	if err := os.MkdirAll(versionsDir, 0o750); err != nil {
-		rollbackFiles(sourcePath, oldSource, viewerPath, oldViewer)
-		return fmt.Errorf("failed to create versions directory: %w", err)
-	}
-
-	versionFilePath := filepath.Join(versionsDir, fmt.Sprintf("%d-%s.md", nextVersionNum, timestamp))
-	if err := os.WriteFile(versionFilePath, restoredContent, 0o600); err != nil {
-		rollbackFiles(sourcePath, oldSource, viewerPath, oldViewer)
-		return fmt.Errorf("failed to write version file: %w", err)
-	}
-
-	err = s.db.RestorePlanVersion(ctx, dto.RestorePlanVersionParams{
+	_, err = s.db.UpdatePlanContent(ctx, dto.UpdatePlanContentParams{
 		Plan: dto.UpdatePlanParams{
 			FileName:   planName,
 			SyncSource: syncSource,
 			Title:      title,
 			Content:    contentToStore,
-			ModifiedAt: info.ModTime(),
 			IndexedAt:  now,
-			FileSize:   info.Size(),
 			WordCount:  int64(wordCount),
 		},
-		Version: dto.InsertPlanVersionParams{
-			PlanID:        plan.ID,
-			VersionNumber: nextVersionNum,
-			FilePath:      versionFilePath,
-			Content:       version.Content,
-			WordCount:     int64(wordCount),
-			CreatedAt:     now,
-		},
-	})
+		VersionContent:   version.Content,
+		VersionCreatedAt: now,
+	}, func() (time.Time, int64, error) {
+		if err := os.WriteFile(sourcePath, []byte(version.Content), 0o600); err != nil {
+			return time.Time{}, 0, fmt.Errorf("failed to write source file: %w", err)
+		}
+		if err := os.WriteFile(viewerPath, []byte(version.Content), 0o600); err != nil {
+			return time.Time{}, 0, fmt.Errorf("failed to write viewer file: %w", err)
+		}
+		info, err := os.Stat(viewerPath)
+		if err != nil {
+			return time.Time{}, 0, fmt.Errorf("failed to stat restored file: %w", err)
+		}
+		return info.ModTime(), info.Size(), nil
+	}, s.writeVersionFile(now, version.Content, wordCount))
 	if err != nil {
-		rollbackFiles(sourcePath, oldSource, viewerPath, oldViewer)
-		_ = os.Remove(versionFilePath)
 		return fmt.Errorf("failed to restore plan: %w", err)
 	}
 

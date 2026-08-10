@@ -1598,6 +1598,46 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		require.NoError(t, err)
 		require.Equal(t, 0, len(results), "should find no versions with 'nonexistent'")
 	})
+
+	t.Run("RestorePlanVersion restores content atomically and records a new version", func(t *testing.T) {
+		createTestPlanFile(t, sourcePlansDir, "restore-test.md", "# Original\nOriginal content")
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, service.SavePlanVersion(ctx, "restore-test.md", sourcePlansDir, "# Version One\nFirst content"))
+		require.NoError(t, service.SavePlanVersion(ctx, "restore-test.md", sourcePlansDir, "# Version Two\nSecond content"))
+
+		err = service.RestorePlanVersion(ctx, "restore-test.md", sourcePlansDir, 1)
+		require.NoError(t, err)
+
+		plan, err := service.GetPlanByFileName(ctx, "restore-test.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, "Version One", plan.Title)
+		require.Equal(t, "# Version One\nFirst content", plan.Content)
+
+		sourceContent, err := os.ReadFile(filepath.Join(sourcePlansDir, "restore-test.md"))
+		require.NoError(t, err)
+		require.Equal(t, "# Version One\nFirst content", string(sourceContent))
+
+		viewerContent, err := os.ReadFile(plan.FilePath)
+		require.NoError(t, err)
+		require.Equal(t, "# Version One\nFirst content", string(viewerContent))
+
+		versions, err := service.GetPlanVersionHistory(ctx, "restore-test.md", sourcePlansDir, 0, 10)
+		require.NoError(t, err)
+		require.Len(t, versions, 3)
+		require.Equal(t, int64(3), versions[0].VersionNumber)
+		require.Equal(t, "# Version One\nFirst content", versions[0].Content)
+	})
+
+	t.Run("RestorePlanVersion fails for non-existent version", func(t *testing.T) {
+		createTestPlanFile(t, sourcePlansDir, "restore-missing.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		err = service.RestorePlanVersion(ctx, "restore-missing.md", sourcePlansDir, 99)
+		require.Error(t, err)
+	})
 }
 
 func TestConnectorManager(t *testing.T) {

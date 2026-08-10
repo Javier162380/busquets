@@ -378,6 +378,10 @@ func (r *Repository) UpdatePlanContent(
 			plan.Tags[i] = tagToDomain(row)
 		}
 
+		if writeVersionFile == nil {
+			return nil
+		}
+
 		lastVersionNum, err := q.GetLatestVersionNumber(ctx, plan.ID)
 		if err != nil {
 			return fmt.Errorf("failed to get latest version number: %w", err)
@@ -733,35 +737,6 @@ func (r *Repository) matchesTagFilter(planTags []dto.Tag, filterTags []string, m
 	}
 
 	return false
-}
-
-func (r *Repository) RestorePlanVersion(ctx context.Context, params dto.RestorePlanVersionParams) error {
-	return r.withTx(ctx, func(q *Queries) error {
-		if _, err := q.UpdatePlan(ctx, UpdatePlanParams{
-			FileName:   params.Plan.FileName,
-			SyncSource: params.Plan.SyncSource,
-			Title:      params.Plan.Title,
-			Content:    params.Plan.Content,
-			ModifiedAt: timeToTimestamptz(params.Plan.ModifiedAt),
-			IndexedAt:  timeToTimestamptz(params.Plan.IndexedAt),
-			FileSize:   params.Plan.FileSize,
-			WordCount:  params.Plan.WordCount,
-		}); err != nil {
-			return fmt.Errorf("failed to update plan: %w", err)
-		}
-
-		if err := q.InsertPlanVersion(ctx, InsertPlanVersionParams{
-			PlanID:        params.Version.PlanID,
-			VersionNumber: params.Version.VersionNumber,
-			FilePath:      params.Version.FilePath,
-			Content:       params.Version.Content,
-			WordCount:     params.Version.WordCount,
-			CreatedAt:     timeToTimestamptz(params.Version.CreatedAt),
-		}); err != nil {
-			return fmt.Errorf("failed to insert plan version: %w", err)
-		}
-		return nil
-	})
 }
 
 func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPlanVersionParams) error {
