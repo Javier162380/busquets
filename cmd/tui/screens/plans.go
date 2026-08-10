@@ -212,14 +212,16 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s, nil
 
 	case messages.SaveResultMsg:
-		if msg.Error == nil && msg.Result.Success && !msg.Result.HasConflict {
-			s.viewer.ScrollToContentLine(s.editor.CurrentLine())
-			s.focus = types.FocusContent
-			s.editor.Blur()
-			// Reload the plan.
-			if s.current != nil {
-				return s, s.loadPlanDetail(s.current.FileName, s.current.SyncSource)
-			}
+		if msg.Error == nil && msg.Result.Success && !msg.Result.HasConflict && msg.Plan != nil {
+			// Update the viewer and the editor's saved baseline so the
+			// content is fresh whenever the user leaves the editor, but stay
+			// in the editor and don't touch its focus or cursor — a save
+			// should not redirect the user away from what they're typing.
+			// Only esc (handleEditorKey) switches focus back to content.
+			s.current = msg.Plan
+			viewerWidth := s.getViewerWidth()
+			s.viewer.SetContent(content.NewPlanContent(msg.Plan, viewerWidth))
+			s.editor.MarkSaved(msg.Plan.Content)
 		}
 		return s, nil
 

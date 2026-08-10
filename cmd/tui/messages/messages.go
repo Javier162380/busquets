@@ -59,6 +59,7 @@ type DumpPlansMsg struct{}
 type SaveResultMsg struct {
 	Result *claudeviewer.UpdatePlanResult
 	Error  error
+	Plan   *claudeviewer.PlanDetail
 }
 
 // SyncResultMsg is sent when sync completes.

@@ -921,6 +921,12 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		require.True(t, result.Success)
 		require.False(t, result.HasConflict)
 
+		require.NotNil(t, result.Plan)
+		require.Equal(t, "test-plan.md", result.Plan.FileName)
+		require.Equal(t, sourcePlansDir, result.Plan.SyncSource)
+		require.Equal(t, "Updated Plan", result.Plan.Title)
+		require.Equal(t, sampleMarkdownUpdated, result.Plan.Content)
+
 		updatedPlan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, "Updated Plan", updatedPlan.Title)
@@ -932,6 +938,31 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		viewerContent, err := os.ReadFile(plan.FilePath)
 		require.NoError(t, err)
 		require.Equal(t, sampleMarkdownUpdated, string(viewerContent))
+	})
+
+	t.Run("UpdatePlan populates Plan.Content with full text even when indexFullContent is false", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		service.indexFullContent = false
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		result, err := service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource:       sourcePlansDir,
+			FileName:         "test-plan.md",
+			NewContent:       sampleMarkdownUpdated,
+			LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+		require.True(t, result.Success)
+		require.NotNil(t, result.Plan)
+		require.Equal(t, sampleMarkdownUpdated, result.Plan.Content)
 	})
 
 	t.Run("UpdatePlan detects conflict when file modified externally", func(t *testing.T) {

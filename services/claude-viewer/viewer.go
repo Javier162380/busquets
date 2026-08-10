@@ -32,6 +32,14 @@ func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName, syncSou
 	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
 	readingTime := s.CalculateReadingTimeWithWPM(int(plan.WordCount), readingSpeedWPM)
 
+	return s.planDetailFromRow(*plan, plan.Tags, plan.Content, readingTime), nil
+}
+
+// planDetailFromRow maps a plan row, its tags, and a precomputed reading
+// time into a PlanDetail. The single place this mapping lives, so callers
+// that already hold these three pieces (from a load, or from a save that
+// just wrote them) don't each restate the field list.
+func (s *Service) planDetailFromRow(plan dto.Plan, tags []dto.Tag, content string, readingTime int) *PlanDetail {
 	return &PlanDetail{
 		PlanSummary: PlanSummary{
 			ID:          plan.ID,
@@ -43,11 +51,11 @@ func (s *Service) GetPlanDetailByFileName(ctx context.Context, fileName, syncSou
 			ModifiedAt:  plan.ModifiedAt,
 			FileSize:    plan.FileSize,
 			ReadingTime: readingTime,
-			Tags:        toTags(plan.Tags),
+			Tags:        toTags(tags),
 		},
 		FilePath: plan.FilePath,
-		Content:  plan.Content,
-	}, nil
+		Content:  content,
+	}
 }
 
 // CopyToClipboard writes text to the system clipboard. The clipboard mode comes

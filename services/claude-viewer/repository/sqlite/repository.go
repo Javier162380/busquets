@@ -335,8 +335,8 @@ func (r *Repository) ListPlanVersionsAll(ctx context.Context, planID int64) ([]d
 	return result, nil
 }
 
-func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams) error {
-	return r.q.UpdatePlan(ctx, UpdatePlanParams{
+func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams) (dto.Plan, error) {
+	p, err := r.q.UpdatePlan(ctx, UpdatePlanParams{
 		FileName:   params.FileName,
 		SyncSource: params.SyncSource,
 		Title:      params.Title,
@@ -346,6 +346,10 @@ func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams
 		FileSize:   params.FileSize,
 		WordCount:  params.WordCount,
 	})
+	if err != nil {
+		return dto.Plan{}, err
+	}
+	return planToDomain(p), nil
 }
 
 func (r *Repository) InsertPlanWithTags(ctx context.Context, params dto.InsertPlanWithTagsParams) error {
@@ -388,7 +392,7 @@ func (r *Repository) InsertPlanWithTags(ctx context.Context, params dto.InsertPl
 
 func (r *Repository) UpdatePlanWithTags(ctx context.Context, params dto.UpdatePlanWithTagsParams) error {
 	return r.withTx(ctx, func(q *Queries) error {
-		if err := q.UpdatePlan(ctx, UpdatePlanParams{
+		if _, err := q.UpdatePlan(ctx, UpdatePlanParams{
 			FileName:   params.Plan.FileName,
 			SyncSource: params.Plan.SyncSource,
 			Title:      params.Plan.Title,
@@ -679,7 +683,7 @@ func (r *Repository) matchesTagFilter(planTags []dto.Tag, filterTags []string, m
 
 func (r *Repository) RestorePlanVersion(ctx context.Context, params dto.RestorePlanVersionParams) error {
 	return r.withTx(ctx, func(q *Queries) error {
-		if err := q.UpdatePlan(ctx, UpdatePlanParams{
+		if _, err := q.UpdatePlan(ctx, UpdatePlanParams{
 			FileName:   params.Plan.FileName,
 			SyncSource: params.Plan.SyncSource,
 			Title:      params.Plan.Title,

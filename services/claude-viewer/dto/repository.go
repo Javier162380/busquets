@@ -16,7 +16,7 @@ type Repository interface {
 	// the id-keyed mirror file, then persists the path writeFile returns —
 	// all atomically. If writeFile fails, the insert rolls back with it.
 	InsertPlan(ctx context.Context, params InsertPlanParams, writeFile func(id int64) (filePath string, err error)) (int64, error)
-	UpdatePlan(ctx context.Context, params UpdatePlanParams) error
+	UpdatePlan(ctx context.Context, params UpdatePlanParams) (Plan, error)
 	// UpdatePlanFilePath runs writeFile inside a transaction and only sets
 	// file_path if it succeeds — same atomicity guarantee as InsertPlan.
 	UpdatePlanFilePath(ctx context.Context, id int64, filePath string, writeFile func() error) error

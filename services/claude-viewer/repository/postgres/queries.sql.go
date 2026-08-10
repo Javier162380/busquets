@@ -1192,10 +1192,11 @@ func (q *Queries) SetConnectorRole(ctx context.Context, arg SetConnectorRolePara
 	return err
 }
 
-const updatePlan = `-- name: UpdatePlan :exec
+const updatePlan = `-- name: UpdatePlan :one
 UPDATE plans
 SET title = $1, content = $2, modified_at = $3, indexed_at = $4, file_size = $5, word_count = $6
 WHERE file_name = $7 AND sync_source = $8
+RETURNING id, file_name, sync_source, file_path, title, content, created_at, modified_at, indexed_at, file_size, word_count
 `
 
 type UpdatePlanParams struct {
@@ -1209,8 +1210,8 @@ type UpdatePlanParams struct {
 	SyncSource string             `json:"sync_source"`
 }
 
-func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) error {
-	_, err := q.db.Exec(ctx, updatePlan,
+func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, error) {
+	row := q.db.QueryRow(ctx, updatePlan,
 		arg.Title,
 		arg.Content,
 		arg.ModifiedAt,
@@ -1220,7 +1221,21 @@ func (q *Queries) UpdatePlan(ctx context.Context, arg UpdatePlanParams) error {
 		arg.FileName,
 		arg.SyncSource,
 	)
-	return err
+	var i Plan
+	err := row.Scan(
+		&i.ID,
+		&i.FileName,
+		&i.SyncSource,
+		&i.FilePath,
+		&i.Title,
+		&i.Content,
+		&i.CreatedAt,
+		&i.ModifiedAt,
+		&i.IndexedAt,
+		&i.FileSize,
+		&i.WordCount,
+	)
+	return i, err
 }
 
 const updatePlanFilePath = `-- name: UpdatePlanFilePath :exec

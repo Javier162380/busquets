@@ -332,7 +332,7 @@ func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileNa
 	now := s.nowProvider.Now()
 
 	if planExists {
-		if err := s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
+		if _, err := s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
 			FileName:   fileName,
 			SyncSource: dir.Path,
 			Title:      title,

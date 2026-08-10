@@ -24,6 +24,7 @@ type UpdatePlanResult struct {
 	Success      bool
 	HasConflict  bool
 	ConflictInfo *ConflictInfo
+	Plan         *PlanDetail
 }
 
 // ConflictInfo describes a detected conflict.
@@ -82,7 +83,7 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 		return nil, fmt.Errorf("failed to stat updated file: %w", err)
 	}
 
-	err = s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
+	updatedPlan, err := s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
 		FileName:   req.FileName,
 		SyncSource: req.SyncSource,
 		Title:      title,
@@ -104,10 +105,31 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 		s.summaryCache.Delete(req.FileName)
 	}
 
+	detail := s.buildSavedPlanDetail(ctx, updatedPlan, req.NewContent, wordCount)
+
 	return &UpdatePlanResult{
 		Success:     true,
 		HasConflict: false,
+		Plan:        detail,
 	}, nil
+}
+
+// buildSavedPlanDetail turns the plan row an UPDATE...RETURNING just handed
+// back into a PlanDetail via planDetailFromRow. Tags is the only piece not
+// on that row (join table) and needs its own lookup; the file write and DB
+// row update have already succeeded by the time this runs, so a failure
+// here (like SavePlanVersion above) is logged and degrades gracefully
+// rather than turning a successful save into a reported failure.
+func (s *Service) buildSavedPlanDetail(ctx context.Context, plan dto.Plan, content string, wordCount int) *PlanDetail {
+	tags, err := s.db.GetPlanTags(ctx, plan.ID)
+	if err != nil {
+		s.logger.Warn("failed to load plan tags after save", "file", plan.FileName, "error", err)
+	}
+
+	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
+	readingTime := s.CalculateReadingTimeWithWPM(wordCount, readingSpeedWPM)
+
+	return s.planDetailFromRow(plan, tags, content, readingTime)
 }
 
 // SavePlanLocal saves a plan file to the viewer directory only (no sync to source).
@@ -152,7 +174,7 @@ func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*Up
 		return nil, fmt.Errorf("failed to stat updated file: %w", err)
 	}
 
-	err = s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
+	updatedPlan, err := s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
 		FileName:   req.FileName,
 		SyncSource: req.SyncSource,
 		Title:      title,
@@ -174,8 +196,11 @@ func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*Up
 		s.summaryCache.Delete(req.FileName)
 	}
 
+	detail := s.buildSavedPlanDetail(ctx, updatedPlan, req.NewContent, wordCount)
+
 	return &UpdatePlanResult{
 		Success:     true,
 		HasConflict: false,
+		Plan:        detail,
 	}, nil
 }

@@ -3,10 +3,11 @@ INSERT INTO plans (file_name, sync_source, file_path, title, content, created_at
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING id;
 
--- name: UpdatePlan :exec
+-- name: UpdatePlan :one
 UPDATE plans
 SET title = ?, content = ?, modified_at = ?, indexed_at = ?, file_size = ?, word_count = ?
-WHERE file_name = ? AND sync_source = ?;
+WHERE file_name = ? AND sync_source = ?
+RETURNING *;
 
 -- name: UpdatePlanFilePath :exec
 UPDATE plans SET file_path = ? WHERE id = ?;
