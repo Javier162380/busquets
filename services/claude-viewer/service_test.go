@@ -921,6 +921,12 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		require.True(t, result.Success)
 		require.False(t, result.HasConflict)
 
+		require.NotNil(t, result.Plan)
+		require.Equal(t, "test-plan.md", result.Plan.FileName)
+		require.Equal(t, sourcePlansDir, result.Plan.SyncSource)
+		require.Equal(t, "Updated Plan", result.Plan.Title)
+		require.Equal(t, sampleMarkdownUpdated, result.Plan.Content)
+
 		updatedPlan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, "Updated Plan", updatedPlan.Title)
@@ -932,6 +938,94 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		viewerContent, err := os.ReadFile(plan.FilePath)
 		require.NoError(t, err)
 		require.Equal(t, sampleMarkdownUpdated, string(viewerContent))
+	})
+
+	t.Run("UpdatePlan creates a version snapshot atomically with the content update", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		result, err := service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource:       sourcePlansDir,
+			FileName:         "test-plan.md",
+			NewContent:       sampleMarkdownUpdated,
+			LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+		require.True(t, result.Success)
+
+		versions, err := service.GetPlanVersionHistory(ctx, "test-plan.md", sourcePlansDir, 0, 10)
+		require.NoError(t, err)
+		require.Len(t, versions, 1)
+		require.Equal(t, int64(1), versions[0].VersionNumber)
+		require.Equal(t, sampleMarkdownUpdated, versions[0].Content)
+
+		versionFileContent, err := os.ReadFile(versions[0].FilePath)
+		require.NoError(t, err)
+		require.Equal(t, sampleMarkdownUpdated, string(versionFileContent))
+	})
+
+	t.Run("UpdatePlan returns the plan's current tags without a separate lookup", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, service.SetPlanTags(ctx, "test-plan.md", sourcePlansDir, []string{"api", "backend"}))
+
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		result, err := service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource:       sourcePlansDir,
+			FileName:         "test-plan.md",
+			NewContent:       sampleMarkdownUpdated,
+			LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+		require.True(t, result.Success)
+		require.NotNil(t, result.Plan)
+
+		tagNames := make([]string, len(result.Plan.Tags))
+		for i, tag := range result.Plan.Tags {
+			tagNames[i] = tag.Name
+		}
+		require.ElementsMatch(t, []string{"api", "backend"}, tagNames)
+	})
+
+	t.Run("UpdatePlan populates Plan.Content with full text even when indexFullContent is false", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		service.indexFullContent = false
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		result, err := service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource:       sourcePlansDir,
+			FileName:         "test-plan.md",
+			NewContent:       sampleMarkdownUpdated,
+			LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+		require.True(t, result.Success)
+		require.NotNil(t, result.Plan)
+		require.Equal(t, sampleMarkdownUpdated, result.Plan.Content)
 	})
 
 	t.Run("UpdatePlan detects conflict when file modified externally", func(t *testing.T) {
@@ -1503,6 +1597,46 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		results, err = service.SearchVersions(ctx, "search-test.md", sourcePlansDir, "nonexistent")
 		require.NoError(t, err)
 		require.Equal(t, 0, len(results), "should find no versions with 'nonexistent'")
+	})
+
+	t.Run("RestorePlanVersion restores content atomically and records a new version", func(t *testing.T) {
+		createTestPlanFile(t, sourcePlansDir, "restore-test.md", "# Original\nOriginal content")
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		require.NoError(t, service.SavePlanVersion(ctx, "restore-test.md", sourcePlansDir, "# Version One\nFirst content"))
+		require.NoError(t, service.SavePlanVersion(ctx, "restore-test.md", sourcePlansDir, "# Version Two\nSecond content"))
+
+		err = service.RestorePlanVersion(ctx, "restore-test.md", sourcePlansDir, 1)
+		require.NoError(t, err)
+
+		plan, err := service.GetPlanByFileName(ctx, "restore-test.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, "Version One", plan.Title)
+		require.Equal(t, "# Version One\nFirst content", plan.Content)
+
+		sourceContent, err := os.ReadFile(filepath.Join(sourcePlansDir, "restore-test.md"))
+		require.NoError(t, err)
+		require.Equal(t, "# Version One\nFirst content", string(sourceContent))
+
+		viewerContent, err := os.ReadFile(plan.FilePath)
+		require.NoError(t, err)
+		require.Equal(t, "# Version One\nFirst content", string(viewerContent))
+
+		versions, err := service.GetPlanVersionHistory(ctx, "restore-test.md", sourcePlansDir, 0, 10)
+		require.NoError(t, err)
+		require.Len(t, versions, 3)
+		require.Equal(t, int64(3), versions[0].VersionNumber)
+		require.Equal(t, "# Version One\nFirst content", versions[0].Content)
+	})
+
+	t.Run("RestorePlanVersion fails for non-existent version", func(t *testing.T) {
+		createTestPlanFile(t, sourcePlansDir, "restore-missing.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		err = service.RestorePlanVersion(ctx, "restore-missing.md", sourcePlansDir, 99)
+		require.Error(t, err)
 	})
 }
 

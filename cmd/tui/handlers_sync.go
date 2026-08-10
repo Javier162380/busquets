@@ -19,7 +19,8 @@ func (a *App) handleSaveResult(msg messages.SaveResultMsg) (tea.Model, tea.Cmd) 
 	case msg.Result.HasConflict:
 		a.statusBar.SetError(fmt.Sprintf("Unable to save result, conflict %s", msg.Result.ConflictInfo.Message))
 	}
-	return a, commands.ClearStatusCmdWithDefaultDuration()
+	_, delegateCmd := a.delegateToCurrentScreen(msg)
+	return a, tea.Batch(delegateCmd, commands.ClearStatusCmdWithDefaultDuration())
 }
 
 func (a *App) handleSyncPlans(_ messages.SyncPlansMsg) (tea.Model, tea.Cmd) {

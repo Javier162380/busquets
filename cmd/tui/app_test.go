@@ -101,6 +101,20 @@ func TestHandleSaveResult(t *testing.T) {
 		require.NotEmpty(t, app.statusBar.SuccessMessage())
 	})
 
+	t.Run("success delegates to the screen stack without panicking", func(t *testing.T) {
+		app := newTestApp(t)
+		model, cmd := app.Update(messages.SaveResultMsg{
+			Result: &claudeviewer.UpdatePlanResult{Success: true},
+			Plan: &claudeviewer.PlanDetail{
+				PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "New Title"},
+				Content:     "new content",
+			},
+		})
+		app = model.(*App)
+		require.NotNil(t, cmd)
+		require.NotEmpty(t, app.View())
+	})
+
 	t.Run("error sets error message", func(t *testing.T) {
 		app := newTestApp(t)
 		model, _ := app.Update(messages.SaveResultMsg{Error: errors.New("write error")})

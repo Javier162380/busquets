@@ -8,6 +8,7 @@ import (
 	reflect "reflect"
 
 	content "github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
+
 	gomock "github.com/golang/mock/gomock"
 )
 

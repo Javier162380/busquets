@@ -87,3 +87,50 @@ func TestEditorJumpToLineScrollsViewport(t *testing.T) {
 		"┃  30 content of line 30                "
 	require.Equal(t, want, e.View())
 }
+
+func TestEditorMarkSaved(t *testing.T) {
+	t.Run("does not touch the current textarea value", func(t *testing.T) {
+		e := NewEditor(80, 10)
+		e.SetContent("v1")
+		e.textarea.SetValue("v1 plus more typing")
+
+		e.MarkSaved("v1")
+
+		require.Equal(t, "v1 plus more typing", e.Content())
+	})
+
+	t.Run("clears modified when the save matches the current value", func(t *testing.T) {
+		e := NewEditor(80, 10)
+		e.SetContent("v1")
+		e.textarea.SetValue("v2")
+		e.modified = true // what Editor.Update would have set after a real keystroke
+		require.True(t, e.IsModified())
+
+		e.MarkSaved("v2")
+
+		require.False(t, e.IsModified())
+	})
+
+	t.Run("keeps modified true when typing continued past the saved snapshot", func(t *testing.T) {
+		e := NewEditor(80, 10)
+		e.SetContent("v1")
+		e.textarea.SetValue("v2 plus more")
+
+		e.MarkSaved("v2") // the save only captured "v2", user kept typing after
+
+		require.True(t, e.IsModified())
+	})
+
+	t.Run("Reset after MarkSaved discards only edits made since the save, not the whole save", func(t *testing.T) {
+		e := NewEditor(80, 10)
+		e.SetContent("v1")        // pre-save baseline
+		e.textarea.SetValue("v2") // saved value
+		e.MarkSaved("v2")
+		e.textarea.SetValue("v2 plus unsaved edit")
+
+		e.Reset()
+
+		require.Equal(t, "v2", e.Content())
+		require.False(t, e.IsModified())
+	})
+}

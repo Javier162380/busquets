@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
@@ -24,6 +25,7 @@ type UpdatePlanResult struct {
 	Success      bool
 	HasConflict  bool
 	ConflictInfo *ConflictInfo
+	Plan         *PlanDetail
 }
 
 // ConflictInfo describes a detected conflict.
@@ -61,14 +63,6 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 		}, nil
 	}
 
-	if err := os.WriteFile(sourcePath, []byte(req.NewContent), 0o600); err != nil {
-		return nil, fmt.Errorf("failed to write to source directory: %w", err)
-	}
-
-	if err := os.WriteFile(viewerPath, []byte(req.NewContent), 0o600); err != nil {
-		return nil, fmt.Errorf("failed to write to viewer directory: %w", err)
-	}
-
 	title := extractTitle(req.NewContent)
 	wordCount := CountWords(req.NewContent)
 
@@ -77,37 +71,87 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 		contentToStore = title
 	}
 
-	info, err := os.Stat(viewerPath)
+	now := s.nowProvider.Now()
+
+	updatedPlan, err := s.db.UpdatePlanContent(ctx, dto.UpdatePlanContentParams{
+		Plan: dto.UpdatePlanParams{
+			FileName:   req.FileName,
+			SyncSource: req.SyncSource,
+			Title:      title,
+			Content:    contentToStore,
+			IndexedAt:  now,
+			WordCount:  int64(wordCount),
+		},
+		VersionContent:   req.NewContent,
+		VersionCreatedAt: now,
+	}, func() (time.Time, int64, error) {
+		if err := os.WriteFile(sourcePath, []byte(req.NewContent), 0o600); err != nil {
+			return time.Time{}, 0, fmt.Errorf("failed to write to source directory: %w", err)
+		}
+		if err := os.WriteFile(viewerPath, []byte(req.NewContent), 0o600); err != nil {
+			return time.Time{}, 0, fmt.Errorf("failed to write to viewer directory: %w", err)
+		}
+		info, err := os.Stat(viewerPath)
+		if err != nil {
+			return time.Time{}, 0, fmt.Errorf("failed to stat updated file: %w", err)
+		}
+		return info.ModTime(), info.Size(), nil
+	},
+		s.writeVersionFile(now, req.NewContent, wordCount))
 	if err != nil {
-		return nil, fmt.Errorf("failed to stat updated file: %w", err)
+		return nil, fmt.Errorf("failed to update plan: %w", err)
 	}
 
-	err = s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
-		FileName:   req.FileName,
-		SyncSource: req.SyncSource,
-		Title:      title,
-		Content:    contentToStore,
-		ModifiedAt: info.ModTime(),
-		IndexedAt:  s.nowProvider.Now(),
-		FileSize:   info.Size(),
-		WordCount:  int64(wordCount),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to update database: %w", err)
-	}
+	return s.invalidateCacheAndBuildUpdateResult(ctx, req.FileName, updatedPlan, req.NewContent, wordCount), nil
+}
 
-	if err := s.SavePlanVersion(ctx, req.FileName, req.SyncSource, req.NewContent); err != nil {
-		s.logger.Warn("failed to save plan version", "file", req.FileName, "error", err)
-	}
-
+// invalidateCacheAndBuildUpdateResult invalidates the summary cache and
+// builds the successful UpdatePlanResult for a plan UpdatePlanContent just
+// wrote — shared by UpdatePlan and SavePlanLocal so this post-write
+// bookkeeping lives in one place instead of being duplicated in both.
+func (s *Service) invalidateCacheAndBuildUpdateResult(ctx context.Context, fileName string, updatedPlan dto.Plan, newContent string, wordCount int) *UpdatePlanResult {
 	if s.summaryCache != nil {
-		s.summaryCache.Delete(req.FileName)
+		s.summaryCache.Delete(fileName)
 	}
+
+	detail := s.buildSavedPlanDetail(ctx, updatedPlan, newContent, wordCount)
 
 	return &UpdatePlanResult{
 		Success:     true,
 		HasConflict: false,
-	}, nil
+		Plan:        detail,
+	}
+}
+
+func (s *Service) writeVersionFile(createdAt time.Time, content string, wordCount int) func(planID, versionNumber int64) (string, int64, error) {
+	return func(planID, versionNumber int64) (string, int64, error) {
+		versionsDir := s.versionsDirFor(planID)
+		if _, err := os.Stat(versionsDir); os.IsNotExist(err) {
+			if err := os.MkdirAll(versionsDir, 0o750); err != nil {
+				return "", 0, fmt.Errorf("failed to create versions directory: %w", err)
+			}
+		}
+
+		versionFileName := fmt.Sprintf("%d-%s.md", versionNumber, strconv.FormatInt(createdAt.Unix(), 10))
+		versionFilePath := filepath.Join(versionsDir, versionFileName)
+
+		if err := os.WriteFile(versionFilePath, []byte(content), 0o600); err != nil {
+			return "", 0, fmt.Errorf("failed to write version file: %w", err)
+		}
+
+		return versionFilePath, int64(wordCount), nil
+	}
+}
+
+// buildSavedPlanDetail turns the plan row UpdatePlanContent's transaction
+// just handed back into a PlanDetail via planDetailFromRow. plan.Tags is
+// already populated (UpdatePlanContent loads it in the same transaction as
+// the write), so this only needs to compute reading time.
+func (s *Service) buildSavedPlanDetail(ctx context.Context, plan dto.Plan, content string, wordCount int) *PlanDetail {
+	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
+	readingTime := s.CalculateReadingTimeWithWPM(wordCount, readingSpeedWPM)
+
+	return s.planDetailFromRow(plan, plan.Tags, content, readingTime)
 }
 
 // SavePlanLocal saves a plan file to the viewer directory only (no sync to source).
@@ -135,10 +179,6 @@ func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*Up
 		}, nil
 	}
 
-	if err := os.WriteFile(viewerPath, []byte(req.NewContent), 0o600); err != nil {
-		return nil, fmt.Errorf("failed to write to viewer directory: %w", err)
-	}
-
 	title := extractTitle(req.NewContent)
 	wordCount := CountWords(req.NewContent)
 
@@ -147,35 +187,32 @@ func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*Up
 		contentToStore = title
 	}
 
-	info, err := os.Stat(viewerPath)
+	now := s.nowProvider.Now()
+
+	updatedPlan, err := s.db.UpdatePlanContent(ctx, dto.UpdatePlanContentParams{
+		Plan: dto.UpdatePlanParams{
+			FileName:   req.FileName,
+			SyncSource: req.SyncSource,
+			Title:      title,
+			Content:    contentToStore,
+			IndexedAt:  now,
+			WordCount:  int64(wordCount),
+		},
+		VersionContent:   req.NewContent,
+		VersionCreatedAt: now,
+	}, func() (time.Time, int64, error) {
+		if err := os.WriteFile(viewerPath, []byte(req.NewContent), 0o600); err != nil {
+			return time.Time{}, 0, fmt.Errorf("failed to write to viewer directory: %w", err)
+		}
+		info, err := os.Stat(viewerPath)
+		if err != nil {
+			return time.Time{}, 0, fmt.Errorf("failed to stat updated file: %w", err)
+		}
+		return info.ModTime(), info.Size(), nil
+	}, s.writeVersionFile(now, req.NewContent, wordCount))
 	if err != nil {
-		return nil, fmt.Errorf("failed to stat updated file: %w", err)
+		return nil, fmt.Errorf("failed to update plan: %w", err)
 	}
 
-	err = s.db.UpdatePlan(ctx, dto.UpdatePlanParams{
-		FileName:   req.FileName,
-		SyncSource: req.SyncSource,
-		Title:      title,
-		Content:    contentToStore,
-		ModifiedAt: info.ModTime(),
-		IndexedAt:  s.nowProvider.Now(),
-		FileSize:   info.Size(),
-		WordCount:  int64(wordCount),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to update database: %w", err)
-	}
-
-	if err := s.SavePlanVersion(ctx, req.FileName, req.SyncSource, req.NewContent); err != nil {
-		s.logger.Warn("failed to save plan version", "file", req.FileName, "error", err)
-	}
-
-	if s.summaryCache != nil {
-		s.summaryCache.Delete(req.FileName)
-	}
-
-	return &UpdatePlanResult{
-		Success:     true,
-		HasConflict: false,
-	}, nil
+	return s.invalidateCacheAndBuildUpdateResult(ctx, req.FileName, updatedPlan, req.NewContent, wordCount), nil
 }

@@ -16,7 +16,17 @@ type Repository interface {
 	// the id-keyed mirror file, then persists the path writeFile returns —
 	// all atomically. If writeFile fails, the insert rolls back with it.
 	InsertPlan(ctx context.Context, params InsertPlanParams, writeFile func(id int64) (filePath string, err error)) (int64, error)
-	UpdatePlan(ctx context.Context, params UpdatePlanParams) error
+	UpdatePlan(ctx context.Context, params UpdatePlanParams) (Plan, error)
+	// UpdatePlanContent writes new content and updates the row atomically,
+	// same guarantee as InsertPlan. writeVersionFile, if non-nil, also
+	// creates a version snapshot in the same transaction; pass nil to skip
+	// versioning. Returned Plan.Tags is preloaded.
+	UpdatePlanContent(
+		ctx context.Context,
+		params UpdatePlanContentParams,
+		writeContent func() (modifiedAt time.Time, fileSize int64, err error),
+		writeVersionFile func(planID, versionNumber int64) (filePath string, wordCount int64, err error),
+	) (Plan, error)
 	// UpdatePlanFilePath runs writeFile inside a transaction and only sets
 	// file_path if it succeeds — same atomicity guarantee as InsertPlan.
 	UpdatePlanFilePath(ctx context.Context, id int64, filePath string, writeFile func() error) error
@@ -36,7 +46,6 @@ type Repository interface {
 
 	// Plan version operations
 	InsertPlanVersion(ctx context.Context, params InsertPlanVersionParams) error
-	RestorePlanVersion(ctx context.Context, params RestorePlanVersionParams) error
 	GetPlanVersionHistory(ctx context.Context, params VersionHistoryParams) ([]PlanVersion, error)
 	GetPlanVersionByNumber(ctx context.Context, planID, versionNumber int64) (PlanVersion, error)
 	GetLatestVersionNumber(ctx context.Context, planID int64) (int64, error)

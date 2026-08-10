@@ -212,14 +212,11 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s, nil
 
 	case messages.SaveResultMsg:
-		if msg.Error == nil && msg.Result.Success && !msg.Result.HasConflict {
-			s.viewer.ScrollToContentLine(s.editor.CurrentLine())
-			s.focus = types.FocusContent
-			s.editor.Blur()
-			// Reload the plan.
-			if s.current != nil {
-				return s, s.loadPlanDetail(s.current.FileName, s.current.SyncSource)
-			}
+		if msg.Error == nil && msg.Result.Success && !msg.Result.HasConflict && msg.Plan != nil {
+			s.current = msg.Plan
+			viewerWidth := s.getViewerWidth()
+			s.viewer.SetContent(content.NewPlanContent(msg.Plan, viewerWidth))
+			s.editor.MarkSaved(msg.Plan.Content)
 		}
 		return s, nil
 
