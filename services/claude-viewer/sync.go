@@ -178,7 +178,7 @@ const trashDirName = ".trash"
 func (s *Service) DeletePlan(ctx context.Context, fileName, syncSource string) error {
 	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
 	if err != nil {
-		return fmt.Errorf("plan not found: %w", err)
+		return dto.ErrNotFound
 	}
 
 	trashRoot := filepath.Join(s.viewerDir, trashDirName)
