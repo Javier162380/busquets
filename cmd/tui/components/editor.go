@@ -105,6 +105,17 @@ func (e *Editor) Reset() {
 	e.modified = false
 }
 
+// MarkSaved updates the baseline content used by IsModified and Reset to a
+// just-saved value, without touching the current textarea value or cursor.
+// Used after a background save completes while the editor is still focused:
+// Reset (esc) and modification tracking should compare against the new save
+// point, but the user's in-progress typing (and cursor position) must be
+// left alone, unlike SetContent which replaces the textarea outright.
+func (e *Editor) MarkSaved(content string) {
+	e.original = content
+	e.modified = e.textarea.Value() != content
+}
+
 // CurrentLine returns the cursor's current 1-indexed line.
 func (e *Editor) CurrentLine() int {
 	return e.textarea.Line() + 1

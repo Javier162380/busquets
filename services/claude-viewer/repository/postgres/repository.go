@@ -324,8 +324,8 @@ func (r *Repository) ListPlanVersionsAll(ctx context.Context, planID int64) ([]d
 	return result, nil
 }
 
-func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams) error {
-	return r.q.UpdatePlan(ctx, UpdatePlanParams{
+func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams) (dto.Plan, error) {
+	p, err := r.q.UpdatePlan(ctx, UpdatePlanParams{
 		FileName:   params.FileName,
 		SyncSource: params.SyncSource,
 		Title:      params.Title,
@@ -335,6 +335,81 @@ func (r *Repository) UpdatePlan(ctx context.Context, params dto.UpdatePlanParams
 		FileSize:   params.FileSize,
 		WordCount:  params.WordCount,
 	})
+	if err != nil {
+		return dto.Plan{}, err
+	}
+	return planToDomain(p), nil
+}
+
+func (r *Repository) UpdatePlanContent(
+	ctx context.Context,
+	params dto.UpdatePlanContentParams,
+	writeContent func() (time.Time, int64, error),
+	writeVersionFile func(planID, versionNumber int64) (string, int64, error),
+) (dto.Plan, error) {
+	var plan dto.Plan
+	err := r.withTx(ctx, func(q *Queries) error {
+		modifiedAt, fileSize, err := writeContent()
+		if err != nil {
+			return err
+		}
+
+		p, err := q.UpdatePlan(ctx, UpdatePlanParams{
+			FileName:   params.Plan.FileName,
+			SyncSource: params.Plan.SyncSource,
+			Title:      params.Plan.Title,
+			Content:    params.Plan.Content,
+			ModifiedAt: timeToTimestamptz(modifiedAt),
+			IndexedAt:  timeToTimestamptz(params.Plan.IndexedAt),
+			FileSize:   fileSize,
+			WordCount:  params.Plan.WordCount,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to update plan: %w", err)
+		}
+		plan = planToDomain(p)
+
+		tagRows, err := q.GetPlanTags(ctx, plan.ID)
+		if err != nil {
+			return fmt.Errorf("failed to get plan tags: %w", err)
+		}
+		plan.Tags = make([]dto.Tag, len(tagRows))
+		for i, row := range tagRows {
+			plan.Tags[i] = tagToDomain(row)
+		}
+
+		if writeVersionFile == nil {
+			return nil
+		}
+
+		lastVersionNum, err := q.GetLatestVersionNumber(ctx, plan.ID)
+		if err != nil {
+			return fmt.Errorf("failed to get latest version number: %w", err)
+		}
+		nextVersionNum := coalesceToInt64(lastVersionNum) + 1
+
+		versionFilePath, versionWordCount, err := writeVersionFile(plan.ID, nextVersionNum)
+		if err != nil {
+			return fmt.Errorf("failed to write version file: %w", err)
+		}
+
+		if err := q.InsertPlanVersion(ctx, InsertPlanVersionParams{
+			PlanID:        plan.ID,
+			VersionNumber: nextVersionNum,
+			FilePath:      versionFilePath,
+			Content:       params.VersionContent,
+			WordCount:     versionWordCount,
+			CreatedAt:     timeToTimestamptz(params.VersionCreatedAt),
+		}); err != nil {
+			return fmt.Errorf("failed to save version to database: %w", err)
+		}
+
+		return nil
+	})
+	if err != nil {
+		return dto.Plan{}, err
+	}
+	return plan, nil
 }
 
 func (r *Repository) InsertPlanWithTags(ctx context.Context, params dto.InsertPlanWithTagsParams) error {
@@ -377,7 +452,7 @@ func (r *Repository) InsertPlanWithTags(ctx context.Context, params dto.InsertPl
 
 func (r *Repository) UpdatePlanWithTags(ctx context.Context, params dto.UpdatePlanWithTagsParams) error {
 	return r.withTx(ctx, func(q *Queries) error {
-		if err := q.UpdatePlan(ctx, UpdatePlanParams{
+		if _, err := q.UpdatePlan(ctx, UpdatePlanParams{
 			FileName:   params.Plan.FileName,
 			SyncSource: params.Plan.SyncSource,
 			Title:      params.Plan.Title,
@@ -415,7 +490,7 @@ func (r *Repository) UpdatePlanWithTags(ctx context.Context, params dto.UpdatePl
 	})
 }
 
-func (r *Repository) DeletePlan(ctx context.Context, fileName, syncSource string) error {
+func (r *Repository) DeletePlan(ctx context.Context, fileName, syncSource string, deleteFiles func() error) error {
 	return r.withTx(ctx, func(q *Queries) error {
 		plan, err := q.GetPlanByFileNameAndSource(ctx, GetPlanByFileNameAndSourceParams{
 			FileName:   fileName,
@@ -439,6 +514,15 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName, syncSource string
 
 		if err := q.DeletePlan(ctx, DeletePlanParams{FileName: fileName, SyncSource: syncSource}); err != nil {
 			return fmt.Errorf("failed to delete plan: %w", err)
+		}
+
+		// Dispose of the files while the transaction is still open. Returning an error
+		// here rolls the DB deletes above back with it, so the delete is atomic across
+		// DB and filesystem — no separate compensating write.
+		if deleteFiles != nil {
+			if err := deleteFiles(); err != nil {
+				return err
+			}
 		}
 		return nil
 	})
@@ -664,35 +748,6 @@ func (r *Repository) matchesTagFilter(planTags []dto.Tag, filterTags []string, m
 	return false
 }
 
-func (r *Repository) RestorePlanVersion(ctx context.Context, params dto.RestorePlanVersionParams) error {
-	return r.withTx(ctx, func(q *Queries) error {
-		if err := q.UpdatePlan(ctx, UpdatePlanParams{
-			FileName:   params.Plan.FileName,
-			SyncSource: params.Plan.SyncSource,
-			Title:      params.Plan.Title,
-			Content:    params.Plan.Content,
-			ModifiedAt: timeToTimestamptz(params.Plan.ModifiedAt),
-			IndexedAt:  timeToTimestamptz(params.Plan.IndexedAt),
-			FileSize:   params.Plan.FileSize,
-			WordCount:  params.Plan.WordCount,
-		}); err != nil {
-			return fmt.Errorf("failed to update plan: %w", err)
-		}
-
-		if err := q.InsertPlanVersion(ctx, InsertPlanVersionParams{
-			PlanID:        params.Version.PlanID,
-			VersionNumber: params.Version.VersionNumber,
-			FilePath:      params.Version.FilePath,
-			Content:       params.Version.Content,
-			WordCount:     params.Version.WordCount,
-			CreatedAt:     timeToTimestamptz(params.Version.CreatedAt),
-		}); err != nil {
-			return fmt.Errorf("failed to insert plan version: %w", err)
-		}
-		return nil
-	})
-}
-
 func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPlanVersionParams) error {
 	return r.q.InsertPlanVersion(ctx, InsertPlanVersionParams{
 		PlanID:        params.PlanID,
@@ -739,11 +794,17 @@ func (r *Repository) GetLatestVersionNumber(ctx context.Context, planID int64) (
 	if err != nil {
 		return 0, err
 	}
-	// Handle the COALESCE result
-	if result == nil {
-		return 0, nil
+	return coalesceToInt64(result), nil
+}
+
+// coalesceToInt64 converts the interface{} SQLC generates for a COALESCE(...)
+// result into an int64. Shared by GetLatestVersionNumber and
+// UpdatePlanContent so the nil-check lives in one place.
+func coalesceToInt64(v any) int64 {
+	if v == nil {
+		return 0
 	}
-	return result.(int64), nil
+	return v.(int64)
 }
 
 func (r *Repository) GetVersionCount(ctx context.Context, planID int64) (int64, error) {

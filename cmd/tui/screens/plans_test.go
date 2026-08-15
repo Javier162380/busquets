@@ -404,3 +404,79 @@ func TestCtrlLClearsFiltersFromList(t *testing.T) {
 	_, ok := cmd().(messages.ClearSearchMsg)
 	require.True(t, ok)
 }
+
+func TestSaveResultMsgRefreshesContent(t *testing.T) {
+	newScreen := func() *PlansScreen {
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)
+		s.current = &claudeviewer.PlanDetail{
+			PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "Old Title"},
+			Content:     "old content",
+		}
+		s.editor.SetContent("old content")
+		s.editor.Focus()
+		s.focus = types.FocusEditor
+		s.layout = types.LayoutFullscreen // matches the real "e" edit-entry path
+		return s
+	}
+
+	t.Run("populated Plan updates viewer and current but stays in the editor", func(t *testing.T) {
+		s := newScreen()
+		newPlan := &claudeviewer.PlanDetail{
+			PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "New Title"},
+			Content:     "new saved content",
+		}
+
+		screen, cmd := s.Update(messages.SaveResultMsg{
+			Result: &claudeviewer.UpdatePlanResult{Success: true},
+			Plan:   newPlan,
+		})
+		ps := screen.(*PlansScreen)
+
+		require.Nil(t, cmd)
+		require.Equal(t, newPlan, ps.current)
+		// A save must not redirect the user out of the editor — only esc does.
+		require.Equal(t, types.FocusEditor, ps.focus)
+		require.True(t, ps.editor.Focused())
+		require.Equal(t, "old content", ps.editor.Content()) // untouched by the save
+		// The viewer is refreshed in the background so it's correct whenever
+		// the user does leave the editor, even though it isn't shown yet.
+		require.Contains(t, ps.viewer.View(), "new saved content")
+	})
+
+	t.Run("esc after a save resets to the saved content, not the pre-save content", func(t *testing.T) {
+		s := newScreen()
+		newPlan := &claudeviewer.PlanDetail{
+			PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "New Title"},
+			Content:     "old content", // what was actually on disk when the save fired
+		}
+		screen, _ := s.Update(messages.SaveResultMsg{
+			Result: &claudeviewer.UpdatePlanResult{Success: true},
+			Plan:   newPlan,
+		})
+		ps := screen.(*PlansScreen)
+		ps.editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(" plus unsaved edit")})
+		require.True(t, ps.editor.IsModified())
+
+		screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		ps = screen.(*PlansScreen)
+
+		require.Equal(t, types.FocusContent, ps.focus)
+		require.Equal(t, "old content", ps.editor.Content())
+		require.False(t, ps.editor.IsModified())
+	})
+
+	t.Run("nil Plan is a no-op", func(t *testing.T) {
+		s := newScreen()
+
+		screen, cmd := s.Update(messages.SaveResultMsg{
+			Result: &claudeviewer.UpdatePlanResult{Success: true},
+			Plan:   nil,
+		})
+		ps := screen.(*PlansScreen)
+
+		require.Nil(t, cmd)
+		require.Equal(t, "Old Title", ps.current.Title)
+		require.Equal(t, "old content", ps.editor.Content())
+		require.Equal(t, types.FocusEditor, ps.focus)
+	})
+}

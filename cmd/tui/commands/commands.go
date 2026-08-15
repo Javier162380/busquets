@@ -107,7 +107,7 @@ func SavePlanCmd(ctx context.Context, svc claudeviewer.UnifiedService, fileName,
 		if err != nil {
 			return messages.SaveResultMsg{Error: err}
 		}
-		return messages.SaveResultMsg{Result: result}
+		return messages.SaveResultMsg{Result: result, Plan: result.Plan}
 	}
 }
 

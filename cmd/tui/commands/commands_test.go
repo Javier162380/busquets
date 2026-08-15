@@ -106,6 +106,37 @@ func TestLoadPlanDetailCmd(t *testing.T) {
 	})
 }
 
+func TestSavePlanCmd(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("successful save forwards Plan from result", func(t *testing.T) {
+		svc, sourcePlansDir, cleanup := setupTestService(t)
+		defer cleanup()
+		createTestPlanFile(t, sourcePlansDir, "save.md", "# Save Plan\nOriginal")
+		_, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+		plan, err := svc.GetPlanByFileName(ctx, "save.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		msg := SavePlanCmd(ctx, svc, "save.md", sourcePlansDir, "# Save Plan\nUpdated", plan.ModifiedAt)()
+		result, ok := msg.(messages.SaveResultMsg)
+		require.True(t, ok)
+		require.NoError(t, result.Error)
+		require.NotNil(t, result.Plan)
+		require.Equal(t, "# Save Plan\nUpdated", result.Plan.Content)
+	})
+
+	t.Run("error omits Plan", func(t *testing.T) {
+		svc, sourcePlansDir, cleanup := setupTestService(t)
+		defer cleanup()
+		msg := SavePlanCmd(ctx, svc, "missing.md", sourcePlansDir, "content", time.Now())()
+		result, ok := msg.(messages.SaveResultMsg)
+		require.True(t, ok)
+		require.Error(t, result.Error)
+		require.Nil(t, result.Plan)
+	})
+}
+
 func TestSyncPlansCmd(t *testing.T) {
 	ctx := context.Background()
 
