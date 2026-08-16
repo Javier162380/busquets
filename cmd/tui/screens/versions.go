@@ -2,6 +2,7 @@ package screens
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
@@ -22,6 +23,7 @@ type VersionsScreen struct {
 	viewer             *components.Viewer
 	searchBar          *components.SearchBar
 	contentSearchModal *components.InputModal[string]
+	inputModal         *components.InputModal[int]
 
 	// State.
 	layout             types.Layout
@@ -53,6 +55,7 @@ func NewVersionsScreen(planName, markdownRenderedTheme string, width, height int
 		viewer:             components.NewViewer(panelWidth, contentHeight, markdownRenderedTheme),
 		searchBar:          components.NewSearchBar(panelWidth),
 		contentSearchModal: components.NewInputModal[string](),
+		inputModal:         components.NewInputModal[int](),
 		layout:             types.LayoutSplit,
 		focus:              types.FocusList,
 		planName:           planName,
@@ -100,6 +103,8 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	switch s.activeModal {
 	case types.ModalContentSearch:
 		return s.handleContentSearchModalUpdate(msg)
+	case types.ModalTextInput:
+		return s.handleInputModalUpdate(msg)
 	default:
 		// ModalNone (the only other value VersionsScreen ever sets): handle normally below
 	}
@@ -315,11 +320,31 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 		s.viewer.SearchPrev()
 		return s, nil
 
-	case "ctrl+l":
+	case "ctrl+u":
 		if s.layout != types.LayoutFullscreen {
 			return s, nil
 		}
 		s.viewer.ClearSearch()
+		return s, nil
+
+	case "ctrl+l":
+		// Jump to a specific line, same pattern as PlansScreen's viewer
+		// go-to-line. Available regardless of layout — a jump has no
+		// highlight state that could linger visibly in split view.
+		maxLine := s.viewer.LineCount()
+		s.activeModal = types.ModalTextInput
+		s.inputModal.SetSize(min(40, s.width-4), min(8, s.height-2))
+		s.inputModal.Open(
+			fmt.Sprintf("Go to line (1-%d)", maxLine),
+			"line number",
+			func(r rune) bool { return r >= '0' && r <= '9' },
+			strconv.Atoi,
+			func(n int) {
+				if n > 0 {
+					s.viewer.ScrollToContentLine(n)
+				}
+			},
+		)
 		return s, nil
 	}
 
@@ -345,6 +370,17 @@ func (s *VersionsScreen) handleContentSearchModalUpdate(msg tea.Msg) (Screen, te
 		err := s.pendingSearchError
 		s.pendingSearchError = nil
 		return s, tea.Batch(cmd, func() tea.Msg { return messages.ContentSearchErrorMsg{Error: err} })
+	}
+	return s, cmd
+}
+
+// handleInputModalUpdate routes messages while the generic int-input modal
+// (currently just go-to-line) is active. Mirrors PlansScreen's own
+// handleInputModalUpdate.
+func (s *VersionsScreen) handleInputModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
+	cmd := s.inputModal.Update(msg)
+	if !s.inputModal.IsActive() {
+		s.activeModal = types.ModalNone
 	}
 	return s, cmd
 }
@@ -384,16 +420,21 @@ func (s *VersionsScreen) View() string {
 		mainContent = s.renderSplitView()
 	}
 
-	if s.activeModal == types.ModalContentSearch {
+	switch s.activeModal {
+	case types.ModalContentSearch:
 		// height-1, not height: App.View() appends a status-bar row below
 		// this screen's own View() output, so a Top-aligned overlay placed
 		// against the full height overflows the terminal by one row —
 		// scrolling the box's own top border (row 0) off screen.
 		overlay := lipgloss.Place(s.width, s.height-1, lipgloss.Left, lipgloss.Top, s.contentSearchModal.View())
 		return overlayContent(mainContent, overlay)
-	}
 
-	return mainContent
+	case types.ModalTextInput:
+		overlay := lipgloss.Place(s.width, s.height, lipgloss.Center, lipgloss.Center, s.inputModal.View())
+		return overlayContent(mainContent, overlay)
+	default:
+		return mainContent
+	}
 }
 
 // renderSplitView renders the two-panel layout.
@@ -519,14 +560,14 @@ func (s *VersionsScreen) ShortHelp() string {
 		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back | Versions: %d", mode, lines, searchHelp, len(s.versions))
 	case types.FocusContent:
 		if s.layout != types.LayoutFullscreen {
-			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | l: lines (%s) | c: copy | esc: back", mode, lines)
+			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | esc: back", mode, lines)
 		}
 		contentSearchHelp := "/: search"
 		if query := s.viewer.SearchQuery(); query != "" {
 			current, total := s.viewer.SearchStatus()
-			contentSearchHelp = fmt.Sprintf("/: search | N/P: next/prev match | ctrl+l: clear [%s] | Hits %d/%d", query, current, total)
+			contentSearchHelp = fmt.Sprintf("/: search | N/P: next/prev match | ctrl+u: clear [%s] | Hits %d/%d", query, current, total)
 		}
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | R: restore | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back", mode, lines, contentSearchHelp)
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | R: restore | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | %s | esc: back", mode, lines, contentSearchHelp)
 	case types.FocusSearch:
 		return "enter: search | esc: cancel"
 	default:

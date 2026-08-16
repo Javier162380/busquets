@@ -398,7 +398,7 @@ func TestCtrlLClearsFiltersFromList(t *testing.T) {
 	s.plans = []claudeviewer.PlanSummary{{FileName: "p.md", SyncSource: "/src", Title: "My Plan"}}
 	s.updateListItems()
 
-	_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
+	_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
 	require.Empty(t, s.searchQuery)
 	require.NotNil(t, cmd)
 	_, ok := cmd().(messages.ClearSearchMsg)

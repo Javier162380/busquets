@@ -516,7 +516,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		}
 		return s, nil
 
-	case "ctrl+l":
+	case "ctrl+u":
 		if s.searchQuery != "" || len(s.tagFilters) > 0 {
 			s.searchQuery = ""
 			s.tagFilters = nil
@@ -788,11 +788,28 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		s.viewer.SearchPrev()
 		return s, nil
 
-	case "ctrl+l":
+	case "ctrl+u":
 		if s.layout != types.LayoutFullscreen {
 			return s, nil
 		}
 		s.viewer.ClearSearch()
+		return s, nil
+
+	case "ctrl+l":
+		maxLine := s.viewer.LineCount()
+		s.activeModal = types.ModalTextInput
+		s.inputModal.SetSize(min(40, s.width-4), min(8, s.height-2))
+		s.inputModal.Open(
+			fmt.Sprintf("Go to line (1-%d)", maxLine),
+			"line number",
+			func(r rune) bool { return r >= '0' && r <= '9' },
+			strconv.Atoi,
+			func(n int) {
+				if n > 0 {
+					s.viewer.ScrollToContentLine(n)
+				}
+			},
+		)
 		return s, nil
 	}
 
@@ -1598,7 +1615,7 @@ func (s *PlansScreen) ShortHelp() string {
 					activeFilters = tagStr
 				}
 			}
-			searchHelp = fmt.Sprintf("/: search | T: tags | ctrl+l: clear [%s]", activeFilters)
+			searchHelp = fmt.Sprintf("/: search | T: tags | ctrl+u: clear [%s]", activeFilters)
 		}
 		tagNav := ""
 		switch {
@@ -1620,19 +1637,19 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.layout != types.LayoutFullscreen {
 			switch {
 			case s.tagPanel != nil:
-				return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | tab: tags | shift+tab: list | esc: back", mode, lines)
+				return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | tab: tags | shift+tab: list | esc: back", mode, lines)
 			case s.labelPanel != nil:
-				return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | tab: labels | shift+tab: list | esc: back", mode, lines)
+				return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | tab: labels | shift+tab: list | esc: back", mode, lines)
 			default:
-				return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | tab: list | esc: back", mode, lines)
+				return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | tab: list | esc: back", mode, lines)
 			}
 		}
 		contentSearchHelp := "/: search"
 		if query := s.viewer.SearchQuery(); query != "" {
 			current, total := s.viewer.SearchStatus()
-			contentSearchHelp = fmt.Sprintf("/: search | N/P: next/prev match | ctrl+l: clear [%s] | Hits %d/%d", query, current, total)
+			contentSearchHelp = fmt.Sprintf("/: search | N/P: next/prev match | ctrl+u: clear [%s] | Hits %d/%d", query, current, total)
 		}
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | %s | e: edit | v: versions | t: transmit | esc: back", mode, lines, contentSearchHelp)
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | %s | e: edit | v: versions | t: transmit | esc: back", mode, lines, contentSearchHelp)
 	case types.FocusEditor:
 		modified := ""
 		if s.editor.IsModified() {
