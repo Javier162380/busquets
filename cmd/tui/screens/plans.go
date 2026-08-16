@@ -758,7 +758,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 			return s, nil
 		}
 		s.activeModal = types.ModalContentSearch
-		s.contentSearchModal.SetSize(min(40, s.width-4), min(8, s.height-2))
+		s.contentSearchModal.SetSize(min(30, s.width-4), min(4, s.height-2))
 		s.contentSearchModal.Open(
 			"Search content", "text to find", nil,
 			func(raw string) (string, error) { return raw, nil },
@@ -1190,9 +1190,14 @@ func (s *PlansScreen) View() string {
 		return overlayContent(mainContent, overlay)
 
 	case types.ModalContentSearch:
+		// height-1, not height: App.View() appends one more row below this
+		// screen's own View() output for the status bar, so a Top-aligned
+		// overlay placed against the full height overflows the terminal by
+		// one row — since row 0 is the box's own top border, that row is
+		// what scrolls off first.
 		overlay := lipgloss.Place(
 			s.width,
-			s.height,
+			s.height-1,
 			lipgloss.Left,
 			lipgloss.Top,
 			s.contentSearchModal.View(),

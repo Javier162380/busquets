@@ -385,7 +385,11 @@ func (s *VersionsScreen) View() string {
 	}
 
 	if s.activeModal == types.ModalContentSearch {
-		overlay := lipgloss.Place(s.width, s.height, lipgloss.Left, lipgloss.Top, s.contentSearchModal.View())
+		// height-1, not height: App.View() appends a status-bar row below
+		// this screen's own View() output, so a Top-aligned overlay placed
+		// against the full height overflows the terminal by one row —
+		// scrolling the box's own top border (row 0) off screen.
+		overlay := lipgloss.Place(s.width, s.height-1, lipgloss.Left, lipgloss.Top, s.contentSearchModal.View())
 		return overlayContent(mainContent, overlay)
 	}
 
