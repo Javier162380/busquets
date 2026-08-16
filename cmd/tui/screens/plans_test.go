@@ -27,25 +27,6 @@ func TestPanelWidths(t *testing.T) {
 	})
 }
 
-func TestOverlayContent(t *testing.T) {
-	s := NewPlansScreen(80, 24, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)
-
-	t.Run("empty overlay returns base unchanged", func(t *testing.T) {
-		result := s.overlayContent("base line 1\nbase line 2", "")
-		require.Equal(t, "base line 1\nbase line 2", result)
-	})
-
-	t.Run("non-empty overlay lines replace base", func(t *testing.T) {
-		result := s.overlayContent("base1\nbase2", "overlay1\noverlay2")
-		require.Equal(t, "overlay1\noverlay2", result)
-	})
-
-	t.Run("empty overlay lines fall through to base", func(t *testing.T) {
-		result := s.overlayContent("base1\nbase2", "overlay1\n")
-		require.Equal(t, "overlay1\nbase2", result)
-	})
-}
-
 func TestGetViewerWidth(t *testing.T) {
 	t.Run("fullscreen layout returns width minus padding", func(t *testing.T) {
 		s := NewPlansScreen(100, 40, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)

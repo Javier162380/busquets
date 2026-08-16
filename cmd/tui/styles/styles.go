@@ -21,6 +21,10 @@ var (
 	SuccessColor = lipgloss.Color("42")  // Green.
 	LoadingColor = lipgloss.Color("81")  // Cyan.
 	HelpColor    = lipgloss.Color("206") // Pink.
+
+	// Search highlight colors.
+	SearchMatchColor        = lipgloss.Color("58")  // Dark olive background for non-active matches.
+	SearchCurrentMatchColor = lipgloss.Color("208") // Orange background for the active match.
 )
 
 // Text styles.
@@ -69,6 +73,19 @@ var (
 	// matching the muted look of the editor's textarea gutter.
 	LineNumberStyle = lipgloss.NewStyle().
 			Foreground(InactiveColor)
+
+	// SearchMatchStyle highlights a non-active content-search match.
+	SearchMatchStyle = lipgloss.NewStyle().
+				Background(SearchMatchColor).
+				Foreground(ForegroundColor)
+
+	// SearchCurrentMatchStyle highlights the active content-search match,
+	// distinct from SearchMatchStyle so the cursor's position among matches
+	// is visible at a glance.
+	SearchCurrentMatchStyle = lipgloss.NewStyle().
+				Background(SearchCurrentMatchColor).
+				Foreground(lipgloss.Color("0")).
+				Bold(true)
 )
 
 // StatusStyle returns a style for the status bar.

@@ -22,40 +22,42 @@ import (
 // PlansScreen handles plan browsing, viewing, and editing.
 type PlansScreen struct {
 	// Components.
-	list          *components.List
-	viewer        *components.Viewer
-	editor        *components.Editor
-	searchBar     *components.SearchBar
-	tagModal      *components.TagModal
-	confirmDialog *components.ConfirmModal
-	tagFilter     *components.TagFilter
-	tagPanel      *components.TagPanel
-	labelPanel    *components.LabelPanel
-	commentModal  *components.CommentModal
-	renameModal   *components.RenameModal
-	inputModal    *components.InputModal[int]
+	list               *components.List
+	viewer             *components.Viewer
+	editor             *components.Editor
+	searchBar          *components.SearchBar
+	tagModal           *components.TagModal
+	confirmDialog      *components.ConfirmModal
+	tagFilter          *components.TagFilter
+	tagPanel           *components.TagPanel
+	labelPanel         *components.LabelPanel
+	commentModal       *components.CommentModal
+	renameModal        *components.RenameModal
+	inputModal         *components.InputModal[int]
+	contentSearchModal *components.InputModal[string]
 
 	// State.
 	layout types.Layout
 	// baseLayout is the layout to restore when leaving fullscreen: Split in
 	// plan_content, ThreePanel whenever a side panel is mounted.
-	baseLayout    types.Layout
-	focus         types.Focus
-	plans         []claudeviewer.PlanSummary            // filtered view shown in list
-	allPlans      []claudeviewer.PlanSummary            // full unfiltered source of truth
-	allTags       []claudeviewer.Tag                    // all tags in the system (including unassigned)
-	tagPlanCounts map[string]int                        // authoritative plan count per tag from DB
-	tagPlanMap    map[string][]claudeviewer.PlanSummary // map tags to a planSummary
-	untaggedCount int                                   // number of plans with no tags assigned
-	current       *claudeviewer.PlanDetail
-	searchQuery   string   // Current active search query (empty = show all).
-	tagFilters    []string // Active tag filters.
-	activeModal   types.ModalState
-	tldrTitle     string // Title of the plan being summarized.
-	tldrSummary   string // Raw summary text, used when saving as a comment.
-	tldrViewport  viewport.Model
-	lastKey       string    // Last key pressed in editor (for double-key detection).
-	lastKeyTime   time.Time // Time of last key press in editor.
+	baseLayout         types.Layout
+	focus              types.Focus
+	plans              []claudeviewer.PlanSummary            // filtered view shown in list
+	allPlans           []claudeviewer.PlanSummary            // full unfiltered source of truth
+	allTags            []claudeviewer.Tag                    // all tags in the system (including unassigned)
+	tagPlanCounts      map[string]int                        // authoritative plan count per tag from DB
+	tagPlanMap         map[string][]claudeviewer.PlanSummary // map tags to a planSummary
+	untaggedCount      int                                   // number of plans with no tags assigned
+	current            *claudeviewer.PlanDetail
+	searchQuery        string   // Current active search query (empty = show all).
+	tagFilters         []string // Active tag filters.
+	activeModal        types.ModalState
+	tldrTitle          string // Title of the plan being summarized.
+	tldrSummary        string // Raw summary text, used when saving as a comment.
+	tldrViewport       viewport.Model
+	lastKey            string    // Last key pressed in editor (for double-key detection).
+	lastKeyTime        time.Time // Time of last key press in editor.
+	pendingSearchError error     // Set by the content-search onSubmit callback when a query has no matches; consumed by handleContentSearchModalUpdate.
 
 	// Dimensions.
 	width  int
@@ -75,21 +77,22 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 	contentHeight := height - 4
 
 	p := PlansScreen{
-		list:          components.NewList(nil, panelWidth, contentHeight, focus),
-		viewer:        components.NewViewer(panelWidth, contentHeight, markdownRenderedTheme),
-		editor:        components.NewEditor(width-4, contentHeight),
-		searchBar:     components.NewSearchBar(panelWidth),
-		tagModal:      components.NewTagModal(),
-		confirmDialog: components.NewConfirmModal(),
-		commentModal:  components.NewCommentModal(),
-		renameModal:   components.NewRenameModal(),
-		inputModal:    components.NewInputModal[int](),
-		tagFilter:     components.NewTagFilter(panelWidth),
-		layout:        types.LayoutSplit,
-		baseLayout:    types.LayoutSplit,
-		focus:         types.FocusList,
-		width:         width,
-		height:        height,
+		list:               components.NewList(nil, panelWidth, contentHeight, focus),
+		viewer:             components.NewViewer(panelWidth, contentHeight, markdownRenderedTheme),
+		editor:             components.NewEditor(width-4, contentHeight),
+		searchBar:          components.NewSearchBar(panelWidth),
+		tagModal:           components.NewTagModal(),
+		confirmDialog:      components.NewConfirmModal(),
+		commentModal:       components.NewCommentModal(),
+		renameModal:        components.NewRenameModal(),
+		inputModal:         components.NewInputModal[int](),
+		contentSearchModal: components.NewInputModal[string](),
+		tagFilter:          components.NewTagFilter(panelWidth),
+		layout:             types.LayoutSplit,
+		baseLayout:         types.LayoutSplit,
+		focus:              types.FocusList,
+		width:              width,
+		height:             height,
 		borderStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(styles.BorderColor),
@@ -149,6 +152,8 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s.handleRenameModalUpdate(msg)
 	case types.ModalTextInput:
 		return s.handleInputModalUpdate(msg)
+	case types.ModalContentSearch:
+		return s.handleContentSearchModalUpdate(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -675,6 +680,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 			return s, nil
 		}
 	case "esc":
+		s.viewer.ClearSearch()
 		// Back to list (split/three-panel view) or back out of fullscreen.
 		if s.layout == types.LayoutFullscreen {
 			s.layout = s.baseLayout
@@ -735,24 +741,58 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		}
 		return s, nil
 
-	case "n":
-		if s.current != nil {
-			s.activeModal = types.ModalComment
-			s.commentModal.SetSize(s.width*3/4, s.height*3/4)
-			s.commentModal.SetDarkMode(s.isDarkModeEnabled)
-			s.commentModal.SetRenderMarkdown(s.viewer.RenderMode() == components.RenderModeGlamour)
-			return s, func() tea.Msg {
-				return messages.OpenCommentModalMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
-			}
-		}
-		return s, nil
-
 	case "g":
 		s.viewer.GotoTop()
 		return s, nil
 
 	case "G":
 		s.viewer.GotoBottom()
+		return s, nil
+
+	case "/":
+		// Fullscreen only: the highlighted matches would otherwise keep
+		// showing in the split/three-panel content pane after focus moves
+		// elsewhere (list, side panel), since that pane stays visible and
+		// only Esc-from-fullscreen clears the search.
+		if s.layout != types.LayoutFullscreen {
+			return s, nil
+		}
+		s.activeModal = types.ModalContentSearch
+		s.contentSearchModal.SetSize(min(30, s.width-4), min(4, s.height-2))
+		s.contentSearchModal.Open(
+			"Search content", "text to find", nil,
+			func(raw string) (string, error) { return raw, nil },
+			func(query string) {
+				s.viewer.Search(query)
+				// onSubmit can't return a tea.Cmd, so a "no matches" error
+				// is stashed here and turned into messages.ErrorMsg by
+				// handleContentSearchModalUpdate right after this runs.
+				if !s.viewer.HasMatches() {
+					s.pendingSearchError = fmt.Errorf("no matches for: %q", query)
+				}
+			},
+		)
+		return s, nil
+
+	case "N":
+		if s.layout != types.LayoutFullscreen {
+			return s, nil
+		}
+		s.viewer.SearchNext()
+		return s, nil
+
+	case "P":
+		if s.layout != types.LayoutFullscreen {
+			return s, nil
+		}
+		s.viewer.SearchPrev()
+		return s, nil
+
+	case "ctrl+l":
+		if s.layout != types.LayoutFullscreen {
+			return s, nil
+		}
+		s.viewer.ClearSearch()
 		return s, nil
 	}
 
@@ -1023,6 +1063,31 @@ func (s *PlansScreen) handleInputModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
 	return s, cmd
 }
 
+// handleContentSearchModalUpdate routes messages while the content search
+// modal is active. Esc is intercepted before delegating to the modal so it
+// also clears the viewer's active search highlight — InputModal.Close()
+// only closes the input box itself, it has no knowledge of the viewer's
+// highlight state, which would otherwise linger after the box closes.
+// (Enter doesn't hit this path: onSubmit — which runs the actual search —
+// only fires on Enter, and Esc never calls it.)
+func (s *PlansScreen) handleContentSearchModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.Type == tea.KeyEsc {
+		s.viewer.ClearSearch()
+	}
+
+	cmd := s.contentSearchModal.Update(msg)
+	if !s.contentSearchModal.IsActive() {
+		s.activeModal = types.ModalNone
+	}
+
+	if s.pendingSearchError != nil {
+		err := s.pendingSearchError
+		s.pendingSearchError = nil
+		return s, tea.Batch(cmd, func() tea.Msg { return messages.ContentSearchErrorMsg{Error: err} })
+	}
+	return s, cmd
+}
+
 // View renders the screen.
 func (s *PlansScreen) View() string {
 	var mainContent string
@@ -1065,7 +1130,7 @@ func (s *PlansScreen) View() string {
 			popup,
 		)
 
-		return s.overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, overlay)
 
 	case types.ModalTagManager:
 		modal := s.tagModal.View()
@@ -1078,7 +1143,7 @@ func (s *PlansScreen) View() string {
 			modal,
 		)
 
-		mainContent = s.overlayContent(mainContent, overlay)
+		mainContent = overlayContent(mainContent, overlay)
 
 		// Overlay confirm dialog on top of the tag modal when active.
 		if s.confirmDialog.IsActive() {
@@ -1089,7 +1154,7 @@ func (s *PlansScreen) View() string {
 				lipgloss.Center,
 				s.confirmDialog.View(),
 			)
-			return s.overlayContent(mainContent, dialogOverlay)
+			return overlayContent(mainContent, dialogOverlay)
 		}
 
 		return mainContent
@@ -1102,7 +1167,7 @@ func (s *PlansScreen) View() string {
 			lipgloss.Center,
 			s.commentModal.View(),
 		)
-		return s.overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, overlay)
 
 	case types.ModalRenameFile:
 		overlay := lipgloss.Place(
@@ -1112,7 +1177,7 @@ func (s *PlansScreen) View() string {
 			lipgloss.Center,
 			s.renameModal.View(),
 		)
-		return s.overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, overlay)
 
 	case types.ModalTextInput:
 		overlay := lipgloss.Place(
@@ -1122,7 +1187,22 @@ func (s *PlansScreen) View() string {
 			lipgloss.Center,
 			s.inputModal.View(),
 		)
-		return s.overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, overlay)
+
+	case types.ModalContentSearch:
+		// height-1, not height: App.View() appends one more row below this
+		// screen's own View() output for the status bar, so a Top-aligned
+		// overlay placed against the full height overflows the terminal by
+		// one row — since row 0 is the box's own top border, that row is
+		// what scrolls off first.
+		overlay := lipgloss.Place(
+			s.width,
+			s.height-1,
+			lipgloss.Left,
+			lipgloss.Top,
+			s.contentSearchModal.View(),
+		)
+		return overlayContent(mainContent, overlay)
 	}
 
 	if s.confirmDialog.IsActive() {
@@ -1133,7 +1213,7 @@ func (s *PlansScreen) View() string {
 			lipgloss.Center,
 			s.confirmDialog.View(),
 		)
-		return s.overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, overlay)
 	}
 
 	return mainContent
@@ -1540,7 +1620,12 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.layout != types.LayoutFullscreen {
 			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | tab: list | esc: back", mode, lines)
 		}
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | e: edit | v: versions | t: transmit | esc: back", mode, lines)
+		contentSearchHelp := "/: search"
+		if query := s.viewer.SearchQuery(); query != "" {
+			current, total := s.viewer.SearchStatus()
+			contentSearchHelp = fmt.Sprintf("/: search | N/P: next/prev match | ctrl+l: clear [%s] | Hits %d/%d", query, current, total)
+		}
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | %s | e: edit | v: versions | t: transmit | esc: back", mode, lines, contentSearchHelp)
 	case types.FocusEditor:
 		modified := ""
 		if s.editor.IsModified() {
@@ -1574,35 +1659,6 @@ func (s *PlansScreen) IsInputMode() bool {
 // EditorMode returns true when the screen is in editor focus.
 func (s *PlansScreen) EditorMode() bool {
 	return s.focus == types.FocusEditor
-}
-
-// overlayContent overlays the modal on top of the main content.
-func (s *PlansScreen) overlayContent(base, overlay string) string {
-	baseLines := strings.Split(base, "\n")
-	overlayLines := strings.Split(overlay, "\n")
-
-	// Ensure both have the same number of lines
-	maxLines := max(len(baseLines), len(overlayLines))
-
-	result := make([]string, maxLines)
-	for i := range maxLines {
-		var baseLine, overlayLine string
-		if i < len(baseLines) {
-			baseLine = baseLines[i]
-		}
-		if i < len(overlayLines) {
-			overlayLine = overlayLines[i]
-		}
-
-		// If overlay line is not empty/whitespace, use it; otherwise use base
-		if strings.TrimSpace(overlayLine) != "" {
-			result[i] = overlayLine
-		} else {
-			result[i] = baseLine
-		}
-	}
-
-	return strings.Join(result, "\n")
 }
 
 // updateListItems updates the list with current plans.

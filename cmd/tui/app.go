@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/commands"
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
@@ -150,6 +151,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.VersionErrorMsg:
 		a.statusBar.SetError(msg.Error.Error())
 		return a, commands.ClearStatusCmdWithDefaultDuration()
+	case messages.ContentSearchErrorMsg:
+		a.statusBar.SetError(msg.Error.Error())
+		return a, commands.ClearStatusCmd(2 * time.Second)
 	case messages.PlansLoadedMsg, messages.AllTagsForPanelLoadedMsg:
 		return a.delegateToPlansScreen(msg)
 	case messages.PlanDetailLoadedMsg,

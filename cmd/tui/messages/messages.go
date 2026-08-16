@@ -465,3 +465,7 @@ type DeleteCommentResultMsg struct {
 	SyncSource string
 	Error      error
 }
+
+type ContentSearchErrorMsg struct {
+	Error error
+}

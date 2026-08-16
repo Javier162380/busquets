@@ -18,17 +18,20 @@ import (
 // VersionsScreen handles version history browsing and viewing.
 type VersionsScreen struct {
 	// Components.
-	list      *components.List
-	viewer    *components.Viewer
-	searchBar *components.SearchBar
+	list               *components.List
+	viewer             *components.Viewer
+	searchBar          *components.SearchBar
+	contentSearchModal *components.InputModal[string]
 
 	// State.
-	layout      types.Layout
-	focus       types.Focus
-	planName    string
-	searchQuery string
-	versions    []claudeviewer.PlanVersionDetail
-	current     *claudeviewer.PlanVersionDetail
+	layout             types.Layout
+	focus              types.Focus
+	activeModal        types.ModalState
+	planName           string
+	searchQuery        string
+	versions           []claudeviewer.PlanVersionDetail
+	current            *claudeviewer.PlanVersionDetail
+	pendingSearchError error // Set by the content-search onSubmit callback when a query has no matches; consumed by handleContentSearchModalUpdate.
 
 	// Dimensions.
 	width  int
@@ -46,14 +49,15 @@ func NewVersionsScreen(planName, markdownRenderedTheme string, width, height int
 	contentHeight := height - 4
 
 	v := &VersionsScreen{
-		list:      components.NewList(nil, panelWidth, contentHeight, true),
-		viewer:    components.NewViewer(panelWidth, contentHeight, markdownRenderedTheme),
-		searchBar: components.NewSearchBar(panelWidth),
-		layout:    types.LayoutSplit,
-		focus:     types.FocusList,
-		planName:  planName,
-		width:     width,
-		height:    height,
+		list:               components.NewList(nil, panelWidth, contentHeight, true),
+		viewer:             components.NewViewer(panelWidth, contentHeight, markdownRenderedTheme),
+		searchBar:          components.NewSearchBar(panelWidth),
+		contentSearchModal: components.NewInputModal[string](),
+		layout:             types.LayoutSplit,
+		focus:              types.FocusList,
+		planName:           planName,
+		width:              width,
+		height:             height,
 		borderStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(styles.BorderColor),
@@ -93,6 +97,13 @@ func (s *VersionsScreen) Init() tea.Cmd {
 
 // Update handles messages.
 func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
+	switch s.activeModal {
+	case types.ModalContentSearch:
+		return s.handleContentSearchModalUpdate(msg)
+	default:
+		// ModalNone (the only other value VersionsScreen ever sets): handle normally below
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		return s.handleKey(msg)
@@ -223,6 +234,7 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 	switch key {
 	case "esc":
 		// Back to split view.
+		s.viewer.ClearSearch()
 		s.layout = types.LayoutSplit
 		s.focus = types.FocusList
 		s.viewer.GotoTop()
@@ -263,9 +275,78 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 	case "G":
 		s.viewer.GotoBottom()
 		return s, nil
+
+	case "/":
+		// Search within the currently displayed version content. Uses N/P
+		// rather than vim's n/N for consistency with PlansScreen's content
+		// search, where lowercase n is already bound to "new comment".
+		// Fullscreen only: split view keeps the content pane visible after
+		// focus moves to the list, and only Esc-from-fullscreen clears the
+		// search, so a split-view search would leave stale highlights
+		// showing behind the list.
+		if s.layout != types.LayoutFullscreen {
+			return s, nil
+		}
+		s.activeModal = types.ModalContentSearch
+		s.contentSearchModal.SetSize(min(40, s.width-4), min(8, s.height-2))
+		s.contentSearchModal.Open(
+			"Search content", "text to find", nil,
+			func(raw string) (string, error) { return raw, nil },
+			func(query string) {
+				s.viewer.Search(query)
+				if !s.viewer.HasMatches() {
+					s.pendingSearchError = fmt.Errorf("no matches for %q", query)
+				}
+			},
+		)
+		return s, nil
+
+	case "N":
+		if s.layout != types.LayoutFullscreen {
+			return s, nil
+		}
+		s.viewer.SearchNext()
+		return s, nil
+
+	case "P":
+		if s.layout != types.LayoutFullscreen {
+			return s, nil
+		}
+		s.viewer.SearchPrev()
+		return s, nil
+
+	case "ctrl+l":
+		if s.layout != types.LayoutFullscreen {
+			return s, nil
+		}
+		s.viewer.ClearSearch()
+		return s, nil
 	}
 
 	return s, s.viewer.Update(msg)
+}
+
+// handleContentSearchModalUpdate routes messages while the content search
+// modal is active. Mirrors PlansScreen.handleContentSearchModalUpdate:
+// Esc is intercepted before delegating to the modal so it also clears the
+// viewer's active search highlight, since InputModal.Close() only closes
+// the input box itself.
+func (s *VersionsScreen) handleContentSearchModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && keyMsg.Type == tea.KeyEsc {
+		s.viewer.ClearSearch()
+	}
+
+	cmd := s.contentSearchModal.Update(msg)
+	if !s.contentSearchModal.IsActive() {
+		s.activeModal = types.ModalNone
+	}
+
+	if s.pendingSearchError != nil {
+		err := s.pendingSearchError
+		s.pendingSearchError = nil
+		return s, tea.Batch(cmd, func() tea.Msg { return messages.ContentSearchErrorMsg{Error: err} })
+	}
+	return s, cmd
 }
 
 // handleSearchKey handles keys in search mode.
@@ -301,6 +382,15 @@ func (s *VersionsScreen) View() string {
 		mainContent = s.renderFullscreenViewer()
 	default:
 		mainContent = s.renderSplitView()
+	}
+
+	if s.activeModal == types.ModalContentSearch {
+		// height-1, not height: App.View() appends a status-bar row below
+		// this screen's own View() output, so a Top-aligned overlay placed
+		// against the full height overflows the terminal by one row —
+		// scrolling the box's own top border (row 0) off screen.
+		overlay := lipgloss.Place(s.width, s.height-1, lipgloss.Left, lipgloss.Top, s.contentSearchModal.View())
+		return overlayContent(mainContent, overlay)
 	}
 
 	return mainContent
@@ -428,7 +518,15 @@ func (s *VersionsScreen) ShortHelp() string {
 		}
 		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back | Versions: %d", mode, lines, searchHelp, len(s.versions))
 	case types.FocusContent:
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | l: lines (%s) | c: copy | esc: back", mode, lines)
+		if s.layout != types.LayoutFullscreen {
+			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | l: lines (%s) | c: copy | esc: back", mode, lines)
+		}
+		contentSearchHelp := "/: search"
+		if query := s.viewer.SearchQuery(); query != "" {
+			current, total := s.viewer.SearchStatus()
+			contentSearchHelp = fmt.Sprintf("/: search | N/P: next/prev match | ctrl+l: clear [%s] | Hits %d/%d", query, current, total)
+		}
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | R: restore | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back", mode, lines, contentSearchHelp)
 	case types.FocusSearch:
 		return "enter: search | esc: cancel"
 	default:
@@ -438,7 +536,7 @@ func (s *VersionsScreen) ShortHelp() string {
 
 // IsInputMode returns true when capturing text input.
 func (s *VersionsScreen) IsInputMode() bool {
-	return s.focus == types.FocusSearch
+	return s.focus == types.FocusSearch || s.activeModal != types.ModalNone
 }
 
 // EditorMode ...
