@@ -1618,7 +1618,14 @@ func (s *PlansScreen) ShortHelp() string {
 			lines = "ON"
 		}
 		if s.layout != types.LayoutFullscreen {
-			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | tab: list | esc: back", mode, lines)
+			switch {
+			case s.tagPanel != nil:
+				return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | tab: tags | shift+tab: list | esc: back", mode, lines)
+			case s.labelPanel != nil:
+				return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | tab: labels | shift+tab: list | esc: back", mode, lines)
+			default:
+				return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | tab: list | esc: back", mode, lines)
+			}
 		}
 		contentSearchHelp := "/: search"
 		if query := s.viewer.SearchQuery(); query != "" {
