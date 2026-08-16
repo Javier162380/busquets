@@ -11,6 +11,7 @@ import (
 	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/golang/mock/gomock"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/require"
@@ -279,5 +280,52 @@ func TestViewerSearch(t *testing.T) {
 		require.True(t, v.HasMatches())
 		_, total := v.SearchStatus()
 		require.Equal(t, 2, total)
+	})
+
+	t.Run("Glamour mode highlights the whole line even when Glamour resets styling mid-line", func(t *testing.T) {
+		// Glamour emits a full SGR reset between nearly every styled span
+		// (bold, code, links). Wrapping that line as-is in a background
+		// style would only highlight the prefix before the first such
+		// reset, so applyHighlight must strip ANSI and highlight the plain
+		// text instead of the original styled line.
+		v := NewViewer(80, 5, "dark")
+		v.SetContent(newMockDisplayable(t, "target", "", "", ""))
+		v.renderMode = RenderModeGlamour
+		v.search.SetQuery("target", 1)
+		require.True(t, v.search.HasMatches())
+
+		styledLine := "before \x1b[m\x1b[1mtarget\x1b[m after"
+		out := v.applyHighlight([]string{styledLine})
+
+		require.Len(t, out, 1)
+		require.Equal(t, styles.SearchMatchStyle.Render(ansi.Strip(styledLine)), out[0])
+		require.NotEqual(t, styles.SearchMatchStyle.Render(styledLine), out[0],
+			"highlighting the original styled line (not the stripped text) would leak Glamour's embedded reset and only cover the prefix before it")
+	})
+
+	t.Run("Glamour mode marks the current match distinctly, approximated from its raw line position", func(t *testing.T) {
+		body := strings.Join([]string{
+			"target line one", "filler", "filler", "filler", "target line two",
+		}, "\n")
+		rendered := []string{
+			"target line one", "filler", "filler", "filler", "target line two",
+		}
+
+		v := NewViewer(80, 5, "dark")
+		v.SetContent(newMockDisplayable(t, body, "", "", ""))
+		v.renderMode = RenderModeGlamour
+		v.search.SetQuery("target", 1)
+		require.Equal(t, 1, v.search.CurrentLine())
+
+		out := v.applyHighlight(append([]string(nil), rendered...))
+		require.Equal(t, styles.SearchCurrentMatchStyle.Render("target line one"), out[0])
+		require.Equal(t, styles.SearchMatchStyle.Render("target line two"), out[4])
+
+		v.search.Next()
+		require.Equal(t, 5, v.search.CurrentLine())
+
+		out = v.applyHighlight(append([]string(nil), rendered...))
+		require.Equal(t, styles.SearchMatchStyle.Render("target line one"), out[0])
+		require.Equal(t, styles.SearchCurrentMatchStyle.Render("target line two"), out[4])
 	})
 }

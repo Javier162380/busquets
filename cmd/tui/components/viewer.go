@@ -174,11 +174,7 @@ func (v *Viewer) ScrollToContentLine(line int) {
 		return
 	}
 
-	total := v.rawLineCount()
-	percent := 0.0
-	if total > 1 {
-		percent = float64(line-1) / float64(total-1)
-	}
+	percent := fractionAlong(line, v.rawLineCount())
 	maxOffset := v.totalLineCount - v.viewport.Height
 	if maxOffset < 0 {
 		maxOffset = 0
@@ -225,6 +221,11 @@ func (v *Viewer) ClearSearch() {
 // HasMatches reports whether the active search query has any matches.
 func (v *Viewer) HasMatches() bool { return v.search.HasMatches() }
 
+// SearchQuery returns the active search query text, or "" if none — e.g.
+// for a "ctrl+l: clear [query]" help hint, mirroring the plan list's own
+// search-clear hint.
+func (v *Viewer) SearchQuery() string { return v.search.Query() }
+
 // SearchStatus returns the active match's 1-indexed position and the total
 // match count (e.g. for a "3/12" indicator), both 0 if there is no query.
 func (v *Viewer) SearchStatus() (current, total int) {
@@ -240,7 +241,25 @@ func (v *Viewer) rawLineCount() int {
 // lineFromScrollPercent maps a viewport scroll percentage onto an
 // approximate 1-indexed line in the raw source.
 func (v *Viewer) lineFromScrollPercent(percent float64) int {
-	total := v.rawLineCount()
+	return lineAtFraction(percent, v.rawLineCount())
+}
+
+// fractionAlong returns the 1-indexed line's position as a 0..1 fraction of
+// total (also 1-indexed), or 0 when total has only one line (nothing to
+// interpolate across).
+func fractionAlong(line, total int) float64 {
+	if total <= 1 {
+		return 0
+	}
+	return float64(line-1) / float64(total-1)
+}
+
+// lineAtFraction is fractionAlong's inverse: maps a 0..1 fraction back onto
+// a clamped 1-indexed line within total.
+func lineAtFraction(percent float64, total int) int {
+	if total <= 1 {
+		return 1
+	}
 	line := int(percent*float64(total-1)+0.5) + 1
 	if line < 1 {
 		line = 1
@@ -314,10 +333,16 @@ func (v *Viewer) updateViewportContent() {
 // reflowed relative to source lines (the same reason CurrentContentLine
 // only approximates position there), so there's no reliable byte-offset
 // mapping to highlight an exact span against. Instead: strip ANSI, check
-// each rendered line's plain text for the query, and highlight the whole
-// line if it matches. There's also no reliable way to tell which rendered
-// line holds the "active" match in this mode, so every matching line gets
-// the same style — no current/other distinction like raw mode has.
+// the plain text for the query, and if it matches, render the *stripped*
+// plain text (not the original styled line) under the highlight style —
+// Glamour emits a full SGR reset between nearly every styled span, and
+// wrapping the original line would only highlight the prefix before the
+// first such reset instead of the whole line. There's also no exact
+// rendered line for the "active" match either, so it's approximated the
+// same way ScrollToContentLine is: project the active match's raw line
+// onto the same fraction of the rendered body, and treat whichever
+// matching line lands closest to that position as current — see
+// currentGlamourMatchIndex.
 func (v *Viewer) applyHighlight(contentLines []string) []string {
 	if !v.search.HasMatches() {
 		return contentLines
@@ -340,19 +365,71 @@ func (v *Viewer) applyHighlight(contentLines []string) []string {
 				}
 				styled[j] = styledRange{start: r[0], end: r[1], style: style}
 			}
-			contentLines[i] = applyStyledRanges(line, styled)
+			contentLines[i] = applyStyledRanges(line, styled) //nolint:gosec // G602 false positive: i comes from range over contentLines, so it's always in bounds
 		}
 
 	case RenderModeGlamour:
 		query := strings.ToLower(v.search.Query())
+		var matches []int
+		plainByLine := make(map[int]string, len(contentLines))
 		for i, line := range contentLines {
-			if strings.Contains(strings.ToLower(ansi.Strip(line)), query) {
-				contentLines[i] = styles.SearchMatchStyle.Render(line)
+			plain := ansi.Strip(line)
+			if strings.Contains(strings.ToLower(plain), query) {
+				matches = append(matches, i)
+				plainByLine[i] = plain
 			}
+		}
+		if len(matches) == 0 {
+			break
+		}
+		current := v.currentGlamourMatchIndex(matches, len(contentLines))
+		for _, i := range matches {
+			// Render the stripped plain text, not the original
+			// Glamour-styled line: Glamour emits a full SGR reset
+			// between nearly every styled span (bold, code, links),
+			// and a full reset clears the background this wrapping
+			// style just set with no way to reapply it mid-line — so
+			// wrapping the original line only highlights the prefix
+			// before the first such reset, which is often not even
+			// where the match is. Stripping first guarantees the
+			// whole line stays highlighted, at the cost of that one
+			// line's own styling while it's highlighted.
+			style := styles.SearchMatchStyle
+			if i == current {
+				style = styles.SearchCurrentMatchStyle
+			}
+			contentLines[i] = style.Render(plainByLine[i])
 		}
 	}
 
 	return contentLines
+}
+
+// currentGlamourMatchIndex picks which of the given rendered-line indices
+// (each already confirmed to contain the query) best represents the
+// "active" search match. There's no exact source-line mapping in Glamour
+// mode, so this reuses the same fractional projection ScrollToContentLine
+// and lineFromScrollPercent use: it converts the active match's raw line
+// into the equivalent fractional position in the rendered body (a 0-indexed
+// slot here, hence the -1), then returns whichever candidate is closest.
+func (v *Viewer) currentGlamourMatchIndex(candidates []int, renderedTotal int) int {
+	percent := fractionAlong(v.search.CurrentLine(), v.rawLineCount())
+	target := lineAtFraction(percent, renderedTotal) - 1
+
+	best, bestDist := candidates[0], abs(candidates[0]-target)
+	for _, c := range candidates[1:] {
+		if d := abs(c - target); d < bestDist {
+			best, bestDist = c, d
+		}
+	}
+	return best
+}
+
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 // styledRange is a [start,end) byte range within a line, paired with the

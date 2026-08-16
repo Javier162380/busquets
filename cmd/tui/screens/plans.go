@@ -22,19 +22,19 @@ import (
 // PlansScreen handles plan browsing, viewing, and editing.
 type PlansScreen struct {
 	// Components.
-	list          *components.List
-	viewer        *components.Viewer
-	editor        *components.Editor
-	searchBar     *components.SearchBar
-	tagModal      *components.TagModal
-	confirmDialog *components.ConfirmModal
-	tagFilter     *components.TagFilter
-	tagPanel      *components.TagPanel
-	labelPanel    *components.LabelPanel
-	commentModal  *components.CommentModal
-	renameModal   *components.RenameModal
-	inputModal    *components.InputModal[int]
-	searchModal   *components.InputModal[string]
+	list               *components.List
+	viewer             *components.Viewer
+	editor             *components.Editor
+	searchBar          *components.SearchBar
+	tagModal           *components.TagModal
+	confirmDialog      *components.ConfirmModal
+	tagFilter          *components.TagFilter
+	tagPanel           *components.TagPanel
+	labelPanel         *components.LabelPanel
+	commentModal       *components.CommentModal
+	renameModal        *components.RenameModal
+	inputModal         *components.InputModal[int]
+	contentSearchModal *components.InputModal[string]
 
 	// State.
 	layout types.Layout
@@ -77,22 +77,22 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 	contentHeight := height - 4
 
 	p := PlansScreen{
-		list:          components.NewList(nil, panelWidth, contentHeight, focus),
-		viewer:        components.NewViewer(panelWidth, contentHeight, markdownRenderedTheme),
-		editor:        components.NewEditor(width-4, contentHeight),
-		searchBar:     components.NewSearchBar(panelWidth),
-		tagModal:      components.NewTagModal(),
-		confirmDialog: components.NewConfirmModal(),
-		commentModal:  components.NewCommentModal(),
-		renameModal:   components.NewRenameModal(),
-		inputModal:    components.NewInputModal[int](),
-		searchModal:   components.NewInputModal[string](),
-		tagFilter:     components.NewTagFilter(panelWidth),
-		layout:        types.LayoutSplit,
-		baseLayout:    types.LayoutSplit,
-		focus:         types.FocusList,
-		width:         width,
-		height:        height,
+		list:               components.NewList(nil, panelWidth, contentHeight, focus),
+		viewer:             components.NewViewer(panelWidth, contentHeight, markdownRenderedTheme),
+		editor:             components.NewEditor(width-4, contentHeight),
+		searchBar:          components.NewSearchBar(panelWidth),
+		tagModal:           components.NewTagModal(),
+		confirmDialog:      components.NewConfirmModal(),
+		commentModal:       components.NewCommentModal(),
+		renameModal:        components.NewRenameModal(),
+		inputModal:         components.NewInputModal[int](),
+		contentSearchModal: components.NewInputModal[string](),
+		tagFilter:          components.NewTagFilter(panelWidth),
+		layout:             types.LayoutSplit,
+		baseLayout:         types.LayoutSplit,
+		focus:              types.FocusList,
+		width:              width,
+		height:             height,
 		borderStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(styles.BorderColor),
@@ -680,6 +680,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 			return s, nil
 		}
 	case "esc":
+		s.viewer.ClearSearch()
 		// Back to list (split/three-panel view) or back out of fullscreen.
 		if s.layout == types.LayoutFullscreen {
 			s.layout = s.baseLayout
@@ -740,18 +741,6 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		}
 		return s, nil
 
-	case "n":
-		if s.current != nil {
-			s.activeModal = types.ModalComment
-			s.commentModal.SetSize(s.width*3/4, s.height*3/4)
-			s.commentModal.SetDarkMode(s.isDarkModeEnabled)
-			s.commentModal.SetRenderMarkdown(s.viewer.RenderMode() == components.RenderModeGlamour)
-			return s, func() tea.Msg {
-				return messages.OpenCommentModalMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
-			}
-		}
-		return s, nil
-
 	case "g":
 		s.viewer.GotoTop()
 		return s, nil
@@ -761,14 +750,16 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		return s, nil
 
 	case "/":
-		// Search within the currently displayed content. Note: lowercase
-		// "n" is already bound above to "new comment" in this same
-		// handler, so match navigation uses N (next) / P (previous)
-		// instead of the more vim-typical n/N — there's no free lowercase
-		// letter left for it here.
+		// Fullscreen only: the highlighted matches would otherwise keep
+		// showing in the split/three-panel content pane after focus moves
+		// elsewhere (list, side panel), since that pane stays visible and
+		// only Esc-from-fullscreen clears the search.
+		if s.layout != types.LayoutFullscreen {
+			return s, nil
+		}
 		s.activeModal = types.ModalContentSearch
-		s.searchModal.SetSize(min(40, s.width-4), min(8, s.height-2))
-		s.searchModal.Open(
+		s.contentSearchModal.SetSize(min(40, s.width-4), min(8, s.height-2))
+		s.contentSearchModal.Open(
 			"Search content", "text to find", nil,
 			func(raw string) (string, error) { return raw, nil },
 			func(query string) {
@@ -777,18 +768,31 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 				// is stashed here and turned into messages.ErrorMsg by
 				// handleContentSearchModalUpdate right after this runs.
 				if !s.viewer.HasMatches() {
-					s.pendingSearchError = fmt.Errorf("no matches for %q", query)
+					s.pendingSearchError = fmt.Errorf("no matches for: %q", query)
 				}
 			},
 		)
 		return s, nil
 
 	case "N":
+		if s.layout != types.LayoutFullscreen {
+			return s, nil
+		}
 		s.viewer.SearchNext()
 		return s, nil
 
 	case "P":
+		if s.layout != types.LayoutFullscreen {
+			return s, nil
+		}
 		s.viewer.SearchPrev()
+		return s, nil
+
+	case "ctrl+l":
+		if s.layout != types.LayoutFullscreen {
+			return s, nil
+		}
+		s.viewer.ClearSearch()
 		return s, nil
 	}
 
@@ -1071,15 +1075,15 @@ func (s *PlansScreen) handleContentSearchModalUpdate(msg tea.Msg) (Screen, tea.C
 		s.viewer.ClearSearch()
 	}
 
-	cmd := s.searchModal.Update(msg)
-	if !s.searchModal.IsActive() {
+	cmd := s.contentSearchModal.Update(msg)
+	if !s.contentSearchModal.IsActive() {
 		s.activeModal = types.ModalNone
 	}
 
 	if s.pendingSearchError != nil {
 		err := s.pendingSearchError
 		s.pendingSearchError = nil
-		return s, tea.Batch(cmd, func() tea.Msg { return messages.ErrorMsg{Error: err} })
+		return s, tea.Batch(cmd, func() tea.Msg { return messages.ContentSearchErrorMsg{Error: err} })
 	}
 	return s, cmd
 }
@@ -1191,7 +1195,7 @@ func (s *PlansScreen) View() string {
 			s.height,
 			lipgloss.Left,
 			lipgloss.Top,
-			s.searchModal.View(),
+			s.contentSearchModal.View(),
 		)
 		return overlayContent(mainContent, overlay)
 	}
@@ -1609,9 +1613,14 @@ func (s *PlansScreen) ShortHelp() string {
 			lines = "ON"
 		}
 		if s.layout != types.LayoutFullscreen {
-			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | /: search | N/P: next/prev match | tab: list | esc: back", mode, lines)
+			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | tab: list | esc: back", mode, lines)
 		}
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | /: search | N/P: next/prev match | e: edit | v: versions | t: transmit | esc: back", mode, lines)
+		contentSearchHelp := "/: search"
+		if query := s.viewer.SearchQuery(); query != "" {
+			current, total := s.viewer.SearchStatus()
+			contentSearchHelp = fmt.Sprintf("/: search | N/P: next/prev match | ctrl+l: clear [%s] | Hits %d/%d", query, current, total)
+		}
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | %s | e: edit | v: versions | t: transmit | esc: back", mode, lines, contentSearchHelp)
 	case types.FocusEditor:
 		modified := ""
 		if s.editor.IsModified() {

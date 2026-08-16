@@ -6,10 +6,7 @@ import (
 )
 
 // ContentSearch indexes raw markdown source for case-insensitive substring
-// search and maps byte-offset matches back to 1-indexed lines. The index
-// (line offsets + lowercased copy) is rebuilt once per SetContent, not per
-// keystroke — for realistic plan sizes a full match scan per query change
-// is still sub-millisecond, so no incremental/trie structure is warranted.
+// search and maps byte-offset matches back to 1-indexed lines.
 type ContentSearch struct {
 	raw         string
 	lower       string
