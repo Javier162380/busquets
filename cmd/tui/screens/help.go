@@ -41,9 +41,10 @@ PLAN CONTENT (right panel / fullscreen):
   r              Toggle markdown rendering (raw vs rendered)
   l              Toggle line numbers
   c              Copy plan content to clipboard
+  Ctrl+L         Jump to a specific line
   /              Search within the plan content (fullscreen only)
   N / P          Jump to next / previous search match (fullscreen only)
-  Ctrl+L         Clear the search highlight (fullscreen only)
+  Ctrl+U         Clear the search highlight (fullscreen only)
   e              Edit the plan
   v              View version history
   t              Transmit to a connector (e.g. Telegram)
@@ -134,9 +135,10 @@ VERSION VIEW (fullscreen):
   r              Toggle markdown rendering (raw vs rendered)
   l              Toggle line numbers
   c              Copy the version content to clipboard
+  Ctrl+L         Jump to a specific line
   /              Search within the version content
   N / P          Jump to next / previous search match
-  Ctrl+L         Clear the search highlight
+  Ctrl+U         Clear the search highlight
   Esc            Back to the versions list
 
 CONNECTORS (left panel):

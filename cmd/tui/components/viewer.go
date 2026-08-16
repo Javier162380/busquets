@@ -232,6 +232,13 @@ func (v *Viewer) SearchStatus() (current, total int) {
 	return v.search.CurrentIndex(), v.search.MatchCount()
 }
 
+// LineCount returns the total number of lines in the underlying markdown
+// source, independent of how it's currently rendered — e.g. for a
+// "Go to line (1-N)" prompt, mirroring Editor.LineCount.
+func (v *Viewer) LineCount() int {
+	return v.rawLineCount()
+}
+
 // rawLineCount returns the number of lines in the underlying markdown
 // source, independent of how it's currently rendered.
 func (v *Viewer) rawLineCount() int {
