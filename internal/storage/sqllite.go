@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/Javier162380/claude-plan-viewer/internal/config"
+	"github.com/Javier162380/busquets/internal/config"
 
 	_ "github.com/mattn/go-sqlite3" //nolint:revive,stylecheck // SQLite driver needed.
 )

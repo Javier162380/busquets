@@ -1,5 +1,5 @@
 # Go binaries
-/claude-plan-viewer
+/busquets
 bin/
 *.exe
 *.exe~
@@ -24,7 +24,7 @@ vendor/
 *.db
 *.db-shm
 *.db-wal
-.claude-viewer/
+.busquets/
 
 # IDE
 .idea/

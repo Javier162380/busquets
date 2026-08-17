@@ -7,13 +7,13 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
-	"github.com/Javier162380/claude-plan-viewer/internal/config"
-	"github.com/Javier162380/claude-plan-viewer/internal/storage"
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
+	"github.com/Javier162380/busquets/cmd/tui/components"
+	"github.com/Javier162380/busquets/cmd/tui/messages"
+	"github.com/Javier162380/busquets/cmd/tui/screens"
+	"github.com/Javier162380/busquets/internal/config"
+	"github.com/Javier162380/busquets/internal/storage"
+	"github.com/Javier162380/busquets/services/busquets"
+	"github.com/Javier162380/busquets/services/busquets/repository/sqlite"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
@@ -27,9 +27,9 @@ func newTestRepository(ctx context.Context, dbPath string) (*sqlite.Repository, 
 	return sqlite.NewRepository(db.DB()), nil
 }
 
-func setupTestService(t *testing.T) (*claudeviewer.Service, func()) {
+func setupTestService(t *testing.T) (*busquets.Service, func()) {
 	t.Helper()
-	tempDir, err := os.MkdirTemp(os.TempDir(), "claude-viewer-tui-test-*")
+	tempDir, err := os.MkdirTemp(os.TempDir(), "busquets-tui-test-*")
 	require.NoError(t, err)
 	viewerDir := filepath.Join(tempDir, "viewer")
 	sourcePlansDir := filepath.Join(tempDir, "source")
@@ -39,7 +39,7 @@ func setupTestService(t *testing.T) (*claudeviewer.Service, func()) {
 	ctx := context.Background()
 	db, err := newTestRepository(ctx, dbPath)
 	require.NoError(t, err)
-	svc, err := claudeviewer.New(db, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
+	svc, err := busquets.New(ctx, db, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
 	require.NoError(t, err)
 	return svc, func() { os.RemoveAll(tempDir) }
 }
@@ -96,7 +96,7 @@ func TestHandleSyncHandlers(t *testing.T) {
 func TestHandleSaveResult(t *testing.T) {
 	t.Run("success sets success message", func(t *testing.T) {
 		app := newTestApp(t)
-		model, _ := app.Update(messages.SaveResultMsg{Result: &claudeviewer.UpdatePlanResult{Success: true}})
+		model, _ := app.Update(messages.SaveResultMsg{Result: &busquets.UpdatePlanResult{Success: true}})
 		app = model.(*App)
 		require.NotEmpty(t, app.statusBar.SuccessMessage())
 	})
@@ -104,9 +104,9 @@ func TestHandleSaveResult(t *testing.T) {
 	t.Run("success delegates to the screen stack without panicking", func(t *testing.T) {
 		app := newTestApp(t)
 		model, cmd := app.Update(messages.SaveResultMsg{
-			Result: &claudeviewer.UpdatePlanResult{Success: true},
-			Plan: &claudeviewer.PlanDetail{
-				PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "New Title"},
+			Result: &busquets.UpdatePlanResult{Success: true},
+			Plan: &busquets.PlanDetail{
+				PlanSummary: busquets.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "New Title"},
 				Content:     "new content",
 			},
 		})
@@ -151,10 +151,10 @@ func TestHandleSettingsHandlers(t *testing.T) {
 
 	t.Run("DisplayModeChangedMsg updates displayMode", func(t *testing.T) {
 		app := newTestApp(t)
-		require.Equal(t, claudeviewer.DisplayModePlanContent, app.displayMode)
-		model, _ := app.Update(messages.DisplayModeChangedMsg{Mode: claudeviewer.DisplayModeTagPlanContent})
+		require.Equal(t, busquets.DisplayModePlanContent, app.displayMode)
+		model, _ := app.Update(messages.DisplayModeChangedMsg{Mode: busquets.DisplayModeTagPlanContent})
 		app = model.(*App)
-		require.Equal(t, claudeviewer.DisplayModeTagPlanContent, app.displayMode)
+		require.Equal(t, busquets.DisplayModeTagPlanContent, app.displayMode)
 	})
 
 	t.Run("PlansSortKeyChangedMsg returns non-nil reload cmd", func(t *testing.T) {
@@ -193,7 +193,7 @@ func hasMsgType[T any](msgs []tea.Msg) bool {
 func TestReloadAfterMutationRespectsDisplayMode(t *testing.T) {
 	t.Run("label mode: delete reloads plans without a redundant tag panel fetch", func(t *testing.T) {
 		app := newTestApp(t)
-		model, _ := app.Update(messages.DisplayModeChangedMsg{Mode: claudeviewer.DisplayModeLabelPlanContent})
+		model, _ := app.Update(messages.DisplayModeChangedMsg{Mode: busquets.DisplayModeLabelPlanContent})
 		app = model.(*App)
 
 		_, cmd := app.Update(messages.DeletePlanResultMsg{})
@@ -205,7 +205,7 @@ func TestReloadAfterMutationRespectsDisplayMode(t *testing.T) {
 
 	t.Run("tag mode: rename reloads via the tag panel fetch, not a separate plans fetch", func(t *testing.T) {
 		app := newTestApp(t)
-		model, _ := app.Update(messages.DisplayModeChangedMsg{Mode: claudeviewer.DisplayModeTagPlanContent})
+		model, _ := app.Update(messages.DisplayModeChangedMsg{Mode: busquets.DisplayModeTagPlanContent})
 		app = model.(*App)
 
 		_, cmd := app.Update(messages.RenamePlanFileResultMsg{})
@@ -224,7 +224,7 @@ func TestReloadAfterMutationRespectsDisplayMode(t *testing.T) {
 		} {
 			t.Run(name, func(t *testing.T) {
 				app := newTestApp(t)
-				model, _ := app.Update(messages.DisplayModeChangedMsg{Mode: claudeviewer.DisplayModeLabelPlanContent})
+				model, _ := app.Update(messages.DisplayModeChangedMsg{Mode: busquets.DisplayModeLabelPlanContent})
 				app = model.(*App)
 
 				_, cmd := app.Update(mutation)
@@ -265,7 +265,7 @@ func TestNavigation(t *testing.T) {
 		_, topIsPlansScreen := app.stack[len(app.stack)-1].(*screens.PlansScreen)
 		require.False(t, topIsPlansScreen)
 
-		model, _ = app.Update(messages.PlansLoadedMsg{Plans: []claudeviewer.PlanSummary{}})
+		model, _ = app.Update(messages.PlansLoadedMsg{Plans: []busquets.PlanSummary{}})
 		app = model.(*App)
 		require.Equal(t, 2, len(app.stack))
 	})

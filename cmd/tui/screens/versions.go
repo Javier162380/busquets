@@ -5,12 +5,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/busquets/cmd/tui/components"
+	"github.com/Javier162380/busquets/cmd/tui/content"
+	"github.com/Javier162380/busquets/cmd/tui/messages"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
+	"github.com/Javier162380/busquets/cmd/tui/types"
+	"github.com/Javier162380/busquets/services/busquets"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -31,8 +31,8 @@ type VersionsScreen struct {
 	activeModal        types.ModalState
 	planName           string
 	searchQuery        string
-	versions           []claudeviewer.PlanVersionDetail
-	current            *claudeviewer.PlanVersionDetail
+	versions           []busquets.PlanVersionDetail
+	current            *busquets.PlanVersionDetail
 	pendingSearchError error // Set by the content-search onSubmit callback when a query has no matches; consumed by handleContentSearchModalUpdate.
 
 	// Dimensions.
@@ -75,7 +75,7 @@ func NewVersionsScreen(planName, markdownRenderedTheme string, width, height int
 }
 
 // NewVersionsScreenWithData creates a versions screen with pre-loaded data.
-func NewVersionsScreenWithData(planName, markdownRenderedTheme string, versions []claudeviewer.PlanVersionDetail, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
+func NewVersionsScreenWithData(planName, markdownRenderedTheme string, versions []busquets.PlanVersionDetail, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
 	s := NewVersionsScreen(planName, markdownRenderedTheme, width, height, isDarkModeEnabled, renderMarkdownByDefault)
 	s.versions = versions
 	s.updateListItems()
@@ -223,7 +223,7 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 		cmd := s.list.Update(msg)
 		// Update current version.
 		if item := s.list.SelectedItem(); item != nil {
-			if version, ok := item.Data().(claudeviewer.PlanVersionDetail); ok {
+			if version, ok := item.Data().(busquets.PlanVersionDetail); ok {
 				s.current = &version
 				viewerWidth := s.getViewerWidth()
 				s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))

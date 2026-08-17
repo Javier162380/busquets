@@ -3,7 +3,7 @@ package components
 import (
 	"strings"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"

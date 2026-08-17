@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +13,14 @@ import (
 const (
 	// ConfigFileName is the name of the configuration file.
 	ConfigFileName = "plan-viewer.toml"
+
+	// LegacyViewerDirName is the pre-rebrand default viewer directory name.
+	// Exported (not just internal to config) because services/busquets also
+	// needs this exact literal to reconcile stale DB file_path prefixes —
+	// see Service.MigrateLegacyFilePathPrefix. Kept as a standalone
+	// constant, not derived from any "previous defaults" concept, since it
+	// only ever needs to describe this one historical value.
+	LegacyViewerDirName = ".claude-viewer"
 )
 
 // Config represents the application configuration.
@@ -94,7 +103,7 @@ func DefaultConfig() *Config {
 		Database: DatabaseConfig{
 			Backend: BackendSQLite,
 			SQLite: SQLiteConfig{
-				Path: filepath.Join(homeDir, ".claude-viewer", "plans.db"),
+				Path: filepath.Join(homeDir, ".busquets", "plans.db"),
 			},
 			Postgres: PostgresConfig{
 				MaxOpenConns: 10,
@@ -102,17 +111,78 @@ func DefaultConfig() *Config {
 			},
 		},
 		Paths: PathsConfig{
-			ViewerDir: filepath.Join(homeDir, ".claude-viewer"),
+			ViewerDir: filepath.Join(homeDir, ".busquets"),
+			// ~/.claude/plans is Claude Code's own on-disk convention — one
+			// built-in default source among potentially several; add more
+			// via [[paths.plans_dirs]] in plan-viewer.toml for any other
+			// LLM/AI assistant that writes plan files to disk.
 			PlansDirs: []SyncDir{{
 				Path:  filepath.Join(homeDir, ".claude", "plans"),
 				Label: "plans",
 			}},
 		},
 		MCP: MCPConfig{
-			ServerName: "claude-plan-viewer",
+			ServerName: "busquets",
 			Version:    "1.0.0",
 		},
 	}
+}
+
+// MigrateLegacyViewerDir renames the legacy ~/.claude-viewer directory to the
+// new default ~/.busquets location. The move is a single os.Rename on the
+// directory, which is atomic on the same filesystem (AGENTS.md rule 12) —
+// the SQLite DB file, every mirrored plan file, version file, and log file
+// move together in one filesystem operation. There is no window where some
+// have moved and others haven't, and a failure leaves the legacy directory
+// completely untouched — no transaction machinery needed, the syscall's own
+// atomicity is the guarantee.
+//
+// No-op if cfg isn't using the default viewer dir (a custom
+// PLAN_VIEWER_DIR/viewer_dir override means this migration doesn't apply),
+// if the legacy dir doesn't exist, or if the new dir already exists (logs a
+// warning and leaves both in place rather than clobbering). Idempotent: safe
+// to call on every startup.
+func MigrateLegacyViewerDir(cfg *Config) error {
+	defaults := DefaultConfig()
+	if cfg.Paths.ViewerDir != defaults.Paths.ViewerDir {
+		return nil // custom viewer_dir — not our concern
+	}
+
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return nil // can't resolve $HOME; nothing safe to migrate
+	}
+	oldDir := filepath.Join(homeDir, LegacyViewerDirName)
+	newDir := cfg.Paths.ViewerDir // == defaults.Paths.ViewerDir
+
+	oldInfo, err := os.Stat(oldDir)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil // nothing to migrate
+	}
+	if err != nil {
+		return fmt.Errorf("failed to stat legacy viewer dir %s: %w", oldDir, err)
+	}
+	if !oldInfo.IsDir() {
+		return nil // unexpected non-directory at the legacy path; leave it alone
+	}
+
+	if _, err := os.Stat(newDir); err == nil {
+		fmt.Fprintf(os.Stderr,
+			"warning: both %s and %s exist; using %s — remove the stale %s manually once you've confirmed no data is missing\n",
+			oldDir, newDir, newDir, oldDir)
+		return nil
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("failed to stat %s: %w", newDir, err)
+	}
+
+	if err := os.Rename(oldDir, newDir); err != nil {
+		return fmt.Errorf(
+			"failed to migrate %s to %s: %w (you can migrate manually with: mv %q %q)",
+			oldDir, newDir, err, oldDir, newDir,
+		)
+	}
+	fmt.Fprintf(os.Stderr, "migrated %s to %s\n", oldDir, newDir)
+	return nil
 }
 
 // applyEnvOverrides applies environment variable overrides to the config.

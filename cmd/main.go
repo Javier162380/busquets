@@ -8,17 +8,17 @@ import (
 	"os"
 	"path/filepath"
 
-	mcphandler "github.com/Javier162380/claude-plan-viewer/cmd/mcp"
-	tuiapp "github.com/Javier162380/claude-plan-viewer/cmd/tui"
-	"github.com/Javier162380/claude-plan-viewer/internal/config"
-	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
-	"github.com/Javier162380/claude-plan-viewer/internal/connectors/ollama"
-	"github.com/Javier162380/claude-plan-viewer/internal/connectors/telegram"
-	"github.com/Javier162380/claude-plan-viewer/internal/storage"
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/postgres"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
+	mcphandler "github.com/Javier162380/busquets/cmd/mcp"
+	tuiapp "github.com/Javier162380/busquets/cmd/tui"
+	"github.com/Javier162380/busquets/internal/config"
+	"github.com/Javier162380/busquets/internal/connectors"
+	"github.com/Javier162380/busquets/internal/connectors/ollama"
+	"github.com/Javier162380/busquets/internal/connectors/telegram"
+	"github.com/Javier162380/busquets/internal/storage"
+	"github.com/Javier162380/busquets/services/busquets"
+	"github.com/Javier162380/busquets/services/busquets/dto"
+	"github.com/Javier162380/busquets/services/busquets/repository/postgres"
+	"github.com/Javier162380/busquets/services/busquets/repository/sqlite"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -27,20 +27,15 @@ import (
 // MCP uses stderr to avoid corrupting the stdio transport (stdout is the MCP protocol).
 // TUI uses a file to avoid corrupting alt-screen rendering.
 // All other commands use stderr.
-func newLogger(command string) *slog.Logger {
+func newLogger(command string, cfg *config.Config) *slog.Logger {
 	switch command {
 	case "tui":
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
+		if err := os.MkdirAll(cfg.Paths.ViewerDir, 0o750); err != nil {
 			return slog.New(slog.NewTextHandler(io.Discard, nil))
 		}
-		logDir := filepath.Join(homeDir, ".claude-viewer")
-		if err := os.MkdirAll(logDir, 0o750); err != nil {
-			return slog.New(slog.NewTextHandler(io.Discard, nil))
-		}
-		//nolint:gosec // G304: log path is constructed from home directory, not user input
+		//nolint:gosec // G304: log path is constructed from configured viewer dir, not user input
 		f, err := os.OpenFile(
-			filepath.Join(logDir, "app.log"),
+			filepath.Join(cfg.Paths.ViewerDir, "app.log"),
 			os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600,
 		)
 		if err != nil {
@@ -59,13 +54,22 @@ func main() {
 	}
 
 	command := os.Args[1]
-	logger := newLogger(command)
 
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		logger.Error("failed to load config", "error", err)
+		fmt.Fprintf(os.Stderr, "failed to load config: %v\n", err)
 		os.Exit(1)
 	}
+
+	// Must run before newLogger or initRepository touch the viewer
+	// directory — see config.MigrateLegacyViewerDir's doc comment for why
+	// this needs to happen first, and its own idempotency guarantees.
+	if err := config.MigrateLegacyViewerDir(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to migrate legacy viewer directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	logger := newLogger(command, cfg)
 
 	switch command {
 	case "sync":
@@ -160,7 +164,7 @@ func runSync(cfg *config.Config, logger *slog.Logger) error {
 	}
 	defer cleanup()
 
-	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
+	service, err := busquets.New(ctx, repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
@@ -186,7 +190,7 @@ func runRSync(cfg *config.Config, logger *slog.Logger) error {
 	}
 	defer cleanup()
 
-	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
+	service, err := busquets.New(ctx, repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
@@ -212,7 +216,7 @@ func runDump(cfg *config.Config, logger *slog.Logger) error {
 	}
 	defer cleanup()
 
-	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
+	service, err := busquets.New(ctx, repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
@@ -240,7 +244,7 @@ func runTUI(cfg *config.Config, logger *slog.Logger) error {
 	}
 	defer cleanup()
 
-	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
+	service, err := busquets.New(ctx, repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
@@ -255,7 +259,7 @@ func runTUI(cfg *config.Config, logger *slog.Logger) error {
 	connectorManager := connectors.NewManager(registry, repo)
 	service.SetConnectorManager(connectorManager)
 
-	return tuiapp.StartWithOptions(ctx, service, debug, logger)
+	return tuiapp.StartWithOptions(ctx, service, debug, logger, cfg.Paths.ViewerDir)
 }
 
 func runMigrate(cfg *config.Config, logger *slog.Logger) error {
@@ -302,7 +306,7 @@ func runMigrate(cfg *config.Config, logger *slog.Logger) error {
 	}
 	defer cleanup()
 
-	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
+	service, err := busquets.New(ctx, repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
@@ -327,7 +331,7 @@ func runMCP(cfg *config.Config, logger *slog.Logger) error {
 	}
 	defer cleanup()
 
-	service, err := claudeviewer.New(repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
+	service, err := busquets.New(ctx, repo, cfg.Paths.ViewerDir, cfg.Paths.PlansDirs, true)
 	if err != nil {
 		return fmt.Errorf("failed to initialize service: %w", err)
 	}
@@ -366,7 +370,7 @@ Commands:
   sync                Copy and index plans from source directory
   dump                Write all plans from the database back to the source plans directory
   tui                 Start terminal user interface
-  mcp                 Start MCP server for Claude integration
+  mcp                 Start MCP server for AI assistant integration
   migrate             Run database schema migrations and migrate plan storage
                       to the current on-disk layout. Run this after upgrading,
                       before starting the TUI/MCP server.
@@ -377,7 +381,7 @@ Configuration:
   - Connection settings
   - Directory paths
 
-  If no config file exists, defaults to SQLite at ~/.claude-viewer/plans.db
+  If no config file exists, defaults to SQLite at ~/.busquets/plans.db
 
 Environment:
   DEBUG=1                       Enable debug mode for TUI

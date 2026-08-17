@@ -12,7 +12,7 @@ make tui-debug
 DEBUG=1 ./bin/plan-viewer tui
 ```
 
-Debug messages are written to: `~/.claude-viewer/tui-debug.log`
+Debug messages are written to: `~/.busquets/tui-debug.log`
 
 ## How It Works
 
@@ -34,31 +34,31 @@ This captures:
 
 ### View in real-time
 ```bash
-tail -f ~/.claude-viewer/tui-debug.log
+tail -f ~/.busquets/tui-debug.log
 ```
 
 ### Search for specific messages
 ```bash
 # Find all key presses
-grep "tea.KeyMsg" ~/.claude-viewer/tui-debug.log
+grep "tea.KeyMsg" ~/.busquets/tui-debug.log
 
 # Find errors
-grep "ErrorMsg" ~/.claude-viewer/tui-debug.log
+grep "ErrorMsg" ~/.busquets/tui-debug.log
 
 # Find plan loads
-grep "PlansLoadedMsg" ~/.claude-viewer/tui-debug.log
+grep "PlansLoadedMsg" ~/.busquets/tui-debug.log
 ```
 
 ### Compare sessions
 ```bash
 # List all session starts
-grep "SESSION START" ~/.claude-viewer/tui-debug.log
+grep "SESSION START" ~/.busquets/tui-debug.log
 
 # Count sessions
-grep -c "SESSION START" ~/.claude-viewer/tui-debug.log
+grep -c "SESSION START" ~/.busquets/tui-debug.log
 
 # View messages between two sessions
-sed -n '/SESSION START: 2026-04-01 10:30/,/SESSION START/p' ~/.claude-viewer/tui-debug.log
+sed -n '/SESSION START: 2026-04-01 10:30/,/SESSION START/p' ~/.busquets/tui-debug.log
 ```
 
 ### Common Message Types
@@ -82,7 +82,7 @@ sed -n '/SESSION START: 2026-04-01 10:30/,/SESSION START/p' ~/.claude-viewer/tui
  Height: (int) 48
 }
 (screens.PlansLoadedMsg) {
- Plans: ([]claudeviewer.PlanSummary) (len=42) {
+ Plans: ([]busquets.PlanSummary) (len=42) {
   ...
  }
 }
@@ -127,13 +127,13 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 ## Troubleshooting
 
 ### Log file not created
-- Ensure `~/.claude-viewer/` directory exists (created automatically on first sync/serve)
+- Ensure `~/.busquets/` directory exists (created automatically on first sync/serve)
 - Check write permissions
 
 ### Log file too large
 - The log appends across sessions and grows quickly
-- Truncate when needed: `> ~/.claude-viewer/tui-debug.log`
-- Or delete and start fresh: `rm ~/.claude-viewer/tui-debug.log`
+- Truncate when needed: `> ~/.busquets/tui-debug.log`
+- Or delete and start fresh: `rm ~/.busquets/tui-debug.log`
 
 ### Missing messages
 - Some messages may be filtered before reaching `Update()`

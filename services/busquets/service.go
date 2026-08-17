@@ -1,22 +1,23 @@
-// Package claudeviewer implements the Claude Plan Viewer service logic.
-package claudeviewer
+// Package busquets implements the Busquets plan-viewer service logic.
+package busquets
 
 import (
 	"context"
 	"fmt"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/internal/cache"
-	"github.com/Javier162380/claude-plan-viewer/internal/clipboard"
-	"github.com/Javier162380/claude-plan-viewer/internal/config"
-	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
-	"github.com/Javier162380/claude-plan-viewer/internal/nowprovider"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+	"github.com/Javier162380/busquets/internal/cache"
+	"github.com/Javier162380/busquets/internal/clipboard"
+	"github.com/Javier162380/busquets/internal/config"
+	"github.com/Javier162380/busquets/internal/connectors"
+	"github.com/Javier162380/busquets/internal/nowprovider"
+	"github.com/Javier162380/busquets/services/busquets/dto"
 )
 
 const (
@@ -24,7 +25,7 @@ const (
 	summaryCacheGCPeriod = 10 * time.Minute
 )
 
-// Service represents the Claude Plan Viewer service.
+// Service represents the Busquets plan-viewer service.
 type Service struct {
 	db               dto.Repository
 	viewerDir        string
@@ -55,9 +56,9 @@ func (s *Service) DB() dto.Repository {
 	return s.db
 }
 
-// New creates a new Claude Plan Viewer service instance.
+// New creates a new Busquets plan-viewer service instance.
 // The db parameter must implement dto.Repository (sqlite.Repository or postgres.Repository).
-func New(db dto.Repository, viewerDir string, syncDirs []config.SyncDir, indexFullContent bool) (*Service, error) {
+func New(ctx context.Context, db dto.Repository, viewerDir string, syncDirs []config.SyncDir, indexFullContent bool) (*Service, error) {
 	svc := &Service{
 		db:               db,
 		viewerDir:        viewerDir,
@@ -71,6 +72,18 @@ func New(db dto.Repository, viewerDir string, syncDirs []config.SyncDir, indexFu
 
 	// Initialize watch manager
 	svc.watchManager = NewWatchManager(svc)
+
+	// Reconcile any file_path rows still pointing at the pre-rebrand
+	// ~/.claude-viewer location after config.MigrateLegacyViewerDir has
+	// already renamed the directory on disk. Runs on every construction —
+	// see MigrateLegacyFilePathPrefix's own settings-flag gate for why this
+	// is cheap once done.
+	if homeDir, err := os.UserHomeDir(); err == nil {
+		oldDir := filepath.Join(homeDir, config.LegacyViewerDirName)
+		if _, err := svc.MigrateLegacyFilePathPrefix(ctx, oldDir, viewerDir); err != nil {
+			return nil, fmt.Errorf("failed to migrate legacy file paths: %w", err)
+		}
+	}
 
 	return svc, nil
 }

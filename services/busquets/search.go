@@ -1,9 +1,9 @@
-package claudeviewer
+package busquets
 
 import (
 	"context"
 
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+	"github.com/Javier162380/busquets/services/busquets/dto"
 )
 
 func (s *Service) toSummaries(ctx context.Context, plans []dto.PlanSummary) []PlanSummary {

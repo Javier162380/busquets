@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
-	"github.com/Javier162380/claude-plan-viewer/internal/config"
-	"github.com/Javier162380/claude-plan-viewer/internal/storage"
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
+	"github.com/Javier162380/busquets/cmd/tui/messages"
+	"github.com/Javier162380/busquets/internal/config"
+	"github.com/Javier162380/busquets/internal/storage"
+	"github.com/Javier162380/busquets/services/busquets"
+	"github.com/Javier162380/busquets/services/busquets/repository/sqlite"
 
 	"github.com/stretchr/testify/require"
 )
@@ -24,9 +24,9 @@ func newTestRepository(ctx context.Context, dbPath string) (*sqlite.Repository, 
 	return sqlite.NewRepository(db.DB()), nil
 }
 
-func setupTestService(t *testing.T) (*claudeviewer.Service, string, func()) {
+func setupTestService(t *testing.T) (*busquets.Service, string, func()) {
 	t.Helper()
-	tempDir, err := os.MkdirTemp(os.TempDir(), "claude-viewer-commands-test-*")
+	tempDir, err := os.MkdirTemp(os.TempDir(), "busquets-commands-test-*")
 	require.NoError(t, err)
 	viewerDir := filepath.Join(tempDir, "viewer")
 	sourcePlansDir := filepath.Join(tempDir, "source")
@@ -36,7 +36,7 @@ func setupTestService(t *testing.T) (*claudeviewer.Service, string, func()) {
 	ctx := context.Background()
 	db, err := newTestRepository(ctx, dbPath)
 	require.NoError(t, err)
-	svc, err := claudeviewer.New(db, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
+	svc, err := busquets.New(ctx, db, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
 	require.NoError(t, err)
 	return svc, sourcePlansDir, func() { os.RemoveAll(tempDir) }
 }
@@ -214,7 +214,7 @@ func TestSetSettingCmd(t *testing.T) {
 		svc, _, cleanup := setupTestService(t)
 		defer cleanup()
 		boolTrue := true
-		msg := SetSettingCmd(ctx, svc, claudeviewer.SettingDarkModeEnabled, claudeviewer.SettingValues{BooleanValue: &boolTrue})()
+		msg := SetSettingCmd(ctx, svc, busquets.SettingDarkModeEnabled, busquets.SettingValues{BooleanValue: &boolTrue})()
 		result, ok := msg.(messages.SettingUpdateResultMsg)
 		require.True(t, ok)
 		require.True(t, result.Success)

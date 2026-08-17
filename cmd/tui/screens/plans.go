@@ -7,12 +7,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/busquets/cmd/tui/components"
+	"github.com/Javier162380/busquets/cmd/tui/content"
+	"github.com/Javier162380/busquets/cmd/tui/messages"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
+	"github.com/Javier162380/busquets/cmd/tui/types"
+	"github.com/Javier162380/busquets/services/busquets"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -42,13 +42,13 @@ type PlansScreen struct {
 	// plan_content, ThreePanel whenever a side panel is mounted.
 	baseLayout         types.Layout
 	focus              types.Focus
-	plans              []claudeviewer.PlanSummary            // filtered view shown in list
-	allPlans           []claudeviewer.PlanSummary            // full unfiltered source of truth
-	allTags            []claudeviewer.Tag                    // all tags in the system (including unassigned)
-	tagPlanCounts      map[string]int                        // authoritative plan count per tag from DB
-	tagPlanMap         map[string][]claudeviewer.PlanSummary // map tags to a planSummary
-	untaggedCount      int                                   // number of plans with no tags assigned
-	current            *claudeviewer.PlanDetail
+	plans              []busquets.PlanSummary            // filtered view shown in list
+	allPlans           []busquets.PlanSummary            // full unfiltered source of truth
+	allTags            []busquets.Tag                    // all tags in the system (including unassigned)
+	tagPlanCounts      map[string]int                    // authoritative plan count per tag from DB
+	tagPlanMap         map[string][]busquets.PlanSummary // map tags to a planSummary
+	untaggedCount      int                               // number of plans with no tags assigned
+	current            *busquets.PlanDetail
 	searchQuery        string   // Current active search query (empty = show all).
 	tagFilters         []string // Active tag filters.
 	activeModal        types.ModalState
@@ -105,13 +105,13 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 	}
 
 	switch displayMode {
-	case claudeviewer.DisplayModeTagPlanContent:
+	case busquets.DisplayModeTagPlanContent:
 		p.tagPanel = components.NewTagPanel(0, contentHeight-4)
 		p.tagPanel.Focus()
 		p.focus = types.FocusTagPanel
 		p.layout = types.LayoutThreePanel
 		p.baseLayout = types.LayoutThreePanel
-	case claudeviewer.DisplayModeLabelPlanContent:
+	case busquets.DisplayModeLabelPlanContent:
 		p.labelPanel = components.NewLabelPanel(0, contentHeight-4)
 		p.labelPanel.Focus()
 		p.focus = types.FocusLabelPanel
@@ -443,7 +443,7 @@ func (s *PlansScreen) applyTagFilter(tag string) tea.Cmd {
 		}
 		s.plans = s.tagPlanMap[mapKey]
 		if s.plans == nil {
-			s.plans = []claudeviewer.PlanSummary{}
+			s.plans = []busquets.PlanSummary{}
 		}
 		s.updateListItems()
 		s.list.Select(0)
@@ -469,7 +469,7 @@ func (s *PlansScreen) applyLabelFilter(label string) tea.Cmd {
 	if label == "" {
 		s.plans = s.allPlans
 	} else {
-		filtered := make([]claudeviewer.PlanSummary, 0, len(s.allPlans))
+		filtered := make([]busquets.PlanSummary, 0, len(s.allPlans))
 		for _, p := range s.allPlans {
 			if p.SyncLabel == label {
 				filtered = append(filtered, p)
@@ -623,7 +623,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 	case "down", "up":
 		cmd := s.list.Update(msg)
 		if item := s.list.SelectedItem(); item != nil {
-			if plan, ok := item.Data().(claudeviewer.PlanSummary); ok {
+			if plan, ok := item.Data().(busquets.PlanSummary); ok {
 				return s, tea.Batch(cmd, s.loadPlanDetail(plan.FileName, plan.SyncSource))
 			}
 		}
@@ -642,7 +642,7 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 			s.list.Select(nextItemIndex)
 			cmd := s.list.Update(msg)
 			if item := s.list.SelectedItem(); item != nil {
-				if plan, ok := item.Data().(claudeviewer.PlanSummary); ok {
+				if plan, ok := item.Data().(busquets.PlanSummary); ok {
 					return s, tea.Batch(cmd, s.loadPlanDetail(plan.FileName, plan.SyncSource))
 				}
 				return s, cmd
@@ -1541,7 +1541,7 @@ func (s *PlansScreen) rebuildLabelPanelEntries() {
 // side panel (or neither) and setting the layout it implies.
 func (s *PlansScreen) SetDisplayMode(mode string) {
 	switch mode {
-	case claudeviewer.DisplayModeTagPlanContent:
+	case busquets.DisplayModeTagPlanContent:
 		s.labelPanel = nil
 		if s.tagPanel == nil {
 			s.tagPanel = components.NewTagPanel(0, 0)
@@ -1551,7 +1551,7 @@ func (s *PlansScreen) SetDisplayMode(mode string) {
 		s.focus = types.FocusTagPanel
 		s.setBaseLayout(types.LayoutThreePanel)
 
-	case claudeviewer.DisplayModeLabelPlanContent:
+	case busquets.DisplayModeLabelPlanContent:
 		s.tagPanel = nil
 		if s.labelPanel == nil {
 			s.labelPanel = components.NewLabelPanel(0, 0)

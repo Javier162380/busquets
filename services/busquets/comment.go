@@ -1,10 +1,10 @@
-package claudeviewer
+package busquets
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+	"github.com/Javier162380/busquets/services/busquets/dto"
 )
 
 // AddComment attaches a new comment to a plan.

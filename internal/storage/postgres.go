@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/internal/config"
+	"github.com/Javier162380/busquets/internal/config"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	_ "github.com/jackc/pgx/v5/stdlib" //nolint:revive,stylecheck // pgx stdlib driver for migrations

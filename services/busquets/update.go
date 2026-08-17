@@ -1,4 +1,4 @@
-package claudeviewer
+package busquets
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+	"github.com/Javier162380/busquets/services/busquets/dto"
 )
 
 // UpdatePlanRequest contains the data needed to update a plan.

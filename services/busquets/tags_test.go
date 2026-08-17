@@ -1,4 +1,4 @@
-package claudeviewer
+package busquets
 
 import (
 	"strings"

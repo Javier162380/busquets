@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
+	"github.com/Javier162380/busquets/internal/connectors"
 )
 
 const (

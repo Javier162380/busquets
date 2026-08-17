@@ -1,4 +1,4 @@
-// Package dto defines the data transfer objects for the Claude Plan Viewer.
+// Package dto defines the data transfer objects for Busquets.
 // These types are used to transfer data between the service layer and repository.
 package dto
 

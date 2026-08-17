@@ -1,11 +1,11 @@
-# Claude Plan Viewer Configuration
+# Busquets Configuration
 # Copy this file to plan-viewer.toml and customize as needed.
 #
 # All settings have sensible defaults. You only need to configure
 # what you want to change.
 #
 # IMPORTANT: Use full paths, not ~ (tilde is not expanded).
-# Example: /Users/yourname/.claude-viewer instead of ~/.claude-viewer
+# Example: /Users/yourname/.busquets instead of ~/.busquets
 #
 # Environment variables can override any setting:
 #   PLAN_VIEWER_DB_BACKEND    - Database backend (sqlite or postgres)
@@ -29,8 +29,8 @@ backend = "sqlite"
 [database.sqlite]
 
 # Path to the SQLite database file
-# Default: $HOME/.claude-viewer/plans.db
-# path = "/Users/yourname/.claude-viewer/plans.db"
+# Default: $HOME/.busquets/plans.db
+# path = "/Users/yourname/.busquets/plans.db"
 
 # -----------------------------------------------------------------------------
 # PostgreSQL Configuration (used when backend = "postgres")
@@ -39,7 +39,7 @@ backend = "sqlite"
 
 # PostgreSQL connection string (required when backend = "postgres")
 # Format: postgres://user:password@host:port/database?sslmode=disable
-connection_string = "postgres://user:password@localhost:5432/claude_plans?sslmode=disable"
+connection_string = "postgres://user:password@localhost:5432/busquets_plans?sslmode=disable"
 
 # Maximum number of open connections to the database
 # Default: 10
@@ -55,10 +55,10 @@ max_idle_conns = 5
 [paths]
 
 # Directory where the viewer stores its data (copied plans, versions, etc.)
-# Default: $HOME/.claude-viewer
-# viewer_dir = "/Users/yourname/.claude-viewer"
+# Default: $HOME/.busquets
+# viewer_dir = "/Users/yourname/.busquets"
 
-# Source directories containing the Claude plan files to sync.
+# Source directories containing the LLM/AI-assistant plan files to sync.
 # Declare one [[paths.plans_dirs]] block per source. Each needs a `path`;
 # `label` is optional and defaults to the directory's base name.
 #

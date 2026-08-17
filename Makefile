@@ -1,4 +1,4 @@
-.PHONY: help build run sync tui tui-debug test generate clean migrate
+.PHONY: help build run sync tui tui-debug test generate clean migrate migrate-dir
 
 help: ## Show this help
 	@echo 'Usage: make [target]'
@@ -24,10 +24,13 @@ rsync: build
 tui: build ## Build and run TUI
 	./bin/plan-viewer tui
 
-tui-debug: build ## Build and run TUI in debug mode (logs to ~/.claude-viewer/tui-debug.log)
+tui-debug: build ## Build and run TUI in debug mode (logs to ~/.busquets/tui-debug.log)
 	DEBUG=1 ./bin/plan-viewer tui
 
 migrate: build ## Run DB schema migrations + migrate plan storage layout (run before tui after upgrading)
+	./bin/plan-viewer migrate
+
+migrate-dir: build ## Migrate ~/.claude-viewer → ~/.busquets (dir rename + DB file_path fix-up); run this once before starting the app after upgrading to Busquets
 	./bin/plan-viewer migrate
 
 test: ## Run tests
@@ -36,7 +39,7 @@ test: ## Run tests
 
 test-integration: ## Run integration tests (SQLite + Postgres, requires Docker)
 	@echo "Running integration tests..."
-	TESTCONTAINERS_RYUK_DISABLED=true INTEGRATION=1 go test -count=1 -v ./services/claude-viewer/...
+	TESTCONTAINERS_RYUK_DISABLED=true INTEGRATION=1 go test -count=1 -v ./services/busquets/...
 
 lint: ## Lint project
 	 @echo "Linting project..."
@@ -44,7 +47,7 @@ lint: ## Lint project
 
 clean: ## Clean build artifacts
 	rm -rf bin/
-	rm -rf services/claude-viewer/repository/
+	rm -rf services/busquets/repository/
 
 deps: ## Download dependencies
 	@echo "Downloading dependencies..."

@@ -3,7 +3,7 @@ package components
 import (
 	"testing"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
+	"github.com/Javier162380/busquets/cmd/tui/messages"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"

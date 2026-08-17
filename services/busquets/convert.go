@@ -1,6 +1,6 @@
-package claudeviewer
+package busquets
 
-import "github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+import "github.com/Javier162380/busquets/services/busquets/dto"
 
 func toTag(t dto.Tag) Tag {
 	return Tag{

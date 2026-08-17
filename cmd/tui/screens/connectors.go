@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
+	"github.com/Javier162380/busquets/cmd/tui/messages"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"

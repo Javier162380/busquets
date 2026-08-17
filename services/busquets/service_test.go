@@ -1,4 +1,4 @@
-package claudeviewer
+package busquets
 
 import (
 	"context"
@@ -13,15 +13,15 @@ import (
 	"testing"
 	"time"
 
-	planviewer "github.com/Javier162380/claude-plan-viewer"
-	clipboard_test "github.com/Javier162380/claude-plan-viewer/internal/clipboard/test"
-	"github.com/Javier162380/claude-plan-viewer/internal/config"
-	"github.com/Javier162380/claude-plan-viewer/internal/connectors"
-	connectors_test "github.com/Javier162380/claude-plan-viewer/internal/connectors/test"
-	"github.com/Javier162380/claude-plan-viewer/internal/storage"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
-	postgresrepo "github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/postgres"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
+	planviewer "github.com/Javier162380/busquets"
+	clipboard_test "github.com/Javier162380/busquets/internal/clipboard/test"
+	"github.com/Javier162380/busquets/internal/config"
+	"github.com/Javier162380/busquets/internal/connectors"
+	connectors_test "github.com/Javier162380/busquets/internal/connectors/test"
+	"github.com/Javier162380/busquets/internal/storage"
+	"github.com/Javier162380/busquets/services/busquets/dto"
+	postgresrepo "github.com/Javier162380/busquets/services/busquets/repository/postgres"
+	"github.com/Javier162380/busquets/services/busquets/repository/sqlite"
 
 	"github.com/golang/mock/gomock"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -100,7 +100,7 @@ func newServiceFromRepo(t *testing.T, tempDir string, repo dto.Repository, syncD
 	viewerDir := filepath.Join(tempDir, "viewer")
 	require.NoError(t, os.MkdirAll(viewerDir, 0o755))
 
-	svc, err := New(repo, viewerDir, syncDirs, true)
+	svc, err := New(context.Background(), repo, viewerDir, syncDirs, true)
 	require.NoError(t, err)
 
 	svc.nowProvider = newMockNowProvider(time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC))
@@ -147,7 +147,7 @@ func newPostgresRepo(t *testing.T) (dto.Repository, func()) {
 func setupTestServiceBackendSQLite(t *testing.T) (*Service, string, string, func()) {
 	t.Helper()
 
-	tempDir, err := os.MkdirTemp(os.TempDir(), "claude-viewer-test-*")
+	tempDir, err := os.MkdirTemp(os.TempDir(), "busquets-test-*")
 	require.NoError(t, err)
 
 	sourcePlansDir := filepath.Join(tempDir, "source")
@@ -173,7 +173,7 @@ func setupTestServiceBackendPostgres(t *testing.T) (*Service, string, string, fu
 
 	repo, dbCleanup := newPostgresRepo(t)
 
-	tempDir, err := os.MkdirTemp(os.TempDir(), "claude-viewer-pg-test-*")
+	tempDir, err := os.MkdirTemp(os.TempDir(), "busquets-pg-test-*")
 	require.NoError(t, err)
 
 	sourcePlansDir := filepath.Join(tempDir, "source")
@@ -2739,7 +2739,7 @@ type multiSourceSetup struct {
 func newMultiSourceTest(t *testing.T, b backendSetup) (*Service, multiSourceSetup, func()) {
 	t.Helper()
 
-	tempDir, err := os.MkdirTemp(os.TempDir(), "claude-viewer-multi-*")
+	tempDir, err := os.MkdirTemp(os.TempDir(), "busquets-multi-*")
 	require.NoError(t, err)
 
 	sourceDir1 := filepath.Join(tempDir, "source-a")

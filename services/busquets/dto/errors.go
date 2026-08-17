@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	planviewer "github.com/Javier162380/claude-plan-viewer"
+	planviewer "github.com/Javier162380/busquets"
 )
 
 // Category represents the type of error for handling at different layers.

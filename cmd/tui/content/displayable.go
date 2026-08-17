@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/busquets/services/busquets"
 
 	"charm.land/glamour/v2"
 )
@@ -36,12 +36,12 @@ type Metadata struct {
 
 // PlanContent wraps PlanDetail to implement Displayable.
 type PlanContent struct {
-	*claudeviewer.PlanDetail
+	*busquets.PlanDetail
 	width int
 }
 
 // NewPlanContent creates a new PlanContent from a PlanDetail.
-func NewPlanContent(plan *claudeviewer.PlanDetail, width int) *PlanContent {
+func NewPlanContent(plan *busquets.PlanDetail, width int) *PlanContent {
 	return &PlanContent{PlanDetail: plan, width: width}
 }
 
@@ -82,12 +82,12 @@ func (p *PlanContent) GetIdentifier() string {
 
 // VersionContent wraps PlanVersionDetail to implement Displayable.
 type VersionContent struct {
-	*claudeviewer.PlanVersionDetail
+	*busquets.PlanVersionDetail
 	width int
 }
 
 // NewVersionContent creates a new VersionContent from a PlanVersionDetail.
-func NewVersionContent(version *claudeviewer.PlanVersionDetail, width int) *VersionContent {
+func NewVersionContent(version *busquets.PlanVersionDetail, width int) *VersionContent {
 	return &VersionContent{PlanVersionDetail: version, width: width}
 }
 
@@ -143,7 +143,7 @@ func renderMarkdown(content, markdownTheme string, width int) string {
 
 	r, err := newTermRenderer(markdownTheme, wordWidth)
 	if err != nil {
-		r, err = newTermRenderer(claudeviewer.DefaultMarkdownTheme, wordWidth)
+		r, err = newTermRenderer(busquets.DefaultMarkdownTheme, wordWidth)
 		if err != nil {
 			return content
 		}

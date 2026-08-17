@@ -9,22 +9,23 @@ import (
 	"path/filepath"
 	"time"
 
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/busquets/services/busquets"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // StartWithOptions launches the TUI application with optional debug mode.
-func StartWithOptions(ctx context.Context, service claudeviewer.UnifiedService, debug bool, logger *slog.Logger) error {
+// viewerDir is only used when debug is true, to place tui-debug.log
+// alongside the app's other on-disk state (cfg.Paths.ViewerDir) rather than
+// reconstructing a path independently — doing so would recreate a stray
+// ~/.claude-viewer directory post-rebrand and confuse
+// config.MigrateLegacyViewerDir on the next run.
+func StartWithOptions(ctx context.Context, service busquets.UnifiedService, debug bool, logger *slog.Logger, viewerDir string) error {
 	app := New(ctx, service)
 
 	if debug {
-		homeDir, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("failed to get home directory: %w", err)
-		}
-		logPath := filepath.Join(homeDir, ".claude-viewer", "tui-debug.log")
-		//nolint:gosec // G304: Debug log path is constructed from home directory
+		logPath := filepath.Join(viewerDir, "tui-debug.log")
+		//nolint:gosec // G304: Debug log path is constructed from the configured viewer directory
 		f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 		if err != nil {
 			return fmt.Errorf("failed to open debug log: %w", err)
@@ -43,10 +44,10 @@ func StartWithOptions(ctx context.Context, service claudeviewer.UnifiedService, 
 	}
 
 	// Check if watch mode should be auto-started
-	setting, exists, _ := service.GetSetting(ctx, claudeviewer.SettingWatchModeEnabled)
+	setting, exists, _ := service.GetSetting(ctx, busquets.SettingWatchModeEnabled)
 	if exists && setting.IsBoolean() && setting.GetBooleanValue() {
 		// Get interval
-		intervalSetting, exists, _ := service.GetSetting(ctx, claudeviewer.SettingWatchIntervalSeconds)
+		intervalSetting, exists, _ := service.GetSetting(ctx, busquets.SettingWatchIntervalSeconds)
 		intervalSeconds := 5.0 // default
 		if exists && intervalSetting.IsNumber() {
 			intervalSeconds = intervalSetting.GetNumberValue()

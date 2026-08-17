@@ -3,7 +3,7 @@ package components
 import (
 	"testing"
 
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/busquets/services/busquets"
 
 	"github.com/stretchr/testify/require"
 )
@@ -44,7 +44,7 @@ func TestTagModal(t *testing.T) {
 
 	t.Run("ToggleTag deselects an already selected tag", func(t *testing.T) {
 		m := NewTagModal()
-		planTags := []claudeviewer.Tag{{Name: "go"}}
+		planTags := []busquets.Tag{{Name: "go"}}
 		m.Open("plan.md", "/path/to/plans", planTags, planTags)
 		m.ToggleTag("go")
 		result := m.Close()

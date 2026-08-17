@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/internal/cache"
+	"github.com/Javier162380/busquets/internal/cache"
 
 	"github.com/stretchr/testify/require"
 )

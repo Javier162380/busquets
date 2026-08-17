@@ -5,8 +5,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
+	"github.com/Javier162380/busquets/cmd/tui/content"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"

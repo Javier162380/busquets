@@ -1,4 +1,4 @@
-package claudeviewer
+package busquets
 
 import (
 	"context"
@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/internal/retrier"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+	"github.com/Javier162380/busquets/internal/retrier"
+	"github.com/Javier162380/busquets/services/busquets/dto"
 )
 
 var validCharsRegex = regexp.MustCompile(`[^a-z0-9_-]+`)

@@ -1,4 +1,4 @@
-package claudeviewer
+package busquets
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/internal/config"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+	"github.com/Javier162380/busquets/internal/config"
+	"github.com/Javier162380/busquets/services/busquets/dto"
 
 	"golang.org/x/sync/errgroup"
 )

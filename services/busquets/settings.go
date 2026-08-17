@@ -1,13 +1,13 @@
-package claudeviewer
+package busquets
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	planviewer "github.com/Javier162380/claude-plan-viewer"
-	"github.com/Javier162380/claude-plan-viewer/internal/clipboard"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/dto"
+	planviewer "github.com/Javier162380/busquets"
+	"github.com/Javier162380/busquets/internal/clipboard"
+	"github.com/Javier162380/busquets/services/busquets/dto"
 
 	"charm.land/glamour/v2/styles"
 )
