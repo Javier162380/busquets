@@ -160,7 +160,7 @@ internal/ (internal modules used on the service layer, this modules do not hold 
 4. Settings stored in database via `Manager`
 
 **Switching Database**:
-- Config: `backend = "postgres"` or env `PLAN_VIEWER_DB_BACKEND=postgres`
+- Config: `backend = "postgres"` or env `BUSQUETS_DB_BACKEND=postgres`
 - Run `make migrate`
 
 ## Configuration
@@ -187,7 +187,7 @@ server_name = "busquets"
 version = "1.0.0"
 ```
 
-**Environment Overrides**: `PLAN_VIEWER_DB_BACKEND`, `PLAN_VIEWER_POSTGRES_URL`, `DEBUG=1` (TUI)
+**Environment Overrides**: `BUSQUETS_DB_BACKEND`, `BUSQUETS_POSTGRES_URL`, `DEBUG=1` (TUI)
 
 ## Database Schema
 

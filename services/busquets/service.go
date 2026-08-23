@@ -82,7 +82,7 @@ func New(ctx context.Context, db dto.Repository, viewerDir string, syncDirs []co
 	// Gated on viewerDir matching the default, exactly like
 	// config.MigrateLegacyViewerDir gates its own directory rename on
 	// cfg.Paths.ViewerDir matching the default. Without this check, a caller
-	// running with a custom viewer_dir/PLAN_VIEWER_DIR — which the directory
+	// running with a custom viewer_dir/BUSQUETS_DIR — which the directory
 	// migration correctly declines to touch — would still have this rewrite
 	// any lingering .claude-viewer-prefixed rows into that custom dir and
 	// regenerate files there, silently doing exactly what the directory-level

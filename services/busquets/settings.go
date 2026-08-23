@@ -224,7 +224,7 @@ func (s *Service) resolveSearchScope(ctx context.Context) planviewer.SearchField
 }
 
 // getClipboardMode returns the stored clipboard mode setting, or the default.
-// The PLAN_VIEWER_CLIPBOARD env var can still override this at write time
+// The BUSQUETS_CLIPBOARD env var can still override this at write time
 // (see internal/clipboard).
 func (s *Service) getClipboardMode(ctx context.Context) string {
 	if setting, exists, _ := s.GetSetting(ctx, SettingClipboardMode); exists && setting.IsString() {

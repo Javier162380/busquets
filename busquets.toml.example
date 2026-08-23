@@ -8,10 +8,10 @@
 # Example: /Users/yourname/.busquets instead of ~/.busquets
 #
 # Environment variables can override any setting:
-#   PLAN_VIEWER_DB_BACKEND    - Database backend (sqlite or postgres)
-#   PLAN_VIEWER_SQLITE_PATH   - SQLite database file path
-#   PLAN_VIEWER_POSTGRES_URL  - PostgreSQL connection string
-#   PLAN_VIEWER_DIR           - Directory for viewer data
+#   BUSQUETS_DB_BACKEND    - Database backend (sqlite or postgres)
+#   BUSQUETS_SQLITE_PATH   - SQLite database file path
+#   BUSQUETS_POSTGRES_URL  - PostgreSQL connection string
+#   BUSQUETS_DIR           - Directory for viewer data
 #
 # Source plan directories are configured only via [[paths.plans_dirs]] below.
 

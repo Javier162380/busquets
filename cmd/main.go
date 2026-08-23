@@ -384,9 +384,9 @@ Configuration:
   If no config file exists, defaults to SQLite at ~/.busquets/plans.db
 
 Environment:
-  DEBUG=1                       Enable debug mode for TUI
-  PLAN_VIEWER_DB_BACKEND        Override database backend
-  PLAN_VIEWER_POSTGRES_URL      Override Postgres connection string
+  DEBUG=1                    Enable debug mode for TUI
+  BUSQUETS_DB_BACKEND        Override database backend
+  BUSQUETS_POSTGRES_URL      Override Postgres connection string
 
 Examples:
   busquets sync
