@@ -25,9 +25,9 @@ const (
 
 const (
 	// clipboardModeEnv overrides the caller-supplied mode for the current session.
-	clipboardModeEnv = "PLAN_VIEWER_CLIPBOARD"
+	clipboardModeEnv = "BUSQUETS_CLIPBOARD"
 	// osc52MaxEnv caps the base64-encoded OSC52 payload size.
-	osc52MaxEnv = "PLAN_VIEWER_OSC52_MAX"
+	osc52MaxEnv = "BUSQUETS_OSC52_MAX"
 	termEnv     = "TERM"
 	tmuxEnv     = "TMUX"
 
@@ -53,7 +53,7 @@ type Clipboard interface {
 type SystemClipboard struct{}
 
 // Write copies text to the clipboard using mode ("auto"/"native"/"osc52"). An
-// empty text is a no-op. The PLAN_VIEWER_CLIPBOARD env var, when set to a valid
+// empty text is a no-op. The BUSQUETS_CLIPBOARD env var, when set to a valid
 // mode, overrides the mode argument.
 func (SystemClipboard) Write(text, mode string) error {
 	if text == "" {
@@ -73,7 +73,7 @@ func (SystemClipboard) Write(text, mode string) error {
 	}
 }
 
-// effectiveMode resolves the mode actually used: a valid PLAN_VIEWER_CLIPBOARD
+// effectiveMode resolves the mode actually used: a valid BUSQUETS_CLIPBOARD
 // env value wins, otherwise the caller-supplied setting, otherwise auto.
 func effectiveMode(setting string) string {
 	if m := normalizeMode(os.Getenv(clipboardModeEnv)); m != "" {

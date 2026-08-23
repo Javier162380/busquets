@@ -59,7 +59,7 @@ func (s *Service) planDetailFromRow(plan dto.Plan, tags []dto.Tag, content strin
 }
 
 // CopyToClipboard writes text to the system clipboard. The clipboard mode comes
-// from the clipboard_mode setting (overridable via the PLAN_VIEWER_CLIPBOARD env
+// from the clipboard_mode setting (overridable via the BUSQUETS_CLIPBOARD env
 // var). Used to copy plan and version content that the caller already holds.
 func (s *Service) CopyToClipboard(ctx context.Context, text string) error {
 	if err := s.clipboard.Write(text, s.getClipboardMode(ctx)); err != nil {

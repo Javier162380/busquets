@@ -149,7 +149,7 @@ func DefaultConfig() *Config {
 // atomicity is the guarantee.
 //
 // No-op if cfg isn't using the default viewer dir (a custom
-// PLAN_VIEWER_DIR/viewer_dir override means this migration doesn't apply),
+// BUSQUETS_DIR/viewer_dir override means this migration doesn't apply),
 // if the legacy dir doesn't exist, or if the new dir already exists (logs a
 // warning and leaves both in place rather than clobbering). Idempotent: safe
 // to call on every startup.
@@ -213,30 +213,30 @@ func MigrateLegacyViewerDir(cfg *Config) error {
 
 // applyEnvOverrides applies environment variable overrides to the config.
 func (c *Config) applyEnvOverrides() {
-	if v := os.Getenv("PLAN_VIEWER_DB_BACKEND"); v != "" {
+	if v := os.Getenv("BUSQUETS_DB_BACKEND"); v != "" {
 		c.Database.Backend = DatabaseBackend(v)
 	}
-	if v := os.Getenv("PLAN_VIEWER_SQLITE_PATH"); v != "" {
+	if v := os.Getenv("BUSQUETS_SQLITE_PATH"); v != "" {
 		c.Database.SQLite.Path = v
 	}
-	if v := os.Getenv("PLAN_VIEWER_POSTGRES_URL"); v != "" {
+	if v := os.Getenv("BUSQUETS_POSTGRES_URL"); v != "" {
 		c.Database.Postgres.ConnectionString = v
 	}
-	if v := os.Getenv("PLAN_VIEWER_DIR"); v != "" {
+	if v := os.Getenv("BUSQUETS_DIR"); v != "" {
 		c.Paths.ViewerDir = v
 	}
-	if v := os.Getenv("PLAN_VIEWER_PLANS_DIR"); v != "" {
-		// PLAN_VIEWER_PLANS_DIR was replaced by [[paths.plans_dirs]] in the TOML config.
+	if v := os.Getenv("BUSQUETS_PLANS_DIR"); v != "" {
+		// BUSQUETS_PLANS_DIR was replaced by [[paths.plans_dirs]] in the TOML config.
 		// Fall back gracefully: treat the value as a single unlabelled sync directory.
-		fmt.Fprintf(os.Stderr, "warning: PLAN_VIEWER_PLANS_DIR is deprecated; use [[paths.plans_dirs]] in busquets.toml instead\n")
+		fmt.Fprintf(os.Stderr, "warning: BUSQUETS_PLANS_DIR is deprecated; use [[paths.plans_dirs]] in busquets.toml instead\n")
 		if len(c.Paths.PlansDirs) == 0 {
 			c.Paths.PlansDirs = []SyncDir{{Path: v}}
 		}
 	}
-	if v := os.Getenv("PLAN_VIEWER_MCP_SERVER_NAME"); v != "" {
+	if v := os.Getenv("BUSQUETS_MCP_SERVER_NAME"); v != "" {
 		c.MCP.ServerName = v
 	}
-	if v := os.Getenv("PLAN_VIEWER_MCP_VERSION"); v != "" {
+	if v := os.Getenv("BUSQUETS_MCP_VERSION"); v != "" {
 		c.MCP.Version = v
 	}
 }

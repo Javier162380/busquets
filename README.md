@@ -155,12 +155,12 @@ Override any configuration with environment variables:
 
 ```bash
 # Database configuration
-export PLAN_VIEWER_DB_BACKEND="postgres"
-export PLAN_VIEWER_POSTGRES_URL="postgres://user:pass@host:5432/db"
-export PLAN_VIEWER_SQLITE_PATH="/path/to/plans.db"
+export BUSQUETS_DB_BACKEND="postgres"
+export BUSQUETS_POSTGRES_URL="postgres://user:pass@host:5432/db"
+export BUSQUETS_SQLITE_PATH="/path/to/plans.db"
 
 # Path configuration
-export PLAN_VIEWER_DIR="/path/to/viewer-dir"
+export BUSQUETS_DIR="/path/to/viewer-dir"
 
 # TUI debug mode
 export DEBUG=1
