@@ -77,7 +77,7 @@ go mod download
 make build
 ```
 
-The binary will be created at `./bin/plan-viewer`.
+The binary will be created at `./bin/busquets`.
 
 ### Quick Start
 
@@ -93,11 +93,11 @@ make tui
 
 ### Configuration File
 
-Create a `plan-viewer.toml` file in your working directory to customize settings. All configuration is optional with sensible defaults.
+Create a `busquets.toml` file in your working directory to customize settings. All configuration is optional with sensible defaults.
 
 ```bash
 # Copy the example configuration
-cp plan-viewer.toml.example plan-viewer.toml
+cp busquets.toml.example busquets.toml
 ```
 
 ### Configuration Options
@@ -128,7 +128,7 @@ max_idle_conns = 5
 
 ```toml
 [paths]
-# Where plan-viewer stores indexed data
+# Where busquets stores indexed data
 viewer_dir = "/Users/yourname/.busquets"
 
 # Source directories containing LLM/AI-assistant plan files — one block per
@@ -144,7 +144,7 @@ viewer_dir = "/Users/yourname/.busquets"
 
 Labels are slugified (lowercased, keeping only `[a-z0-9-_]`) to name each
 source's mirror directory under `viewer_dir`. Two sources may not share a
-path or resolve to the same slug — plan-viewer refuses to start if they do.
+path or resolve to the same slug — busquets refuses to start if they do.
 
 > **Note:** paths are used verbatim. `~` is **not** expanded — always write
 > the full path.
@@ -168,7 +168,7 @@ export DEBUG=1
 
 ### Default Configuration
 
-Without a config file, plan-viewer uses these defaults:
+Without a config file, busquets uses these defaults:
 
 - **Database**: SQLite at `~/.busquets/plans.db`
 - **Viewer Directory**: `~/.busquets/`
@@ -185,11 +185,11 @@ Copy and index plans from the configured source directories to the viewer databa
 make sync
 
 # Using binary directly
-./bin/plan-viewer sync
+./bin/busquets sync
 
 # Using rsync (bidirectional sync)
 make rsync
-./bin/plan-viewer rsync
+./bin/busquets rsync
 ```
 
 **Output:**
@@ -202,7 +202,7 @@ make rsync
 Write all plans stored in the database back to their source directory (e.g. `~/.claude/plans/`). Useful when the source directory has been lost or you've switched databases and want to restore plan files to disk:
 
 ```bash
-./bin/plan-viewer dump
+./bin/busquets dump
 ```
 
 **Output:**
@@ -219,11 +219,11 @@ Launch the interactive terminal interface:
 ```bash
 # Standard mode
 make tui
-./bin/plan-viewer tui
+./bin/busquets tui
 
 # Debug mode (logs to ~/.busquets/tui-debug.log)
 make tui-debug
-DEBUG=1 ./bin/plan-viewer tui
+DEBUG=1 ./bin/busquets tui
 ```
 
 **TUI Features:**
@@ -254,7 +254,7 @@ Enable Claude Code — or any other MCP-capable AI assistant — to directly sea
 
 ```bash
 # Start MCP server
-./bin/plan-viewer mcp
+./bin/busquets mcp
 ```
 
 **Configure Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
@@ -262,7 +262,7 @@ Enable Claude Code — or any other MCP-capable AI assistant — to directly sea
 {
   "mcpServers": {
     "claude-plans": {
-      "command": "/path/to/bin/plan-viewer",
+      "command": "/path/to/bin/busquets",
       "args": ["mcp"]
     }
   }
@@ -298,7 +298,7 @@ Run database migrations manually:
 
 ```bash
 make migrate
-./bin/plan-viewer migrate
+./bin/busquets migrate
 ```
 
 This is typically only needed when:

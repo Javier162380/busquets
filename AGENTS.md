@@ -165,7 +165,7 @@ internal/ (internal modules used on the service layer, this modules do not hold 
 
 ## Configuration
 
-**File** (plan-viewer.toml):
+**File** (busquets.toml):
 ```toml
 [database]
 backend = "sqlite"  # or "postgres"

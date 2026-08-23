@@ -11,27 +11,27 @@ generate: ## Generate SQLC code
 	sqlc generate
 
 build: generate ## Build the application
-	@echo "Building plan-viewer..."
-	go build -o bin/plan-viewer cmd/main.go
-	@echo "Build complete: bin/plan-viewer"
+	@echo "Building busquets..."
+	go build -o bin/busquets cmd/main.go
+	@echo "Build complete: bin/busquets"
 
 sync: build ## Build and run sync command
-	./bin/plan-viewer sync
+	./bin/busquets sync
 
 rsync: build
-	./bin/plan-viewer rsync
+	./bin/busquets rsync
 
 tui: build ## Build and run TUI
-	./bin/plan-viewer tui
+	./bin/busquets tui
 
 tui-debug: build ## Build and run TUI in debug mode (logs to ~/.busquets/tui-debug.log)
-	DEBUG=1 ./bin/plan-viewer tui
+	DEBUG=1 ./bin/busquets tui
 
 migrate: build ## Run DB schema migrations + migrate plan storage layout (run before tui after upgrading)
-	./bin/plan-viewer migrate
+	./bin/busquets migrate
 
 migrate-dir: build ## Migrate ~/.claude-viewer → ~/.busquets (dir rename + DB file_path fix-up); run this once before starting the app after upgrading to Busquets
-	./bin/plan-viewer migrate
+	./bin/busquets migrate
 
 test: ## Run tests
 	@echo "Running tests..."

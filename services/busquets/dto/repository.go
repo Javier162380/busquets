@@ -36,7 +36,8 @@ type Repository interface {
 	DeletePlan(ctx context.Context, fileName, syncSource string, deleteFiles func() error) error
 	RenamePlanFile(ctx context.Context, params RenamePlanFileParams, renameFiles func() error) error
 	ListAllPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]PlanSummary, error)
-	// ListAllPlansFull and ListPlanVersionsAll are used only by MigrateStorageLayout.
+	// ListAllPlansFull and ListPlanVersionsAll back the full-table scans in
+	// MigrateStorageLayout and MigrateLegacyFilePathPrefix.
 	ListAllPlansFull(ctx context.Context) ([]Plan, error)
 	ListPlanVersionsAll(ctx context.Context, planID int64) ([]PlanVersion, error)
 	ListAllPlansWithPagination(ctx context.Context, params PaginationParams) ([]PlanSummary, error)

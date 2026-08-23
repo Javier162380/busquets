@@ -364,7 +364,7 @@ func runMCP(cfg *config.Config, logger *slog.Logger) error {
 }
 
 func printUsage() {
-	fmt.Println(`Usage: plan-viewer <command>
+	fmt.Println(`Usage: busquets <command>
 
 Commands:
   sync                Copy and index plans from source directory
@@ -376,7 +376,7 @@ Commands:
                       before starting the TUI/MCP server.
 
 Configuration:
-  Place a plan-viewer.toml file in the current directory to configure:
+  Place a busquets.toml file in the current directory to configure:
   - Database backend (sqlite or postgres)
   - Connection settings
   - Directory paths
@@ -389,9 +389,9 @@ Environment:
   PLAN_VIEWER_POSTGRES_URL      Override Postgres connection string
 
 Examples:
-  plan-viewer sync
-  plan-viewer tui
-  plan-viewer mcp
-  plan-viewer migrate
-  DEBUG=1 plan-viewer tui`)
+  busquets sync
+  busquets tui
+  busquets mcp
+  busquets migrate
+  DEBUG=1 busquets tui`)
 }

@@ -9,7 +9,7 @@ This skill explains how to debug the BubbleTea TUI application by capturing all 
 make tui-debug
 
 # Or manually
-DEBUG=1 ./bin/plan-viewer tui
+DEBUG=1 ./bin/busquets tui
 ```
 
 Debug messages are written to: `~/.busquets/tui-debug.log`

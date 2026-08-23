@@ -12,7 +12,13 @@ import (
 
 const (
 	// ConfigFileName is the name of the configuration file.
-	ConfigFileName = "plan-viewer.toml"
+	ConfigFileName = "busquets.toml"
+
+	// LegacyConfigFileName is the pre-rebrand config file name. LoadConfig
+	// falls back to it (with a deprecation warning) when ConfigFileName
+	// isn't found, so a config file created before the rebrand keeps
+	// working rather than silently reverting to defaults.
+	LegacyConfigFileName = "plan-viewer.toml"
 
 	// LegacyViewerDirName is the pre-rebrand default viewer directory name.
 	// Exported (not just internal to config) because services/busquets also
@@ -74,7 +80,12 @@ func LoadConfig() (*Config, error) {
 
 	configPath := filepath.Join(cwd, ConfigFileName)
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		return cfg, nil // Config doesn't exist, use defaults
+		legacyPath := filepath.Join(cwd, LegacyConfigFileName)
+		if _, err := os.Stat(legacyPath); os.IsNotExist(err) {
+			return cfg, nil // Neither config file exists, use defaults
+		}
+		fmt.Fprintf(os.Stderr, "warning: %s is deprecated; rename it to %s\n", LegacyConfigFileName, ConfigFileName)
+		configPath = legacyPath
 	}
 
 	if _, err := toml.DecodeFile(configPath, cfg); err != nil {
@@ -114,7 +125,7 @@ func DefaultConfig() *Config {
 			ViewerDir: filepath.Join(homeDir, ".busquets"),
 			// ~/.claude/plans is Claude Code's own on-disk convention — one
 			// built-in default source among potentially several; add more
-			// via [[paths.plans_dirs]] in plan-viewer.toml for any other
+			// via [[paths.plans_dirs]] in busquets.toml for any other
 			// LLM/AI assistant that writes plan files to disk.
 			PlansDirs: []SyncDir{{
 				Path:  filepath.Join(homeDir, ".claude", "plans"),
@@ -142,6 +153,15 @@ func DefaultConfig() *Config {
 // if the legacy dir doesn't exist, or if the new dir already exists (logs a
 // warning and leaves both in place rather than clobbering). Idempotent: safe
 // to call on every startup.
+//
+// Safe under concurrent callers (e.g. a TUI session and an MCP server both
+// launching around the same time on first run after upgrading): the
+// existence checks below are advisory only, not a lock — the real race is
+// resolved at the os.Rename call itself, whose ENOENT/ErrNotExist result
+// (oldDir already gone — a concurrent caller won the race) is treated as
+// success, not failure. Whoever loses the race for the rename just
+// discovers oldDir is already gone and moves on; it never hard-exits the
+// process over a directory that's already exactly where it should be.
 func MigrateLegacyViewerDir(cfg *Config) error {
 	defaults := DefaultConfig()
 	if cfg.Paths.ViewerDir != defaults.Paths.ViewerDir {
@@ -176,6 +196,12 @@ func MigrateLegacyViewerDir(cfg *Config) error {
 	}
 
 	if err := os.Rename(oldDir, newDir); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			// oldDir vanished between our stat above and this rename — a
+			// concurrent process already migrated it. That's the outcome we
+			// wanted, just achieved by someone else; nothing left to do.
+			return nil
+		}
 		return fmt.Errorf(
 			"failed to migrate %s to %s: %w (you can migrate manually with: mv %q %q)",
 			oldDir, newDir, err, oldDir, newDir,
@@ -202,7 +228,7 @@ func (c *Config) applyEnvOverrides() {
 	if v := os.Getenv("PLAN_VIEWER_PLANS_DIR"); v != "" {
 		// PLAN_VIEWER_PLANS_DIR was replaced by [[paths.plans_dirs]] in the TOML config.
 		// Fall back gracefully: treat the value as a single unlabelled sync directory.
-		fmt.Fprintf(os.Stderr, "warning: PLAN_VIEWER_PLANS_DIR is deprecated; use [[paths.plans_dirs]] in plan-viewer.toml instead\n")
+		fmt.Fprintf(os.Stderr, "warning: PLAN_VIEWER_PLANS_DIR is deprecated; use [[paths.plans_dirs]] in busquets.toml instead\n")
 		if len(c.Paths.PlansDirs) == 0 {
 			c.Paths.PlansDirs = []SyncDir{{Path: v}}
 		}

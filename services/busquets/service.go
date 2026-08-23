@@ -1,4 +1,4 @@
-// Package busquets implements the Busquets plan-viewer service logic.
+// Package busquets implements the Busquets plan-indexing service logic.
 package busquets
 
 import (
@@ -25,7 +25,7 @@ const (
 	summaryCacheGCPeriod = 10 * time.Minute
 )
 
-// Service represents the Busquets plan-viewer service.
+// Service represents the Busquets service.
 type Service struct {
 	db               dto.Repository
 	viewerDir        string
@@ -56,7 +56,7 @@ func (s *Service) DB() dto.Repository {
 	return s.db
 }
 
-// New creates a new Busquets plan-viewer service instance.
+// New creates a new Busquets service instance.
 // The db parameter must implement dto.Repository (sqlite.Repository or postgres.Repository).
 func New(ctx context.Context, db dto.Repository, viewerDir string, syncDirs []config.SyncDir, indexFullContent bool) (*Service, error) {
 	svc := &Service{
@@ -78,10 +78,22 @@ func New(ctx context.Context, db dto.Repository, viewerDir string, syncDirs []co
 	// already renamed the directory on disk. Runs on every construction —
 	// see MigrateLegacyFilePathPrefix's own settings-flag gate for why this
 	// is cheap once done.
+	//
+	// Gated on viewerDir matching the default, exactly like
+	// config.MigrateLegacyViewerDir gates its own directory rename on
+	// cfg.Paths.ViewerDir matching the default. Without this check, a caller
+	// running with a custom viewer_dir/PLAN_VIEWER_DIR — which the directory
+	// migration correctly declines to touch — would still have this rewrite
+	// any lingering .claude-viewer-prefixed rows into that custom dir and
+	// regenerate files there, silently doing exactly what the directory-level
+	// migration explicitly opted out of.
 	if homeDir, err := os.UserHomeDir(); err == nil {
 		oldDir := filepath.Join(homeDir, config.LegacyViewerDirName)
-		if _, err := svc.MigrateLegacyFilePathPrefix(ctx, oldDir, viewerDir); err != nil {
-			return nil, fmt.Errorf("failed to migrate legacy file paths: %w", err)
+		defaultViewerDir := config.DefaultConfig().Paths.ViewerDir
+		if viewerDir == defaultViewerDir {
+			if _, err := svc.MigrateLegacyFilePathPrefix(ctx, oldDir, viewerDir); err != nil {
+				return nil, fmt.Errorf("failed to migrate legacy file paths: %w", err)
+			}
 		}
 	}
 

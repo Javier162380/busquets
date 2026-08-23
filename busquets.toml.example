@@ -1,5 +1,5 @@
 # Busquets Configuration
-# Copy this file to plan-viewer.toml and customize as needed.
+# Copy this file to busquets.toml and customize as needed.
 #
 # All settings have sensible defaults. You only need to configure
 # what you want to change.
