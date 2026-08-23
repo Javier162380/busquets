@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/Javier162380/claude-plan-viewer/internal/config"
+	"github.com/Javier162380/busquets/internal/config"
 
 	"github.com/pressly/goose/v3"
 )

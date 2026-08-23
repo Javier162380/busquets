@@ -1,4 +1,4 @@
-module github.com/Javier162380/claude-plan-viewer
+module github.com/Javier162380/busquets
 
 go 1.26.2
 

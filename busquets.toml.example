@@ -1,0 +1,78 @@
+# Busquets Configuration
+# Copy this file to busquets.toml and customize as needed.
+#
+# All settings have sensible defaults. You only need to configure
+# what you want to change.
+#
+# IMPORTANT: Use full paths, not ~ (tilde is not expanded).
+# Example: /Users/yourname/.busquets instead of ~/.busquets
+#
+# Environment variables can override any setting:
+#   PLAN_VIEWER_DB_BACKEND    - Database backend (sqlite or postgres)
+#   PLAN_VIEWER_SQLITE_PATH   - SQLite database file path
+#   PLAN_VIEWER_POSTGRES_URL  - PostgreSQL connection string
+#   PLAN_VIEWER_DIR           - Directory for viewer data
+#
+# Source plan directories are configured only via [[paths.plans_dirs]] below.
+
+# =============================================================================
+# Database Configuration
+# =============================================================================
+[database]
+
+# Database backend: "sqlite" (default) or "postgres"
+backend = "sqlite"
+
+# -----------------------------------------------------------------------------
+# SQLite Configuration (used when backend = "sqlite")
+# -----------------------------------------------------------------------------
+[database.sqlite]
+
+# Path to the SQLite database file
+# Default: $HOME/.busquets/plans.db
+# path = "/Users/yourname/.busquets/plans.db"
+
+# -----------------------------------------------------------------------------
+# PostgreSQL Configuration (used when backend = "postgres")
+# -----------------------------------------------------------------------------
+[database.postgres]
+
+# PostgreSQL connection string (required when backend = "postgres")
+# Format: postgres://user:password@host:port/database?sslmode=disable
+connection_string = "postgres://user:password@localhost:5432/busquets_plans?sslmode=disable"
+
+# Maximum number of open connections to the database
+# Default: 10
+max_open_conns = 10
+
+# Maximum number of idle connections in the pool
+# Default: 5
+max_idle_conns = 5
+
+# =============================================================================
+# Path Configuration
+# =============================================================================
+[paths]
+
+# Directory where the viewer stores its data (copied plans, versions, etc.)
+# Default: $HOME/.busquets
+# viewer_dir = "/Users/yourname/.busquets"
+
+# Source directories containing the LLM/AI-assistant plan files to sync.
+# Declare one [[paths.plans_dirs]] block per source. Each needs a `path`;
+# `label` is optional and defaults to the directory's base name.
+#
+# The label is slugified (lowercased, only [a-z0-9-_] kept) to name that
+# source's mirror directory under viewer_dir, so two sources must not share
+# a path or resolve to the same slug — startup fails if they do.
+#
+# Default when omitted entirely: a single source at $HOME/.claude/plans
+# labelled "plans".
+#
+# [[paths.plans_dirs]]
+#   path  = "/Users/yourname/.claude/plans"
+#   label = "claudeRoot"
+#
+# [[paths.plans_dirs]]
+#   path  = "/Users/yourname/work/some-repo/docs/plans"
+#   label = "workRepo"

@@ -1,4 +1,4 @@
-.PHONY: help build run sync tui tui-debug test generate clean migrate
+.PHONY: help build run sync tui tui-debug test generate clean migrate migrate-dir
 
 help: ## Show this help
 	@echo 'Usage: make [target]'
@@ -11,24 +11,27 @@ generate: ## Generate SQLC code
 	sqlc generate
 
 build: generate ## Build the application
-	@echo "Building plan-viewer..."
-	go build -o bin/plan-viewer cmd/main.go
-	@echo "Build complete: bin/plan-viewer"
+	@echo "Building busquets..."
+	go build -o bin/busquets cmd/main.go
+	@echo "Build complete: bin/busquets"
 
 sync: build ## Build and run sync command
-	./bin/plan-viewer sync
+	./bin/busquets sync
 
 rsync: build
-	./bin/plan-viewer rsync
+	./bin/busquets rsync
 
 tui: build ## Build and run TUI
-	./bin/plan-viewer tui
+	./bin/busquets tui
 
-tui-debug: build ## Build and run TUI in debug mode (logs to ~/.claude-viewer/tui-debug.log)
-	DEBUG=1 ./bin/plan-viewer tui
+tui-debug: build ## Build and run TUI in debug mode (logs to ~/.busquets/tui-debug.log)
+	DEBUG=1 ./bin/busquets tui
 
 migrate: build ## Run DB schema migrations + migrate plan storage layout (run before tui after upgrading)
-	./bin/plan-viewer migrate
+	./bin/busquets migrate
+
+migrate-dir: build ## Migrate ~/.claude-viewer → ~/.busquets (dir rename + DB file_path fix-up); run this once before starting the app after upgrading to Busquets
+	./bin/busquets migrate
 
 test: ## Run tests
 	@echo "Running tests..."
@@ -36,7 +39,7 @@ test: ## Run tests
 
 test-integration: ## Run integration tests (SQLite + Postgres, requires Docker)
 	@echo "Running integration tests..."
-	TESTCONTAINERS_RYUK_DISABLED=true INTEGRATION=1 go test -count=1 -v ./services/claude-viewer/...
+	TESTCONTAINERS_RYUK_DISABLED=true INTEGRATION=1 go test -count=1 -v ./services/busquets/...
 
 lint: ## Lint project
 	 @echo "Linting project..."
@@ -44,7 +47,7 @@ lint: ## Lint project
 
 clean: ## Clean build artifacts
 	rm -rf bin/
-	rm -rf services/claude-viewer/repository/
+	rm -rf services/busquets/repository/
 
 deps: ## Download dependencies
 	@echo "Downloading dependencies..."

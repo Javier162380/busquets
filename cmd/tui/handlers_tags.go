@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/commands"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
+	"github.com/Javier162380/busquets/cmd/tui/commands"
+	"github.com/Javier162380/busquets/cmd/tui/components"
+	"github.com/Javier162380/busquets/cmd/tui/messages"
 
 	tea "github.com/charmbracelet/bubbletea"
 )

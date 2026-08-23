@@ -4,7 +4,7 @@ package connectors
 import (
 	"context"
 
-	planviewer "github.com/Javier162380/claude-plan-viewer"
+	planviewer "github.com/Javier162380/busquets"
 )
 
 // SendResult contains the result of a send/generate operation.

@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
-	content_test "github.com/Javier162380/claude-plan-viewer/cmd/tui/content/test"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
+	"github.com/Javier162380/busquets/cmd/tui/content"
+	content_test "github.com/Javier162380/busquets/cmd/tui/content/test"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"

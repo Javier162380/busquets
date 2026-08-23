@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/busquets/cmd/tui/messages"
+	"github.com/Javier162380/busquets/cmd/tui/types"
+	"github.com/Javier162380/busquets/services/busquets"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/stretchr/testify/require"
@@ -15,13 +15,13 @@ import (
 
 func TestPanelWidths(t *testing.T) {
 	t.Run("widths sum to total width", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
 		tagW, listW, viewW := s.panelWidths()
 		require.Equal(t, 100, tagW+listW+viewW+4)
 	})
 
 	t.Run("works for odd widths", func(t *testing.T) {
-		s := NewPlansScreen(99, 40, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)
+		s := NewPlansScreen(99, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
 		tagW, listW, viewW := s.panelWidths()
 		require.Equal(t, 99, tagW+listW+viewW+4)
 	})
@@ -29,18 +29,18 @@ func TestPanelWidths(t *testing.T) {
 
 func TestGetViewerWidth(t *testing.T) {
 	t.Run("fullscreen layout returns width minus padding", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
 		s.layout = types.LayoutFullscreen
 		require.Equal(t, 96, s.getViewerWidth())
 	})
 
 	t.Run("split layout returns half width minus padding", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
 		require.Equal(t, 44, s.getViewerWidth())
 	})
 
 	t.Run("three-panel layout uses panelWidths third value", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", claudeviewer.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII)
 		_, _, viewW := s.panelWidths()
 		require.Equal(t, viewW-4, s.getViewerWidth())
 	})
@@ -48,15 +48,15 @@ func TestGetViewerWidth(t *testing.T) {
 
 func TestUpdateListItems(t *testing.T) {
 	t.Run("empty plans produces empty list", func(t *testing.T) {
-		s := NewPlansScreen(80, 24, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)
-		s.plans = []claudeviewer.PlanSummary{}
+		s := NewPlansScreen(80, 24, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+		s.plans = []busquets.PlanSummary{}
 		s.updateListItems()
 		require.Equal(t, 0, s.list.ItemCount())
 	})
 
 	t.Run("items count matches plans count", func(t *testing.T) {
-		s := NewPlansScreen(80, 24, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)
-		s.plans = []claudeviewer.PlanSummary{
+		s := NewPlansScreen(80, 24, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+		s.plans = []busquets.PlanSummary{
 			{Title: "Plan A", FileName: "a.md"},
 			{Title: "Plan B", FileName: "b.md"},
 		}
@@ -65,8 +65,8 @@ func TestUpdateListItems(t *testing.T) {
 	})
 
 	t.Run("item titles match plan titles", func(t *testing.T) {
-		s := NewPlansScreen(80, 24, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)
-		s.plans = []claudeviewer.PlanSummary{
+		s := NewPlansScreen(80, 24, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+		s.plans = []busquets.PlanSummary{
 			{Title: "My Plan", FileName: "plan.md", ModifiedAt: time.Now()},
 		}
 		s.updateListItems()
@@ -78,8 +78,8 @@ func TestUpdateListItems(t *testing.T) {
 
 func TestRebuildTagPanelEntries(t *testing.T) {
 	t.Run("does not panic with populated tags and counts", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", claudeviewer.MarkdownThemeASCII)
-		s.allTags = []claudeviewer.Tag{
+		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII)
+		s.allTags = []busquets.Tag{
 			{Name: "go"},
 			{Name: "api"},
 		}
@@ -89,16 +89,16 @@ func TestRebuildTagPanelEntries(t *testing.T) {
 	})
 
 	t.Run("counts from tagPlanCounts are used when set", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", claudeviewer.MarkdownThemeASCII)
-		s.allTags = []claudeviewer.Tag{{Name: "backend"}}
+		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII)
+		s.allTags = []busquets.Tag{{Name: "backend"}}
 		s.tagPlanCounts = map[string]int{"backend": 7}
 		s.rebuildTagPanelEntries()
 		require.Equal(t, "", s.tagPanel.SelectedTag())
 	})
 
 	t.Run("tags missing from counts appear without panic", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", claudeviewer.MarkdownThemeASCII)
-		s.allTags = []claudeviewer.Tag{{Name: "orphan"}}
+		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII)
+		s.allTags = []busquets.Tag{{Name: "orphan"}}
 		s.tagPlanCounts = map[string]int{}
 		s.rebuildTagPanelEntries()
 		require.Equal(t, "", s.tagPanel.SelectedTag())
@@ -106,8 +106,8 @@ func TestRebuildTagPanelEntries(t *testing.T) {
 }
 
 func newLabelModeScreenWithPlans() *PlansScreen {
-	s := NewPlansScreen(120, 40, false, false, false, claudeviewer.DisplayModeLabelPlanContent, claudeviewer.MarkdownThemeASCII)
-	s.allPlans = []claudeviewer.PlanSummary{
+	s := NewPlansScreen(120, 40, false, false, false, busquets.DisplayModeLabelPlanContent, busquets.MarkdownThemeASCII)
+	s.allPlans = []busquets.PlanSummary{
 		{FileName: "a.md", SyncSource: "/srv/work", SyncLabel: "work", Title: "A"},
 		{FileName: "b.md", SyncSource: "/srv/work", SyncLabel: "work", Title: "B"},
 		{FileName: "c.md", SyncSource: "/srv/mine", SyncLabel: "personal", Title: "C"},
@@ -193,10 +193,10 @@ func TestLabelModeIgnoresTagPanelMessages(t *testing.T) {
 	// AllTagsForPanelLoadedMsg is tag-panel data. Label mode never requests it and
 	// must not be mutated by it if one arrives anyway.
 	screen, cmd := s.Update(messages.AllTagsForPanelLoadedMsg{
-		Tags:       []claudeviewer.Tag{{Name: "go"}, {Name: "api"}},
+		Tags:       []busquets.Tag{{Name: "go"}, {Name: "api"}},
 		Counts:     map[string]int{"go": 1},
-		TagPlanMap: map[string][]claudeviewer.PlanSummary{"go": {{FileName: "a.md"}}},
-		AllPlans:   []claudeviewer.PlanSummary{{FileName: "a.md", SyncLabel: "work"}},
+		TagPlanMap: map[string][]busquets.PlanSummary{"go": {{FileName: "a.md"}}},
+		AllPlans:   []busquets.PlanSummary{{FileName: "a.md", SyncLabel: "work"}},
 	})
 	ps := screen.(*PlansScreen)
 
@@ -223,12 +223,12 @@ func TestSidePanelFocusCycle(t *testing.T) {
 		mode  string
 		focus types.Focus
 	}{
-		{claudeviewer.DisplayModeTagPlanContent, types.FocusTagPanel},
-		{claudeviewer.DisplayModeLabelPlanContent, types.FocusLabelPanel},
+		{busquets.DisplayModeTagPlanContent, types.FocusTagPanel},
+		{busquets.DisplayModeLabelPlanContent, types.FocusLabelPanel},
 	} {
 		t.Run(tc.mode, func(t *testing.T) {
 			t.Run("shift+tab from the list reaches the side panel", func(t *testing.T) {
-				s := NewPlansScreen(120, 40, false, false, false, tc.mode, claudeviewer.MarkdownThemeASCII)
+				s := NewPlansScreen(120, 40, false, false, false, tc.mode, busquets.MarkdownThemeASCII)
 				s.focus = types.FocusList
 
 				screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
@@ -236,7 +236,7 @@ func TestSidePanelFocusCycle(t *testing.T) {
 			})
 
 			t.Run("tab from content reaches the side panel", func(t *testing.T) {
-				s := NewPlansScreen(120, 40, false, false, false, tc.mode, claudeviewer.MarkdownThemeASCII)
+				s := NewPlansScreen(120, 40, false, false, false, tc.mode, busquets.MarkdownThemeASCII)
 				s.focus = types.FocusContent
 
 				screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyTab})
@@ -246,7 +246,7 @@ func TestSidePanelFocusCycle(t *testing.T) {
 	}
 
 	t.Run("plan_content has no side panel to reach", func(t *testing.T) {
-		s := NewPlansScreen(120, 40, false, false, false, claudeviewer.DisplayModePlanContent, claudeviewer.MarkdownThemeASCII)
+		s := NewPlansScreen(120, 40, false, false, false, busquets.DisplayModePlanContent, busquets.MarkdownThemeASCII)
 		s.focus = types.FocusList
 
 		screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
@@ -255,21 +255,21 @@ func TestSidePanelFocusCycle(t *testing.T) {
 }
 
 func TestSetDisplayModeMountsOnePanel(t *testing.T) {
-	s := NewPlansScreen(120, 40, false, false, false, claudeviewer.DisplayModePlanContent, claudeviewer.MarkdownThemeASCII)
+	s := NewPlansScreen(120, 40, false, false, false, busquets.DisplayModePlanContent, busquets.MarkdownThemeASCII)
 
-	s.SetDisplayMode(claudeviewer.DisplayModeTagPlanContent)
+	s.SetDisplayMode(busquets.DisplayModeTagPlanContent)
 	require.NotNil(t, s.tagPanel)
 	require.Nil(t, s.labelPanel)
 	require.Equal(t, types.FocusTagPanel, s.focus)
 	require.Equal(t, types.LayoutThreePanel, s.layout)
 
-	s.SetDisplayMode(claudeviewer.DisplayModeLabelPlanContent)
+	s.SetDisplayMode(busquets.DisplayModeLabelPlanContent)
 	require.Nil(t, s.tagPanel)
 	require.NotNil(t, s.labelPanel)
 	require.Equal(t, types.FocusLabelPanel, s.focus)
 	require.Equal(t, types.LayoutThreePanel, s.layout)
 
-	s.SetDisplayMode(claudeviewer.DisplayModePlanContent)
+	s.SetDisplayMode(busquets.DisplayModePlanContent)
 	require.Nil(t, s.tagPanel)
 	require.Nil(t, s.labelPanel)
 	require.Equal(t, types.FocusList, s.focus)
@@ -278,14 +278,14 @@ func TestSetDisplayModeMountsOnePanel(t *testing.T) {
 
 func TestLeavingFullscreenRestoresThreePanelLayout(t *testing.T) {
 	for _, mode := range []string{
-		claudeviewer.DisplayModeTagPlanContent,
-		claudeviewer.DisplayModeLabelPlanContent,
+		busquets.DisplayModeTagPlanContent,
+		busquets.DisplayModeLabelPlanContent,
 	} {
 		t.Run(mode, func(t *testing.T) {
-			s := NewPlansScreen(120, 40, false, false, false, mode, claudeviewer.MarkdownThemeASCII)
+			s := NewPlansScreen(120, 40, false, false, false, mode, busquets.MarkdownThemeASCII)
 			s.focus = types.FocusList
-			s.current = &claudeviewer.PlanDetail{
-				PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "P"},
+			s.current = &busquets.PlanDetail{
+				PlanSummary: busquets.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "P"},
 			}
 
 			screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}})
@@ -300,11 +300,11 @@ func TestLeavingFullscreenRestoresThreePanelLayout(t *testing.T) {
 }
 
 func TestDeleteConfirmDialogVisibleFromList(t *testing.T) {
-	s := NewPlansScreen(100, 40, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)
+	s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
 	s.focus = types.FocusList
-	s.plans = []claudeviewer.PlanSummary{{FileName: "p.md", SyncSource: "/src", Title: "My Plan"}}
-	s.current = &claudeviewer.PlanDetail{
-		PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "My Plan"},
+	s.plans = []busquets.PlanSummary{{FileName: "p.md", SyncSource: "/src", Title: "My Plan"}}
+	s.current = &busquets.PlanDetail{
+		PlanSummary: busquets.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "My Plan"},
 		FilePath:    "/mirror/p.md",
 	}
 	s.updateListItems()
@@ -318,11 +318,11 @@ func TestDeleteConfirmDialogVisibleFromList(t *testing.T) {
 
 func TestCopyKeyEmitsCopyMsg(t *testing.T) {
 	newScreen := func(focus types.Focus) *PlansScreen {
-		s := NewPlansScreen(100, 40, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
 		s.focus = focus
-		s.plans = []claudeviewer.PlanSummary{{FileName: "p.md", SyncSource: "/src", Title: "My Plan"}}
-		s.current = &claudeviewer.PlanDetail{
-			PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "My Plan"},
+		s.plans = []busquets.PlanSummary{{FileName: "p.md", SyncSource: "/src", Title: "My Plan"}}
+		s.current = &busquets.PlanDetail{
+			PlanSummary: busquets.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "My Plan"},
 			FilePath:    "/mirror/p.md",
 			Content:     "# My Plan\n\nbody",
 		}
@@ -351,13 +351,13 @@ func TestCopyKeyEmitsCopyMsg(t *testing.T) {
 
 func TestTagFilterVisibleInBothDisplayModes(t *testing.T) {
 	modes := []string{
-		claudeviewer.DisplayModePlanContent,
-		claudeviewer.DisplayModeTagPlanContent,
-		claudeviewer.DisplayModeLabelPlanContent,
+		busquets.DisplayModePlanContent,
+		busquets.DisplayModeTagPlanContent,
+		busquets.DisplayModeLabelPlanContent,
 	}
 	for _, mode := range modes {
 		t.Run(mode, func(t *testing.T) {
-			s := NewPlansScreen(120, 40, false, false, false, mode, claudeviewer.MarkdownThemeASCII)
+			s := NewPlansScreen(120, 40, false, false, false, mode, busquets.MarkdownThemeASCII)
 			s.focus = types.FocusList
 
 			screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'T'}})
@@ -372,13 +372,13 @@ func TestTagFilterVisibleInBothDisplayModes(t *testing.T) {
 
 func TestSearchBarVisibleInBothDisplayModes(t *testing.T) {
 	modes := []string{
-		claudeviewer.DisplayModePlanContent,
-		claudeviewer.DisplayModeTagPlanContent,
-		claudeviewer.DisplayModeLabelPlanContent,
+		busquets.DisplayModePlanContent,
+		busquets.DisplayModeTagPlanContent,
+		busquets.DisplayModeLabelPlanContent,
 	}
 	for _, mode := range modes {
 		t.Run(mode, func(t *testing.T) {
-			s := NewPlansScreen(120, 40, false, false, false, mode, claudeviewer.MarkdownThemeASCII)
+			s := NewPlansScreen(120, 40, false, false, false, mode, busquets.MarkdownThemeASCII)
 			s.focus = types.FocusList
 
 			screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
@@ -392,10 +392,10 @@ func TestSearchBarVisibleInBothDisplayModes(t *testing.T) {
 }
 
 func TestCtrlLClearsFiltersFromList(t *testing.T) {
-	s := NewPlansScreen(100, 40, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)
+	s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
 	s.focus = types.FocusList
 	s.searchQuery = "needle"
-	s.plans = []claudeviewer.PlanSummary{{FileName: "p.md", SyncSource: "/src", Title: "My Plan"}}
+	s.plans = []busquets.PlanSummary{{FileName: "p.md", SyncSource: "/src", Title: "My Plan"}}
 	s.updateListItems()
 
 	_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyCtrlU})
@@ -407,9 +407,9 @@ func TestCtrlLClearsFiltersFromList(t *testing.T) {
 
 func TestSaveResultMsgRefreshesContent(t *testing.T) {
 	newScreen := func() *PlansScreen {
-		s := NewPlansScreen(100, 40, false, false, false, "plan_content", claudeviewer.MarkdownThemeASCII)
-		s.current = &claudeviewer.PlanDetail{
-			PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "Old Title"},
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+		s.current = &busquets.PlanDetail{
+			PlanSummary: busquets.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "Old Title"},
 			Content:     "old content",
 		}
 		s.editor.SetContent("old content")
@@ -421,13 +421,13 @@ func TestSaveResultMsgRefreshesContent(t *testing.T) {
 
 	t.Run("populated Plan updates viewer and current but stays in the editor", func(t *testing.T) {
 		s := newScreen()
-		newPlan := &claudeviewer.PlanDetail{
-			PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "New Title"},
+		newPlan := &busquets.PlanDetail{
+			PlanSummary: busquets.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "New Title"},
 			Content:     "new saved content",
 		}
 
 		screen, cmd := s.Update(messages.SaveResultMsg{
-			Result: &claudeviewer.UpdatePlanResult{Success: true},
+			Result: &busquets.UpdatePlanResult{Success: true},
 			Plan:   newPlan,
 		})
 		ps := screen.(*PlansScreen)
@@ -445,12 +445,12 @@ func TestSaveResultMsgRefreshesContent(t *testing.T) {
 
 	t.Run("esc after a save resets to the saved content, not the pre-save content", func(t *testing.T) {
 		s := newScreen()
-		newPlan := &claudeviewer.PlanDetail{
-			PlanSummary: claudeviewer.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "New Title"},
+		newPlan := &busquets.PlanDetail{
+			PlanSummary: busquets.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "New Title"},
 			Content:     "old content", // what was actually on disk when the save fired
 		}
 		screen, _ := s.Update(messages.SaveResultMsg{
-			Result: &claudeviewer.UpdatePlanResult{Success: true},
+			Result: &busquets.UpdatePlanResult{Success: true},
 			Plan:   newPlan,
 		})
 		ps := screen.(*PlansScreen)
@@ -469,7 +469,7 @@ func TestSaveResultMsgRefreshesContent(t *testing.T) {
 		s := newScreen()
 
 		screen, cmd := s.Update(messages.SaveResultMsg{
-			Result: &claudeviewer.UpdatePlanResult{Success: true},
+			Result: &busquets.UpdatePlanResult{Success: true},
 			Plan:   nil,
 		})
 		ps := screen.(*PlansScreen)

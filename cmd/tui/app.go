@@ -6,12 +6,12 @@ import (
 	"io"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/commands"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/components"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/busquets/cmd/tui/commands"
+	"github.com/Javier162380/busquets/cmd/tui/components"
+	"github.com/Javier162380/busquets/cmd/tui/messages"
+	"github.com/Javier162380/busquets/cmd/tui/screens"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
+	"github.com/Javier162380/busquets/services/busquets"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/davecgh/go-spew/spew"
@@ -31,7 +31,7 @@ type App struct {
 	width  int
 	height int
 
-	service claudeviewer.UnifiedService
+	service busquets.UnifiedService
 
 	dump io.Writer
 
@@ -42,7 +42,7 @@ type App struct {
 }
 
 // New creates a new TUI application.
-func New(ctx context.Context, service claudeviewer.UnifiedService) *App {
+func New(ctx context.Context, service busquets.UnifiedService) *App {
 	return &App{
 		ctx:       ctx,
 		service:   service,
@@ -58,7 +58,7 @@ func (a *App) SetDump(w io.Writer) {
 // Init initializes the application.
 func (a *App) Init() tea.Cmd {
 	// Initialize theme from settings.
-	setting, exists, _ := a.service.GetSetting(a.ctx, claudeviewer.SettingDarkModeEnabled)
+	setting, exists, _ := a.service.GetSetting(a.ctx, busquets.SettingDarkModeEnabled)
 	darkMode := true // default
 	if exists && setting.IsBoolean() {
 		darkMode = setting.GetBooleanValue()
@@ -66,29 +66,29 @@ func (a *App) Init() tea.Cmd {
 	styles.SetDarkMode(darkMode)
 	a.isDarkModeEnabled = darkMode
 
-	setting, exists, _ = a.service.GetSetting(a.ctx, claudeviewer.SettingRenderMarkdownByDefault)
+	setting, exists, _ = a.service.GetSetting(a.ctx, busquets.SettingRenderMarkdownByDefault)
 	renderMarkDownByDefault := false
 	if exists && setting.IsBoolean() {
 		renderMarkDownByDefault = setting.GetBooleanValue()
 	}
 	a.renderMarkDownByDefault = renderMarkDownByDefault
 
-	setting, exists, _ = a.service.GetSetting(a.ctx, claudeviewer.SettingDefaultDisplayMode)
-	displayMode := claudeviewer.DisplayModePlanContent
+	setting, exists, _ = a.service.GetSetting(a.ctx, busquets.SettingDefaultDisplayMode)
+	displayMode := busquets.DisplayModePlanContent
 	if exists && setting.IsString() {
 		displayMode = setting.GetStringValue()
 	}
 	a.displayMode = displayMode
 
-	setting, exists, _ = a.service.GetSetting(a.ctx, claudeviewer.SettingMarkdownTheme)
-	markdownRenderedTheme := claudeviewer.DefaultMarkdownTheme
+	setting, exists, _ = a.service.GetSetting(a.ctx, busquets.SettingMarkdownTheme)
+	markdownRenderedTheme := busquets.DefaultMarkdownTheme
 	if exists && setting.IsString() {
 		markdownRenderedTheme = setting.GetStringValue()
 	}
 	a.markdownRenderedTheme = markdownRenderedTheme
 
 	// Create initial plans screen.
-	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault, displayMode == claudeviewer.DisplayModePlanContent, displayMode, markdownRenderedTheme)
+	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault, displayMode == busquets.DisplayModePlanContent, displayMode, markdownRenderedTheme)
 	a.stack = append(a.stack, plansScreen)
 
 	// Start watching for watch results and load initial plans.
@@ -350,7 +350,7 @@ func (a *App) View() string {
 // This is the only place that maps a display mode to a reload command — callers
 // stay mode-agnostic.
 func (a *App) reloadPlans() tea.Cmd {
-	if a.displayMode == claudeviewer.DisplayModeTagPlanContent {
+	if a.displayMode == busquets.DisplayModeTagPlanContent {
 		return commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
 	}
 	return commands.LoadPlansCmd(a.ctx, a.service)
@@ -364,7 +364,7 @@ func (a *App) popScreen() tea.Cmd { //nolint:unparam // ok for now.
 	return nil
 }
 
-func (a *App) pushVersionsScreenWithData(planName string, versions []claudeviewer.PlanVersionDetail) tea.Cmd {
+func (a *App) pushVersionsScreenWithData(planName string, versions []busquets.PlanVersionDetail) tea.Cmd {
 	versionsScreen := screens.NewVersionsScreenWithData(planName, a.markdownRenderedTheme, versions, a.width, a.height, a.isDarkModeEnabled, a.renderMarkDownByDefault)
 	a.stack = append(a.stack, versionsScreen)
 	return versionsScreen.Init()

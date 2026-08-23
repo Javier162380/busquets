@@ -1,6 +1,6 @@
-# Claude Plan Viewer
+# Busquets
 
-A powerful Go application for indexing, searching, and viewing [Claude Code](https://claude.com/claude-code) plan files with multiple interfaces (TUI, CLI, MCP).
+A powerful Go application for indexing, searching, and viewing LLM/AI-assistant plan files with multiple interfaces (TUI, CLI, MCP). Works with any assistant that writes plan files to disk — [Claude Code](https://claude.com/claude-code)'s `~/.claude/plans/` is the built-in default source, and any other directory can be added via configuration.
 
 ## Table of Contents
 
@@ -20,10 +20,10 @@ A powerful Go application for indexing, searching, and viewing [Claude Code](htt
 
 ## Overview
 
-Claude Plan Viewer provides a centralized solution for managing Claude Code plan files. It syncs plans from Claude's native storage location, indexes them in a searchable database, and offers multiple ways to browse and search your plans efficiently.
+Busquets provides a centralized solution for managing LLM/AI-assistant plan files. It syncs plans from one or more source directories, indexes them in a searchable database, and offers multiple ways to browse and search your plans efficiently.
 
 **Why use this?**
-- **Centralized Management**: Keep all your Claude Code plans organized and searchable in one place
+- **Centralized Management**: Keep all your plans organized and searchable in one place
 - **Full-Text Search**: Quickly find plans by content, not just filename
 - **Version Tracking**: Track changes to plans over time
 - **Multiple Interfaces**: Choose between terminal UI, CLI, or MCP based on your workflow
@@ -32,9 +32,9 @@ Claude Plan Viewer provides a centralized solution for managing Claude Code plan
 ## Features
 
 ### Core Functionality
-- **Automatic Synchronization**: Sync plans from `~/.claude/plans/` to `~/.claude-viewer/`
+- **Automatic Synchronization**: Sync plans from configured source directories (e.g. `~/.claude/plans/` for Claude Code) to `~/.busquets/`
 - **Bidirectional Sync**: `rsync` command for syncing changes back to source
-- **Database Dump**: `dump` command to restore plans from the database back to `~/.claude/plans/`
+- **Database Dump**: `dump` command to restore plans from the database back to their source directory
 - **Full-Text Search**: Fast content search with SQLite FTS5 or PostgreSQL text search
 - **Version Control**: Track multiple versions of plans with diff viewing
 - **File Watching**: Automatic background synchronization at configurable intervals
@@ -42,7 +42,7 @@ Claude Plan Viewer provides a centralized solution for managing Claude Code plan
 
 ### User Interfaces
 - **Terminal UI (TUI)**: Feature-rich terminal interface for command-line enthusiasts
-- **MCP Server**: Model Context Protocol integration for Claude Code AI assistant
+- **MCP Server**: Model Context Protocol integration for MCP-capable AI assistants.
 - **CLI Commands**: Direct command-line operations for scripting and automation
 
 ### Database Support
@@ -67,8 +67,8 @@ Claude Plan Viewer provides a centralized solution for managing Claude Code plan
 
 ```bash
 # Clone the repository
-git clone https://github.com/Javier162380/claude-plan-viewer.git
-cd claude-plan-viewer
+git clone https://github.com/Javier162380/busquets.git
+cd busquets
 
 # Download dependencies
 go mod download
@@ -77,7 +77,7 @@ go mod download
 make build
 ```
 
-The binary will be created at `./bin/plan-viewer`.
+The binary will be created at `./bin/busquets`.
 
 ### Quick Start
 
@@ -93,11 +93,11 @@ make tui
 
 ### Configuration File
 
-Create a `plan-viewer.toml` file in your working directory to customize settings. All configuration is optional with sensible defaults.
+Create a `busquets.toml` file in your working directory to customize settings. All configuration is optional with sensible defaults.
 
 ```bash
 # Copy the example configuration
-cp plan-viewer.toml.example plan-viewer.toml
+cp busquets.toml.example busquets.toml
 ```
 
 ### Configuration Options
@@ -110,7 +110,7 @@ cp plan-viewer.toml.example plan-viewer.toml
 backend = "sqlite"
 
 [database.sqlite]
-path = "/Users/yourname/.claude-viewer/plans.db"
+path = "/Users/yourname/.busquets/plans.db"
 ```
 
 **PostgreSQL**
@@ -119,7 +119,7 @@ path = "/Users/yourname/.claude-viewer/plans.db"
 backend = "postgres"
 
 [database.postgres]
-connection_string = "postgres://user:password@localhost:5432/claude_plans?sslmode=disable"
+connection_string = "postgres://user:password@localhost:5432/busquets_plans?sslmode=disable"
 max_open_conns = 10
 max_idle_conns = 5
 ```
@@ -128,11 +128,11 @@ max_idle_conns = 5
 
 ```toml
 [paths]
-# Where plan-viewer stores indexed data
-viewer_dir = "/Users/yourname/.claude-viewer"
+# Where busquets stores indexed data
+viewer_dir = "/Users/yourname/.busquets"
 
-# Source directories containing Claude plan files — one block per source.
-# `label` is optional and defaults to the directory's base name.
+# Source directories containing LLM/AI-assistant plan files — one block per
+# source. `label` is optional and defaults to the directory's base name.
 [[paths.plans_dirs]]
   path  = "/Users/yourname/.claude/plans"
   label = "claudeRoot"
@@ -144,7 +144,7 @@ viewer_dir = "/Users/yourname/.claude-viewer"
 
 Labels are slugified (lowercased, keeping only `[a-z0-9-_]`) to name each
 source's mirror directory under `viewer_dir`. Two sources may not share a
-path or resolve to the same slug — plan-viewer refuses to start if they do.
+path or resolve to the same slug — busquets refuses to start if they do.
 
 > **Note:** paths are used verbatim. `~` is **not** expanded — always write
 > the full path.
@@ -168,41 +168,41 @@ export DEBUG=1
 
 ### Default Configuration
 
-Without a config file, plan-viewer uses these defaults:
+Without a config file, busquets uses these defaults:
 
-- **Database**: SQLite at `~/.claude-viewer/plans.db`
-- **Viewer Directory**: `~/.claude-viewer/`
-- **Plans Source**: `~/.claude/plans/`
+- **Database**: SQLite at `~/.busquets/plans.db`
+- **Viewer Directory**: `~/.busquets/`
+- **Plans Source**: `~/.claude/plans/` (Claude Code's own default location; add more via `[[paths.plans_dirs]]`)
 
 ## Usage
 
 ### Sync Plans
 
-Copy and index plans from Claude's storage to the viewer database:
+Copy and index plans from the configured source directories to the viewer database:
 
 ```bash
 # Using Make
 make sync
 
 # Using binary directly
-./bin/plan-viewer sync
+./bin/busquets sync
 
 # Using rsync (bidirectional sync)
 make rsync
-./bin/plan-viewer rsync
+./bin/busquets rsync
 ```
 
 **Output:**
 ```
-✓ Synced 42 plans from /Users/you/.claude/plans to /Users/you/.claude-viewer (backend: sqlite)
+✓ Synced 42 plans from /Users/you/.claude/plans to /Users/you/.busquets (backend: sqlite)
 ```
 
 ### Dump Plans
 
-Write all plans stored in the database back to `~/.claude/plans/`. Useful when the source directory has been lost or you've switched databases and want to restore plan files to disk:
+Write all plans stored in the database back to their source directory (e.g. `~/.claude/plans/`). Useful when the source directory has been lost or you've switched databases and want to restore plan files to disk:
 
 ```bash
-./bin/plan-viewer dump
+./bin/busquets dump
 ```
 
 **Output:**
@@ -219,11 +219,11 @@ Launch the interactive terminal interface:
 ```bash
 # Standard mode
 make tui
-./bin/plan-viewer tui
+./bin/busquets tui
 
-# Debug mode (logs to ~/.claude-viewer/tui-debug.log)
+# Debug mode (logs to ~/.busquets/tui-debug.log)
 make tui-debug
-DEBUG=1 ./bin/plan-viewer tui
+DEBUG=1 ./bin/busquets tui
 ```
 
 **TUI Features:**
@@ -250,11 +250,11 @@ viewer is in raw mode.
 
 ### MCP Server
 
-Enable Claude Code to directly search and retrieve your plans during coding sessions:
+Enable Claude Code — or any other MCP-capable AI assistant — to directly search and retrieve your plans during coding sessions:
 
 ```bash
 # Start MCP server
-./bin/plan-viewer mcp
+./bin/busquets mcp
 ```
 
 **Configure Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
@@ -262,7 +262,7 @@ Enable Claude Code to directly search and retrieve your plans during coding sess
 {
   "mcpServers": {
     "claude-plans": {
-      "command": "/path/to/bin/plan-viewer",
+      "command": "/path/to/bin/busquets",
       "args": ["mcp"]
     }
   }
@@ -298,7 +298,7 @@ Run database migrations manually:
 
 ```bash
 make migrate
-./bin/plan-viewer migrate
+./bin/busquets migrate
 ```
 
 This is typically only needed when:
@@ -311,15 +311,15 @@ This is typically only needed when:
 ### Project Structure
 
 ```
-claude-plan-viewer/
+busquets/
 ├── cmd/                        # Application entry points
-│   ├── mcp/                    # MCP server (Claude integration)
+│   ├── mcp/                    # MCP server (AI assistant integration)
 │   └── tui/                    # Terminal UI
 │       ├── screens/            # TUI screens
 │       ├── components/         # Reusable UI components
 │       ├── content/            # Content models
 │       └── styles/             # Theme and styling
-├── services/claude-viewer/     # Core business logic
+├── services/busquets/          # Core business logic
 │   ├── dto/                    # Data transfer objects
 │   └── repository/             # Data access layer
 │       ├── sqlite/             # SQLite implementation
@@ -334,12 +334,12 @@ claude-plan-viewer/
 
 ### Key Components
 
-**Service Layer** (`services/claude-viewer/`)
+**Service Layer** (`services/busquets/`)
 - Orchestrates business logic
 - Manages plan synchronization and versioning
 - Provides repository abstraction
 
-**Repository Pattern** (`services/claude-viewer/repository/`)
+**Repository Pattern** (`services/busquets/repository/`)
 - Abstract interface for data access
 - SQLite and PostgreSQL implementations
 - Generated code via SQLC for type safety
@@ -394,7 +394,7 @@ make help
 
 ### Adding Database Queries
 
-1. Edit SQL queries in `services/claude-viewer/repository/{sqlite|postgres}/queries.sql`
+1. Edit SQL queries in `services/busquets/repository/{sqlite|postgres}/queries.sql`
 2. Run `make generate` to regenerate Go code
 3. Use the generated code in your repository implementation
 
@@ -408,7 +408,7 @@ go test -v ./...
 go test -v -cover ./...
 
 # Run specific package tests
-go test -v ./services/claude-viewer/...
+go test -v ./services/busquets/...
 ```
 
 ### Code Organization

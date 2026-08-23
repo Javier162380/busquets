@@ -1,14 +1,14 @@
 package screens
 
 import (
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
+	"github.com/Javier162380/busquets/cmd/tui/messages"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const helpContent = `Claude Plan Viewer - Keyboard Shortcuts
+const helpContent = `Busquets - Keyboard Shortcuts
 
 GENERAL:
   ?              Toggle this help screen

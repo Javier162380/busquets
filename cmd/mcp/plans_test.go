@@ -5,15 +5,15 @@ import (
 	"testing"
 	"time"
 
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/busquets/services/busquets"
 )
 
 func TestFormatSearchResults(t *testing.T) {
-	plans := []claudeviewer.PlanSummary{
+	plans := []busquets.PlanSummary{
 		{
 			FileName:    "test-plan.md",
 			Title:       "Test Plan",
-			Tags:        []claudeviewer.Tag{{Name: "tag1"}, {Name: "tag2"}},
+			Tags:        []busquets.Tag{{Name: "tag1"}, {Name: "tag2"}},
 			ModifiedAt:  time.Date(2024, 1, 15, 14, 30, 0, 0, time.UTC),
 			ReadingTime: 5,
 		},
@@ -39,7 +39,7 @@ func TestFormatSearchResults(t *testing.T) {
 }
 
 func TestFormatSearchResults_Empty(t *testing.T) {
-	plans := []claudeviewer.PlanSummary{}
+	plans := []busquets.PlanSummary{}
 
 	output, err := FormatSearchResults(plans)
 	if err != nil {
@@ -53,13 +53,13 @@ func TestFormatSearchResults_Empty(t *testing.T) {
 }
 
 func TestFormatPlanDetail(t *testing.T) {
-	plan := &claudeviewer.PlanDetail{
-		PlanSummary: claudeviewer.PlanSummary{
+	plan := &busquets.PlanDetail{
+		PlanSummary: busquets.PlanSummary{
 			FileName:    "test.md",
 			Title:       "Test",
 			CreatedAt:   time.Date(2024, 1, 10, 10, 0, 0, 0, time.UTC),
 			ModifiedAt:  time.Date(2024, 1, 15, 14, 30, 0, 0, time.UTC),
-			Tags:        []claudeviewer.Tag{{Name: "tag1"}},
+			Tags:        []busquets.Tag{{Name: "tag1"}},
 			ReadingTime: 3,
 			FileSize:    1024,
 		},

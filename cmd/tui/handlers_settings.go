@@ -1,11 +1,11 @@
 package tui
 
 import (
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/commands"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/screens"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/busquets/cmd/tui/commands"
+	"github.com/Javier162380/busquets/cmd/tui/messages"
+	"github.com/Javier162380/busquets/cmd/tui/screens"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
+	"github.com/Javier162380/busquets/services/busquets"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -17,8 +17,8 @@ func (a *App) handleSettingUpdateResult(msg messages.SettingUpdateResultMsg) (te
 		a.statusBar.SetSuccess("Setting saved")
 	}
 
-	if msg.Success && (msg.SettingName == claudeviewer.SettingWatchModeEnabled ||
-		msg.SettingName == claudeviewer.SettingWatchIntervalSeconds) {
+	if msg.Success && (msg.SettingName == busquets.SettingWatchModeEnabled ||
+		msg.SettingName == busquets.SettingWatchIntervalSeconds) {
 		model, cmd := a.delegateToCurrentScreen(msg)
 		return model, tea.Batch(cmd, commands.ApplyWatchSettingCmd(a.ctx, a.service))
 	}
@@ -65,7 +65,7 @@ func (a *App) handleDisplayModeChanged(msg messages.DisplayModeChangedMsg) (tea.
 	// Only the tag panel needs a fetch on a mode switch. Labels are static and
 	// SetDisplayMode rebuilds the label panel synchronously from the plans the
 	// screen already holds.
-	if msg.Mode == claudeviewer.DisplayModeTagPlanContent {
+	if msg.Mode == busquets.DisplayModeTagPlanContent {
 		return a, commands.LoadAllTagsForPanelCmd(a.ctx, a.service)
 	}
 	return a, nil

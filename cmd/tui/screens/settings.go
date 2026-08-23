@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/busquets/cmd/tui/messages"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
+	"github.com/Javier162380/busquets/services/busquets"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -17,87 +17,87 @@ type SettingDefinition struct {
 	Name          string
 	Description   string
 	Type          string
-	Default       claudeviewer.SettingValues
+	Default       busquets.SettingValues
 	AllowedValues []string // non-nil: cycle through these on Enter/Space (string settings)
 }
 
 var KnownSettings = []SettingDefinition{
 	{
-		Name:        claudeviewer.SettingReadingSpeedWPM,
+		Name:        busquets.SettingReadingSpeedWPM,
 		Description: "Words per minute for reading time estimates",
-		Type:        claudeviewer.SettingTypeNumber,
-		Default:     claudeviewer.SettingValues{NumberValue: new(float64(200))},
+		Type:        busquets.SettingTypeNumber,
+		Default:     busquets.SettingValues{NumberValue: new(float64(200))},
 	},
 	{
-		Name:        claudeviewer.SettingDarkModeEnabled,
+		Name:        busquets.SettingDarkModeEnabled,
 		Description: "Enable dark mode theme",
-		Type:        claudeviewer.SettingTypeBoolean,
-		Default:     claudeviewer.SettingValues{BooleanValue: new(true)},
+		Type:        busquets.SettingTypeBoolean,
+		Default:     busquets.SettingValues{BooleanValue: new(true)},
 	},
 	{
-		Name:        claudeviewer.SettingRenderMarkdownByDefault,
+		Name:        busquets.SettingRenderMarkdownByDefault,
 		Description: "Automatically render markdown by default, using the selected theme",
-		Type:        claudeviewer.SettingTypeBoolean,
-		Default:     claudeviewer.SettingValues{BooleanValue: new(false)},
+		Type:        busquets.SettingTypeBoolean,
+		Default:     busquets.SettingValues{BooleanValue: new(false)},
 	},
 	{
-		Name:        claudeviewer.SettingWatchModeEnabled,
+		Name:        busquets.SettingWatchModeEnabled,
 		Description: "Automatically sync plans in the background",
-		Type:        claudeviewer.SettingTypeBoolean,
-		Default:     claudeviewer.SettingValues{BooleanValue: new(false)},
+		Type:        busquets.SettingTypeBoolean,
+		Default:     busquets.SettingValues{BooleanValue: new(false)},
 	},
 	{
-		Name:        claudeviewer.SettingWatchIntervalSeconds,
+		Name:        busquets.SettingWatchIntervalSeconds,
 		Description: "Watch mode sync interval (seconds)",
-		Type:        claudeviewer.SettingTypeNumber,
-		Default:     claudeviewer.SettingValues{NumberValue: new(claudeviewer.DefaultWatchIntervalSeconds)},
+		Type:        busquets.SettingTypeNumber,
+		Default:     busquets.SettingValues{NumberValue: new(busquets.DefaultWatchIntervalSeconds)},
 	},
 	{
-		Name:          claudeviewer.SettingDefaultDisplayMode,
+		Name:          busquets.SettingDefaultDisplayMode,
 		Description:   "Default plans screen layout",
-		Type:          claudeviewer.SettingTypeString,
-		AllowedValues: []string{claudeviewer.DisplayModePlanContent, claudeviewer.DisplayModeTagPlanContent, claudeviewer.DisplayModeLabelPlanContent},
+		Type:          busquets.SettingTypeString,
+		AllowedValues: []string{busquets.DisplayModePlanContent, busquets.DisplayModeTagPlanContent, busquets.DisplayModeLabelPlanContent},
 	},
 	{
-		Name:          claudeviewer.SettingPlansSortKey,
+		Name:          busquets.SettingPlansSortKey,
 		Description:   "Sort plans by field",
-		Type:          claudeviewer.SettingTypeString,
-		AllowedValues: []string{claudeviewer.SortKeyUpdatedAt, claudeviewer.SortKeyCreatedAt, claudeviewer.SortKeyReadingTime, claudeviewer.SortKeySize},
+		Type:          busquets.SettingTypeString,
+		AllowedValues: []string{busquets.SortKeyUpdatedAt, busquets.SortKeyCreatedAt, busquets.SortKeyReadingTime, busquets.SortKeySize},
 	},
 	{
-		Name:          claudeviewer.SettingPlansSortDir,
+		Name:          busquets.SettingPlansSortDir,
 		Description:   "Sort direction",
-		Type:          claudeviewer.SettingTypeString,
-		AllowedValues: []string{claudeviewer.SortDirDesc, claudeviewer.SortDirAsc},
+		Type:          busquets.SettingTypeString,
+		AllowedValues: []string{busquets.SortDirDesc, busquets.SortDirAsc},
 	},
 	{
-		Name:          claudeviewer.SettingSearchOver,
+		Name:          busquets.SettingSearchOver,
 		Description:   "Search over: plan name, content, or both",
-		Type:          claudeviewer.SettingTypeString,
-		Default:       claudeviewer.SettingValues{StringValue: new(string(claudeviewer.DefaultSearchOver))},
-		AllowedValues: []string{string(claudeviewer.SearchOverAll), string(claudeviewer.SearchOverPlanName), string(claudeviewer.SearchOverContent)},
+		Type:          busquets.SettingTypeString,
+		Default:       busquets.SettingValues{StringValue: new(string(busquets.DefaultSearchOver))},
+		AllowedValues: []string{string(busquets.SearchOverAll), string(busquets.SearchOverPlanName), string(busquets.SearchOverContent)},
 	},
 	{
-		Name:          claudeviewer.SettingClipboardMode,
+		Name:          busquets.SettingClipboardMode,
 		Description:   "Clipboard: auto (native+OSC52), native, or osc52",
-		Type:          claudeviewer.SettingTypeString,
-		Default:       claudeviewer.SettingValues{StringValue: new(claudeviewer.DefaultClipboardMode)},
-		AllowedValues: []string{claudeviewer.ClipboardModeAuto, claudeviewer.ClipboardModeNative, claudeviewer.ClipboardModeOSC52},
+		Type:          busquets.SettingTypeString,
+		Default:       busquets.SettingValues{StringValue: new(busquets.DefaultClipboardMode)},
+		AllowedValues: []string{busquets.ClipboardModeAuto, busquets.ClipboardModeNative, busquets.ClipboardModeOSC52},
 	},
 	{
-		Name:        claudeviewer.SettingMarkdownTheme,
+		Name:        busquets.SettingMarkdownTheme,
 		Description: "Markdown rendering theme (only visible while markdown rendering is on)",
-		Type:        claudeviewer.SettingTypeString,
-		Default:     claudeviewer.SettingValues{StringValue: new(claudeviewer.DefaultMarkdownTheme)},
+		Type:        busquets.SettingTypeString,
+		Default:     busquets.SettingValues{StringValue: new(busquets.DefaultMarkdownTheme)},
 		// MarkdownThemeNoTTYStyle is omitted: glamour renders it identically to
 		// MarkdownThemeASCII, so offering both is a dead step in the cycle.
-		AllowedValues: []string{claudeviewer.MarkdownThemeDark, claudeviewer.MarkdownThemeLight, claudeviewer.MarkdownThemeTokyoNight, claudeviewer.MarkdownThemeASCII, claudeviewer.MarkdownThemeDracula, claudeviewer.MarkdownThemePinkStyle},
+		AllowedValues: []string{busquets.MarkdownThemeDark, busquets.MarkdownThemeLight, busquets.MarkdownThemeTokyoNight, busquets.MarkdownThemeASCII, busquets.MarkdownThemeDracula, busquets.MarkdownThemePinkStyle},
 	},
 }
 
 type SettingItem struct {
 	Definition SettingDefinition
-	Value      claudeviewer.SettingValues
+	Value      busquets.SettingValues
 	Editing    bool
 	EditBuffer string
 }
@@ -164,32 +164,32 @@ func (s *SettingsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.settings[s.cursor].Editing = false
 
 		switch s.settings[s.cursor].Definition.Name {
-		case claudeviewer.SettingDarkModeEnabled:
+		case busquets.SettingDarkModeEnabled:
 			newVal := s.settings[s.cursor].Value.BooleanValue != nil && *s.settings[s.cursor].Value.BooleanValue
 			return s, func() tea.Msg { return messages.ThemeChangedMsg{DarkMode: newVal} }
-		case claudeviewer.SettingRenderMarkdownByDefault:
+		case busquets.SettingRenderMarkdownByDefault:
 			newVal := s.settings[s.cursor].Value.BooleanValue != nil && *s.settings[s.cursor].Value.BooleanValue
 			return s, func() tea.Msg { return messages.RenderMarkDownByDefaultMsg{Enabled: newVal} }
-		case claudeviewer.SettingDefaultDisplayMode:
+		case busquets.SettingDefaultDisplayMode:
 			newVal := ""
 			if s.settings[s.cursor].Value.StringValue != nil {
 				newVal = *s.settings[s.cursor].Value.StringValue
 			}
 			return s, func() tea.Msg { return messages.DisplayModeChangedMsg{Mode: newVal} }
-		case claudeviewer.SettingPlansSortKey:
-			newVal := claudeviewer.DefaultPlansSortKey
+		case busquets.SettingPlansSortKey:
+			newVal := busquets.DefaultPlansSortKey
 			if s.settings[s.cursor].Value.StringValue != nil {
 				newVal = *s.settings[s.cursor].Value.StringValue
 			}
 			return s, func() tea.Msg { return messages.PlansSortKeyChangedMsg{SortKey: newVal} }
-		case claudeviewer.SettingPlansSortDir:
-			newVal := claudeviewer.DefaultSortDir
+		case busquets.SettingPlansSortDir:
+			newVal := busquets.DefaultSortDir
 			if s.settings[s.cursor].Value.StringValue != nil {
 				newVal = *s.settings[s.cursor].Value.StringValue
 			}
 			return s, func() tea.Msg { return messages.PlansSortDirChangedMsg{SortDir: newVal} }
-		case claudeviewer.SettingMarkdownTheme:
-			newVal := claudeviewer.DefaultMarkdownTheme
+		case busquets.SettingMarkdownTheme:
+			newVal := busquets.DefaultMarkdownTheme
 			if s.settings[s.cursor].Value.StringValue != nil {
 				newVal = *s.settings[s.cursor].Value.StringValue
 			}
@@ -202,8 +202,8 @@ func (s *SettingsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	return s, nil
 }
 
-func (s *SettingsScreen) settingToValues(setting claudeviewer.Setting) claudeviewer.SettingValues {
-	var values claudeviewer.SettingValues
+func (s *SettingsScreen) settingToValues(setting busquets.Setting) busquets.SettingValues {
+	var values busquets.SettingValues
 	switch {
 	case setting.IsNumber():
 		v := setting.GetNumberValue()
@@ -249,7 +249,7 @@ func (s *SettingsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 	case "enter", " ":
 		setting := &s.settings[s.cursor]
 		switch setting.Definition.Type {
-		case claudeviewer.SettingTypeBoolean:
+		case busquets.SettingTypeBoolean:
 			current := false
 			if setting.Value.BooleanValue != nil {
 				current = *setting.Value.BooleanValue
@@ -258,7 +258,7 @@ func (s *SettingsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 			setting.Value.BooleanValue = &newVal
 			return s, s.saveSetting(setting.Definition.Name, setting.Value)
 
-		case claudeviewer.SettingTypeNumber:
+		case busquets.SettingTypeNumber:
 			s.editing = true
 			setting.Editing = true
 			if setting.Value.NumberValue != nil {
@@ -267,7 +267,7 @@ func (s *SettingsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 				setting.EditBuffer = ""
 			}
 
-		case claudeviewer.SettingTypeString:
+		case busquets.SettingTypeString:
 			if len(setting.Definition.AllowedValues) > 0 {
 				current := ""
 				if setting.Value.StringValue != nil {
@@ -352,19 +352,19 @@ func (s *SettingsScreen) renderSettingItem(index int, setting *SettingItem) stri
 
 	var value string
 	switch setting.Definition.Type {
-	case claudeviewer.SettingTypeBoolean:
+	case busquets.SettingTypeBoolean:
 		if setting.Value.BooleanValue != nil && *setting.Value.BooleanValue {
 			value = styles.SuccessStyle.Render("[ON]")
 		} else {
 			value = styles.InactiveStyle.Render("[OFF]")
 		}
-	case claudeviewer.SettingTypeNumber:
+	case busquets.SettingTypeNumber:
 		if setting.Editing {
 			value = styles.AccentStyle.Render(fmt.Sprintf("> %s_", setting.EditBuffer))
 		} else if setting.Value.NumberValue != nil {
 			value = lipgloss.NewStyle().Foreground(styles.ForegroundColor).Render(fmt.Sprintf("%.0f", *setting.Value.NumberValue))
 		}
-	case claudeviewer.SettingTypeString:
+	case busquets.SettingTypeString:
 		if setting.Value.StringValue != nil {
 			value = lipgloss.NewStyle().Foreground(styles.ForegroundColor).Render("[" + *setting.Value.StringValue + "]")
 		} else if len(setting.Definition.AllowedValues) > 0 {
@@ -400,7 +400,7 @@ func (s *SettingsScreen) IsInputMode() bool { return s.editing }
 // EditorMode ....
 func (s *SettingsScreen) EditorMode() bool { return false }
 
-func (s *SettingsScreen) saveSetting(name string, values claudeviewer.SettingValues) tea.Cmd {
+func (s *SettingsScreen) saveSetting(name string, values busquets.SettingValues) tea.Cmd {
 	return func() tea.Msg {
 		return messages.SaveSettingMsg{
 			Name:   name,

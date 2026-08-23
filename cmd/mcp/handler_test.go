@@ -6,17 +6,17 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Javier162380/claude-plan-viewer/internal/config"
-	"github.com/Javier162380/claude-plan-viewer/internal/storage"
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
-	"github.com/Javier162380/claude-plan-viewer/services/claude-viewer/repository/sqlite"
+	"github.com/Javier162380/busquets/internal/config"
+	"github.com/Javier162380/busquets/internal/storage"
+	"github.com/Javier162380/busquets/services/busquets"
+	"github.com/Javier162380/busquets/services/busquets/repository/sqlite"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/require"
 )
 
 // setupTestService creates a test service with a real SQLite database.
-func setupTestService(t *testing.T) (*claudeviewer.Service, string, func()) {
+func setupTestService(t *testing.T) (*busquets.Service, string, func()) {
 	t.Helper()
 
 	tempDir, err := os.MkdirTemp(os.TempDir(), "mcp-test-*")
@@ -34,7 +34,7 @@ func setupTestService(t *testing.T) (*claudeviewer.Service, string, func()) {
 	require.NoError(t, err)
 
 	repo := sqlite.NewRepository(db.DB())
-	service, err := claudeviewer.New(repo, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
+	service, err := busquets.New(ctx, repo, viewerDir, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}}, true)
 	require.NoError(t, err)
 
 	cleanup := func() {

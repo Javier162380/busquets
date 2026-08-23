@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/content"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/messages"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/styles"
-	"github.com/Javier162380/claude-plan-viewer/cmd/tui/types"
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/busquets/cmd/tui/content"
+	"github.com/Javier162380/busquets/cmd/tui/messages"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
+	"github.com/Javier162380/busquets/cmd/tui/types"
+	"github.com/Javier162380/busquets/services/busquets"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -21,7 +21,7 @@ import (
 type CommentModal struct {
 	fileName        string
 	syncSource      string
-	comments        []claudeviewer.Comment
+	comments        []busquets.Comment
 	selected        int
 	focus           types.Focus
 	input           textarea.Model
@@ -50,7 +50,7 @@ func NewCommentModal() *CommentModal {
 }
 
 // Open activates the modal for the given plan and populates it with comments.
-func (m *CommentModal) Open(fileName, syncSource, markdownTheme string, comments []claudeviewer.Comment) {
+func (m *CommentModal) Open(fileName, syncSource, markdownTheme string, comments []busquets.Comment) {
 	m.fileName = fileName
 	m.syncSource = syncSource
 	m.comments = comments
@@ -82,7 +82,7 @@ func (m *CommentModal) IsActive() bool {
 }
 
 // SetComments replaces the comment list and refreshes the viewport.
-func (m *CommentModal) SetComments(comments []claudeviewer.Comment) {
+func (m *CommentModal) SetComments(comments []busquets.Comment) {
 	m.comments = comments
 	if m.selected >= len(m.comments) && len(m.comments) > 0 {
 		m.selected = len(m.comments) - 1

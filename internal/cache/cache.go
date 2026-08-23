@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Javier162380/claude-plan-viewer/internal/nowprovider"
+	"github.com/Javier162380/busquets/internal/nowprovider"
 )
 
 var (

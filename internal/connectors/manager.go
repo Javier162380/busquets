@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	planviewer "github.com/Javier162380/claude-plan-viewer"
+	planviewer "github.com/Javier162380/busquets"
 )
 
 // Manager orchestrates connector operations.

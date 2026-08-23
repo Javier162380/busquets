@@ -1,6 +1,9 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -168,4 +171,194 @@ func TestValidate(t *testing.T) {
 			}
 		})
 	}
+}
+
+// newDefaultCfgForHome builds a Config via DefaultConfig() while HOME is
+// pointed at tempDir, so cfg.Paths.ViewerDir resolves under the test's own
+// throwaway directory instead of the real machine's home — MigrateLegacyViewerDir
+// gates on cfg.Paths.ViewerDir matching DefaultConfig()'s value, so tests must
+// go through DefaultConfig() itself rather than hand-building a Config to stay
+// on that gate's happy path.
+func newDefaultCfgForHome(t *testing.T, tempDir string) *Config {
+	t.Helper()
+	t.Setenv("HOME", tempDir)
+	return DefaultConfig()
+}
+
+func TestMigrateLegacyViewerDir(t *testing.T) {
+	t.Run("no-op when a custom viewer dir is configured", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfg := newDefaultCfgForHome(t, tempDir)
+		cfg.Paths.ViewerDir = filepath.Join(tempDir, "custom-viewer-dir")
+
+		legacyDir := filepath.Join(tempDir, LegacyViewerDirName)
+		require.NoError(t, os.MkdirAll(legacyDir, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(legacyDir, "marker.txt"), []byte("legacy"), 0o600))
+
+		require.NoError(t, MigrateLegacyViewerDir(cfg))
+
+		// A custom viewer_dir means this migration doesn't apply — the
+		// legacy dir must be left exactly as it was.
+		require.DirExists(t, legacyDir)
+		require.NoDirExists(t, cfg.Paths.ViewerDir)
+	})
+
+	t.Run("no-op when neither the legacy nor the new dir exists", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfg := newDefaultCfgForHome(t, tempDir)
+
+		require.NoError(t, MigrateLegacyViewerDir(cfg))
+
+		require.NoDirExists(t, filepath.Join(tempDir, LegacyViewerDirName))
+		require.NoDirExists(t, cfg.Paths.ViewerDir)
+	})
+
+	t.Run("renames the legacy dir to the new default location, preserving its contents", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfg := newDefaultCfgForHome(t, tempDir)
+
+		legacyDir := filepath.Join(tempDir, LegacyViewerDirName)
+		require.NoError(t, os.MkdirAll(filepath.Join(legacyDir, "plans", "1"), 0o750))
+		require.NoError(t, os.WriteFile(
+			filepath.Join(legacyDir, "plans", "1", "example.md"), []byte("# Example"), 0o600))
+
+		require.NoError(t, MigrateLegacyViewerDir(cfg))
+
+		require.NoDirExists(t, legacyDir)
+		require.DirExists(t, cfg.Paths.ViewerDir)
+		data, err := os.ReadFile(filepath.Join(cfg.Paths.ViewerDir, "plans", "1", "example.md"))
+		require.NoError(t, err)
+		require.Equal(t, "# Example", string(data))
+	})
+
+	t.Run("is idempotent: a second call is a no-op once already migrated", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfg := newDefaultCfgForHome(t, tempDir)
+
+		legacyDir := filepath.Join(tempDir, LegacyViewerDirName)
+		require.NoError(t, os.MkdirAll(legacyDir, 0o750))
+
+		require.NoError(t, MigrateLegacyViewerDir(cfg))
+		require.NoError(t, MigrateLegacyViewerDir(cfg)) // must not error just because legacyDir is already gone
+
+		require.DirExists(t, cfg.Paths.ViewerDir)
+	})
+
+	t.Run("warns and leaves both directories in place rather than clobbering when both exist", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfg := newDefaultCfgForHome(t, tempDir)
+
+		legacyDir := filepath.Join(tempDir, LegacyViewerDirName)
+		require.NoError(t, os.MkdirAll(legacyDir, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(legacyDir, "marker.txt"), []byte("legacy"), 0o600))
+		require.NoError(t, os.MkdirAll(cfg.Paths.ViewerDir, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(cfg.Paths.ViewerDir, "marker.txt"), []byte("current"), 0o600))
+
+		require.NoError(t, MigrateLegacyViewerDir(cfg))
+
+		legacyMarker, err := os.ReadFile(filepath.Join(legacyDir, "marker.txt"))
+		require.NoError(t, err)
+		require.Equal(t, "legacy", string(legacyMarker))
+
+		currentMarker, err := os.ReadFile(filepath.Join(cfg.Paths.ViewerDir, "marker.txt"))
+		require.NoError(t, err)
+		require.Equal(t, "current", string(currentMarker))
+	})
+
+	// Regression test for a TOCTOU race: two processes (e.g. a TUI session
+	// and an MCP server) can both launch around the same time on first run
+	// after upgrading and both call this concurrently. The loser's
+	// os.Rename used to fail with ENOENT once the winner had already moved
+	// oldDir, and that error was propagated as a hard failure. Neither
+	// caller should ever error — the loser must recognize "oldDir is
+	// already gone" as success, since that's exactly the outcome it wanted.
+	t.Run("concurrent callers never error, even when they race the same rename", func(t *testing.T) {
+		tempDir := t.TempDir()
+		cfg := newDefaultCfgForHome(t, tempDir)
+
+		legacyDir := filepath.Join(tempDir, LegacyViewerDirName)
+		require.NoError(t, os.MkdirAll(legacyDir, 0o750))
+		require.NoError(t, os.WriteFile(filepath.Join(legacyDir, "marker.txt"), []byte("legacy"), 0o600))
+
+		const callers = 8
+		start := make(chan struct{})
+		errs := make([]error, callers)
+		var wg sync.WaitGroup
+		wg.Add(callers)
+		for i := range callers {
+			go func(i int) {
+				defer wg.Done()
+				<-start // maximize the chance every goroutine reaches os.Rename around the same time
+				errs[i] = MigrateLegacyViewerDir(cfg)
+			}(i)
+		}
+		close(start)
+		wg.Wait()
+
+		for i, err := range errs {
+			require.NoErrorf(t, err, "caller %d", i)
+		}
+
+		require.NoDirExists(t, legacyDir)
+		require.DirExists(t, cfg.Paths.ViewerDir)
+		data, err := os.ReadFile(filepath.Join(cfg.Paths.ViewerDir, "marker.txt"))
+		require.NoError(t, err)
+		require.Equal(t, "legacy", string(data))
+	})
+}
+
+func TestLoadConfig(t *testing.T) {
+	t.Run("returns defaults when neither config file exists", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+
+		cfg, err := LoadConfig()
+		require.NoError(t, err)
+		require.Equal(t, DefaultConfig().Database.Backend, cfg.Database.Backend)
+	})
+
+	t.Run("reads busquets.toml when present", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		require.NoError(t, os.WriteFile(ConfigFileName, []byte(`
+[database]
+backend = "postgres"
+[database.postgres]
+connection_string = "postgres://example"
+`), 0o600))
+
+		cfg, err := LoadConfig()
+		require.NoError(t, err)
+		require.Equal(t, BackendPostgres, cfg.Database.Backend)
+	})
+
+	t.Run("falls back to the legacy plan-viewer.toml name when busquets.toml is absent", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		require.NoError(t, os.WriteFile(LegacyConfigFileName, []byte(`
+[database]
+backend = "postgres"
+[database.postgres]
+connection_string = "postgres://example"
+`), 0o600))
+
+		cfg, err := LoadConfig()
+		require.NoError(t, err)
+		require.Equal(t, BackendPostgres, cfg.Database.Backend)
+	})
+
+	t.Run("prefers busquets.toml over the legacy name when both exist", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		require.NoError(t, os.WriteFile(ConfigFileName, []byte(`
+[database]
+backend = "sqlite"
+`), 0o600))
+		require.NoError(t, os.WriteFile(LegacyConfigFileName, []byte(`
+[database]
+backend = "postgres"
+[database.postgres]
+connection_string = "postgres://example"
+`), 0o600))
+
+		cfg, err := LoadConfig()
+		require.NoError(t, err)
+		require.Equal(t, BackendSQLite, cfg.Database.Backend)
+	})
 }

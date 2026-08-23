@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/busquets/services/busquets"
 
 	"github.com/toon-format/toon-go"
 )
@@ -54,7 +54,7 @@ type toolsResponse struct {
 }
 
 // FormatSearchResults formats plan summaries using TOON.
-func FormatSearchResults(plans []claudeviewer.PlanSummary) (string, error) {
+func FormatSearchResults(plans []busquets.PlanSummary) (string, error) {
 	if len(plans) == 0 {
 		return "plans[0]{file_name,title,tags,modified_at,reading_time}:", nil
 	}
@@ -82,7 +82,7 @@ func FormatSearchResults(plans []claudeviewer.PlanSummary) (string, error) {
 }
 
 // FormatPlanDetail formats a single plan using TOON + markdown content.
-func FormatPlanDetail(plan *claudeviewer.PlanDetail) (string, error) {
+func FormatPlanDetail(plan *busquets.PlanDetail) (string, error) {
 	// TOON metadata
 	metadata := planResponse{
 		Plan: planDetailTOON{
@@ -142,7 +142,7 @@ func FormatToolsList() (string, error) {
 }
 
 // formatTagNames extracts tag names from a Tag slice and joins them.
-func formatTagNames(tags []claudeviewer.Tag) string {
+func formatTagNames(tags []busquets.Tag) string {
 	if len(tags) == 0 {
 		return ""
 	}

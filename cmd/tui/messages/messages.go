@@ -5,7 +5,7 @@ package messages
 import (
 	"time"
 
-	claudeviewer "github.com/Javier162380/claude-plan-viewer/services/claude-viewer"
+	"github.com/Javier162380/busquets/services/busquets"
 )
 
 // --- Watch / status ---
@@ -23,13 +23,13 @@ type ClearStatusMsg struct{}
 
 // PlansLoadedMsg is sent when plans are loaded.
 type PlansLoadedMsg struct {
-	Plans      []claudeviewer.PlanSummary
+	Plans      []busquets.PlanSummary
 	IsFiltered bool // when true, only s.plans is updated, not s.allPlans
 }
 
 // PlanDetailLoadedMsg is sent when plan detail is loaded.
 type PlanDetailLoadedMsg struct {
-	Detail *claudeviewer.PlanDetail
+	Detail *busquets.PlanDetail
 }
 
 // LoadPlanDetailMsg requests loading a plan detail.
@@ -57,9 +57,9 @@ type DumpPlansMsg struct{}
 
 // SaveResultMsg is sent when save completes.
 type SaveResultMsg struct {
-	Result *claudeviewer.UpdatePlanResult
+	Result *busquets.UpdatePlanResult
 	Error  error
-	Plan   *claudeviewer.PlanDetail
+	Plan   *busquets.PlanDetail
 }
 
 // SyncResultMsg is sent when sync completes.
@@ -169,11 +169,11 @@ type LoadUntaggedPlansMsg struct{}
 
 // AllTagsForPanelLoadedMsg carries all tags, their plan counts, and the tag→plans map.
 type AllTagsForPanelLoadedMsg struct {
-	Tags          []claudeviewer.Tag
+	Tags          []busquets.Tag
 	Counts        map[string]int
 	UntaggedCount int
-	TagPlanMap    map[string][]claudeviewer.PlanSummary
-	AllPlans      []claudeviewer.PlanSummary
+	TagPlanMap    map[string][]busquets.PlanSummary
+	AllPlans      []busquets.PlanSummary
 }
 
 // --- Search ---
@@ -321,13 +321,13 @@ type LoadSettingsMsg struct {
 
 // SettingsLoadedMsg carries loaded settings.
 type SettingsLoadedMsg struct {
-	Settings map[string]claudeviewer.Setting
+	Settings map[string]busquets.Setting
 }
 
 // SaveSettingMsg requests saving a setting.
 type SaveSettingMsg struct {
 	Name   string
-	Values claudeviewer.SettingValues
+	Values busquets.SettingValues
 }
 
 // SettingUpdateResultMsg carries result of a setting update.
@@ -372,7 +372,7 @@ type RequestVersionsScreenMsg struct {
 type VersionsNavigationResultMsg struct {
 	PlanName   string
 	SyncSource string
-	Versions   []claudeviewer.PlanVersionDetail
+	Versions   []busquets.PlanVersionDetail
 }
 
 // LoadVersionsMsg requests loading versions for a plan.
@@ -383,7 +383,7 @@ type LoadVersionsMsg struct {
 
 // VersionsLoadedMsg is sent when versions are loaded.
 type VersionsLoadedMsg struct {
-	Versions []claudeviewer.PlanVersionDetail
+	Versions []busquets.PlanVersionDetail
 }
 
 // VersionErrorMsg is sent on version error.
@@ -433,7 +433,7 @@ type OpenCommentModalMsg struct {
 
 // CommentsLoadedMsg carries comments fetched from the service.
 type CommentsLoadedMsg struct {
-	Comments   []claudeviewer.Comment
+	Comments   []busquets.Comment
 	FileName   string
 	SyncSource string
 }
