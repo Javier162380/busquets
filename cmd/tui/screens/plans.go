@@ -14,6 +14,8 @@ import (
 	"github.com/Javier162380/busquets/cmd/tui/types"
 	"github.com/Javier162380/busquets/services/busquets"
 
+	keyBinding "github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -829,6 +831,7 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		s.editor.Reset()
 		s.viewer.ScrollToContentLine(line)
 		s.lastKey = ""
+		s.editor.SetEditorMode(types.EditorModeNavigation)
 		return s, nil
 
 	case "ctrl+s":
@@ -857,16 +860,14 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		return s, nil
 
 	case "t", "b":
+		if s.editor.EditorMode() == types.EditorModeInsert {
+			return s, s.editor.Update(msg)
+		}
 		// Check for double-key press (tt = top, bb = bottom).
 		now := time.Now()
 		if s.lastKey == key && now.Sub(s.lastKeyTime) < 500*time.Millisecond {
 			// Double-key detected, remove the first typed character and trigger navigation.
 			s.lastKey = ""
-			// Simulate backspace to remove the first character.
-			backspaceMsg := tea.KeyMsg{
-				Type: tea.KeyBackspace,
-			}
-			s.editor.Update(backspaceMsg)
 			// Now jump to top or bottom.
 			if key == "t" {
 				s.editor.MoveCursorToFirstRow()
@@ -878,9 +879,13 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		// First key press or timeout expired, record and pass to editor.
 		s.lastKey = key
 		s.lastKeyTime = now
-		return s, s.editor.Update(msg)
+		return s, nil
 
 	case "d":
+		if s.editor.EditorMode() == types.EditorModeNavigation {
+			return s, nil
+		}
+
 		// Check for double-key press (dd = delete line).
 		now := time.Now()
 		if s.lastKey == key && now.Sub(s.lastKeyTime) < 500*time.Millisecond {
@@ -903,6 +908,9 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		return s, s.editor.Update(msg)
 
 	case "o":
+		if s.editor.EditorMode() == types.EditorModeNavigation {
+			return s, nil
+		}
 		// Check for double-key press (oo = new line below).
 		now := time.Now()
 		if s.lastKey == key && now.Sub(s.lastKeyTime) < 500*time.Millisecond {
@@ -924,9 +932,39 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		s.lastKeyTime = now
 		return s, s.editor.Update(msg)
 
+	case "enter":
+		switch {
+		case s.editor.EditorMode() == types.EditorModeNavigation:
+			s.editor.SetEditorMode(types.EditorModeInsert)
+		case s.editor.EditorMode() == types.EditorModeInsert:
+			s.editor.SetEditorMode(types.EditorModeNavigation)
+		}
+		return s, nil
+	}
+
+	switch {
+	case keyBinding.Matches(msg, textarea.DefaultKeyMap.LineNext):
+		return s, s.editor.Update(msg)
+	case keyBinding.Matches(msg, textarea.DefaultKeyMap.LinePrevious):
+		return s, s.editor.Update(msg)
+	case keyBinding.Matches(msg, textarea.DefaultKeyMap.LineStart):
+		return s, s.editor.Update(msg)
+	case keyBinding.Matches(msg, textarea.DefaultKeyMap.LineEnd):
+		return s, s.editor.Update(msg)
+	case keyBinding.Matches(msg, textarea.DefaultKeyMap.InputBegin):
+		return s, s.editor.Update(msg)
+	case keyBinding.Matches(msg, textarea.DefaultKeyMap.InputEnd):
+		return s, s.editor.Update(msg)
+	case keyBinding.Matches(msg, textarea.DefaultKeyMap.CharacterForward):
+		return s, s.editor.Update(msg)
+	case keyBinding.Matches(msg, textarea.DefaultKeyMap.CharacterBackward):
+		return s, s.editor.Update(msg)
 	default:
 		// Any other key clears the double-key tracking.
 		s.lastKey = ""
+		if s.editor.EditorMode() == types.EditorModeNavigation {
+			return s, nil
+		}
 		return s, s.editor.Update(msg)
 	}
 }
@@ -1655,7 +1693,15 @@ func (s *PlansScreen) ShortHelp() string {
 		if s.editor.IsModified() {
 			modified = " [MODIFIED]"
 		}
-		return fmt.Sprintf("ctrl+s: save | ctrl+l: go to line | tt/bb: top/bottom | dd: delete line | oo: new line | esc: cancel%s", modified)
+
+		switch {
+		case s.editor.EditorMode() == types.EditorModeInsert:
+			return fmt.Sprintf("enter: [NAVIGATION] | ctrl+s: save | ctrl+l: go to line | dd: delete line | oo: new line | esc: cancel%s", modified)
+		case s.editor.EditorMode() == types.EditorModeNavigation:
+			return fmt.Sprintf("enter: [INSERT] | ctrl+s: save | ctrl+l: go to line | tt/bb: top/bottom | esc: cancel%s", modified)
+		default:
+			return ""
+		}
 	case types.FocusSearch:
 		return "enter: search | esc: cancel"
 	case types.FocusTagFilter:

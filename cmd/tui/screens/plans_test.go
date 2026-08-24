@@ -480,3 +480,30 @@ func TestSaveResultMsgRefreshesContent(t *testing.T) {
 		require.Equal(t, types.FocusEditor, ps.focus)
 	})
 }
+
+func TestEditorModeToggleAndEscReturnsToViewer(t *testing.T) {
+	s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+	s.current = &busquets.PlanDetail{
+		PlanSummary: busquets.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "My Plan"},
+		Content:     "some content",
+	}
+	s.editor.SetContent("some content")
+	s.editor.Focus()
+	s.focus = types.FocusEditor
+	s.layout = types.LayoutFullscreen
+
+	require.Equal(t, types.EditorModeNavigation, s.editor.EditorMode())
+
+	screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	ps := screen.(*PlansScreen)
+	require.Equal(t, types.EditorModeInsert, ps.editor.EditorMode())
+
+	screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	ps = screen.(*PlansScreen)
+	require.Equal(t, types.FocusContent, ps.focus)
+
+	screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	ps = screen.(*PlansScreen)
+	require.Equal(t, types.FocusEditor, ps.focus)
+	require.Equal(t, types.EditorModeNavigation, ps.editor.EditorMode())
+}

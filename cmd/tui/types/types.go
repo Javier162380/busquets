@@ -37,3 +37,10 @@ const (
 	ModalTextInput                // generic single-field input modal (e.g. go-to-line)
 	ModalContentSearch            // content search modal (viewer search)
 )
+
+type EditorMode int
+
+const (
+	EditorModeNavigation EditorMode = iota
+	EditorModeInsert
+)
