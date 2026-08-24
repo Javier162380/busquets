@@ -27,12 +27,12 @@ func (a *App) handleRestoreVersion(msg messages.RestoreVersionMsg) (tea.Model, t
 func (a *App) handleRestoreResult(msg messages.RestoreResultMsg) (tea.Model, tea.Cmd) {
 	if msg.Error != nil {
 		a.statusBar.SetError("Restore failed: " + msg.Error.Error())
-		return a, nil
+		return a, commands.ClearStatusCmdWithDefaultDuration()
 	}
 	a.statusBar.SetSuccess("Version restored successfully")
 	a.popScreen()
 	return a, tea.Batch(
-		commands.SyncPlansCmd(a.ctx, a.service),
-		commands.LoadPlansCmd(a.ctx, a.service),
+		a.reloadPlans(),
+		commands.ClearStatusCmdWithDefaultDuration(),
 	)
 }

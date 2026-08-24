@@ -123,6 +123,24 @@ func TestHandleSaveResult(t *testing.T) {
 	})
 }
 
+func TestHandleRestoreResult(t *testing.T) {
+	t.Run("success sets success message and schedules a clear", func(t *testing.T) {
+		app := newTestApp(t)
+		model, cmd := app.Update(messages.RestoreResultMsg{Success: true})
+		app = model.(*App)
+		require.Equal(t, "Version restored successfully", app.statusBar.SuccessMessage())
+		require.NotNil(t, cmd)
+	})
+
+	t.Run("error sets error message and schedules a clear", func(t *testing.T) {
+		app := newTestApp(t)
+		model, cmd := app.Update(messages.RestoreResultMsg{Error: errors.New("plan not found")})
+		app = model.(*App)
+		require.Equal(t, "Restore failed: plan not found", app.statusBar.ErrorMessage())
+		require.NotNil(t, cmd)
+	})
+}
+
 func TestHandleTagHandlers(t *testing.T) {
 	t.Run("CreateTagResultMsg success sets success message and returns reload cmd", func(t *testing.T) {
 		app := newTestApp(t)
