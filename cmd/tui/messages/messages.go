@@ -371,6 +371,7 @@ type RequestVersionsScreenMsg struct {
 // VersionsNavigationResultMsg carries the result of a version check.
 type VersionsNavigationResultMsg struct {
 	PlanName   string
+	PlanID     int64
 	SyncSource string
 	Versions   []busquets.PlanVersionDetail
 }
@@ -393,6 +394,7 @@ type VersionErrorMsg struct {
 
 // RestoreVersionMsg requests restoring a version.
 type RestoreVersionMsg struct {
+	PlanID        int64
 	PlanName      string
 	SyncSource    string
 	VersionNumber int64
