@@ -1,17 +1,20 @@
 package components
 
 import (
+	"github.com/Javier162380/busquets/cmd/tui/types"
+
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 // Editor wraps textarea with modification tracking.
 type Editor struct {
-	textarea textarea.Model
-	original string
-	modified bool
-	width    int
-	height   int
+	textarea     textarea.Model
+	editorStatus types.EditorMode
+	original     string
+	modified     bool
+	width        int
+	height       int
 }
 
 // NewEditor creates a new editor component.
@@ -24,9 +27,10 @@ func NewEditor(width, height int) *Editor {
 	ta.Blur()
 
 	return &Editor{
-		textarea: ta,
-		width:    width,
-		height:   height,
+		textarea:     ta,
+		width:        width,
+		height:       height,
+		editorStatus: types.EditorModeNavigation,
 	}
 }
 
@@ -35,6 +39,15 @@ func (e *Editor) SetContent(content string) {
 	e.original = content
 	e.textarea.SetValue(content)
 	e.modified = false
+}
+
+// SetEditorMode sets editor mode.
+func (e *Editor) SetEditorMode(mode types.EditorMode) {
+	e.editorStatus = mode
+}
+
+func (e *Editor) EditorMode() types.EditorMode {
+	return e.editorStatus
 }
 
 // Content returns the current editor content.
