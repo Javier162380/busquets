@@ -51,13 +51,19 @@ PLAN CONTENT (right panel / fullscreen):
   Tab            Switch panel
   Esc            Back to the plans list / split view
 
-EDITING:
+EDITING (starts in Navigation mode):
+  Enter          Toggle Navigation / Insert mode
   Ctrl+S         Save and sync changes
   Ctrl+L         Jump to a specific line
-  tt / bb        Jump to first / last line
-  dd             Delete the current line
-  oo             Insert a new line below
   Esc            Cancel without saving
+
+  Navigation mode (default, no typing):
+    tt / bb      Jump to first / last line
+    ↑/↓, ←/→     Move the cursor
+
+  Insert mode (typing enabled):
+    dd           Delete the current line
+    oo           Insert a new line below
 
 SEARCH:
   Enter          Execute search

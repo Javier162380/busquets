@@ -41,6 +41,6 @@ const (
 type EditorMode int
 
 const (
-	EditorModeInsert EditorMode = iota
-	EditorModeNavigation
+	EditorModeNavigation EditorMode = iota
+	EditorModeInsert
 )
