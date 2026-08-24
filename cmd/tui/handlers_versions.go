@@ -16,23 +16,23 @@ func (a *App) handleVersionsNavigation(msg messages.VersionsNavigationResultMsg)
 		a.statusBar.SetError("No versions found")
 		return a, commands.ClearStatusCmdWithDefaultDuration()
 	}
-	return a, a.pushVersionsScreenWithData(msg.PlanName, msg.Versions)
+	return a, a.pushVersionsScreenWithData(msg.PlanID, msg.PlanName, msg.Versions)
 }
 
 func (a *App) handleRestoreVersion(msg messages.RestoreVersionMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Restoring version...")
-	return a, commands.RestoreVersionCmd(a.ctx, a.service, msg.PlanName, msg.SyncSource, msg.VersionNumber)
+	return a, commands.RestoreVersionCmd(a.ctx, a.service, msg.PlanID, msg.PlanName, msg.VersionNumber)
 }
 
 func (a *App) handleRestoreResult(msg messages.RestoreResultMsg) (tea.Model, tea.Cmd) {
 	if msg.Error != nil {
 		a.statusBar.SetError("Restore failed: " + msg.Error.Error())
-		return a, nil
+		return a, commands.ClearStatusCmdWithDefaultDuration()
 	}
 	a.statusBar.SetSuccess("Version restored successfully")
 	a.popScreen()
 	return a, tea.Batch(
-		commands.SyncPlansCmd(a.ctx, a.service),
-		commands.LoadPlansCmd(a.ctx, a.service),
+		a.reloadPlans(),
+		commands.ClearStatusCmdWithDefaultDuration(),
 	)
 }

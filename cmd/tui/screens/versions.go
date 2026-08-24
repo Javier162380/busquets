@@ -29,6 +29,7 @@ type VersionsScreen struct {
 	layout             types.Layout
 	focus              types.Focus
 	activeModal        types.ModalState
+	planID             int64
 	planName           string
 	searchQuery        string
 	versions           []busquets.PlanVersionDetail
@@ -46,7 +47,7 @@ type VersionsScreen struct {
 }
 
 // NewVersionsScreen creates a new versions screen.
-func NewVersionsScreen(planName, markdownRenderedTheme string, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
+func NewVersionsScreen(planID int64, planName, markdownRenderedTheme string, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
 	panelWidth := (width - 3) / 2
 	contentHeight := height - 4
 
@@ -58,6 +59,7 @@ func NewVersionsScreen(planName, markdownRenderedTheme string, width, height int
 		inputModal:         components.NewInputModal[int](),
 		layout:             types.LayoutSplit,
 		focus:              types.FocusList,
+		planID:             planID,
 		planName:           planName,
 		width:              width,
 		height:             height,
@@ -75,8 +77,8 @@ func NewVersionsScreen(planName, markdownRenderedTheme string, width, height int
 }
 
 // NewVersionsScreenWithData creates a versions screen with pre-loaded data.
-func NewVersionsScreenWithData(planName, markdownRenderedTheme string, versions []busquets.PlanVersionDetail, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
-	s := NewVersionsScreen(planName, markdownRenderedTheme, width, height, isDarkModeEnabled, renderMarkdownByDefault)
+func NewVersionsScreenWithData(planID int64, planName, markdownRenderedTheme string, versions []busquets.PlanVersionDetail, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
+	s := NewVersionsScreen(planID, planName, markdownRenderedTheme, width, height, isDarkModeEnabled, renderMarkdownByDefault)
 	s.versions = versions
 	s.updateListItems()
 	if len(versions) > 0 {
@@ -603,6 +605,7 @@ func (s *VersionsScreen) updateListItems() {
 func (s *VersionsScreen) restoreVersion() tea.Cmd {
 	return func() tea.Msg {
 		return messages.RestoreVersionMsg{
+			PlanID:        s.planID,
 			PlanName:      s.planName,
 			VersionNumber: s.current.VersionNumber,
 		}

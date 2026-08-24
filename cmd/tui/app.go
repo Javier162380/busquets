@@ -364,8 +364,8 @@ func (a *App) popScreen() tea.Cmd { //nolint:unparam // ok for now.
 	return nil
 }
 
-func (a *App) pushVersionsScreenWithData(planName string, versions []busquets.PlanVersionDetail) tea.Cmd {
-	versionsScreen := screens.NewVersionsScreenWithData(planName, a.markdownRenderedTheme, versions, a.width, a.height, a.isDarkModeEnabled, a.renderMarkDownByDefault)
+func (a *App) pushVersionsScreenWithData(planID int64, planName string, versions []busquets.PlanVersionDetail) tea.Cmd {
+	versionsScreen := screens.NewVersionsScreenWithData(planID, planName, a.markdownRenderedTheme, versions, a.width, a.height, a.isDarkModeEnabled, a.renderMarkDownByDefault)
 	a.stack = append(a.stack, versionsScreen)
 	return versionsScreen.Init()
 }

@@ -1607,10 +1607,13 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		require.NoError(t, service.SavePlanVersion(ctx, "restore-test.md", sourcePlansDir, "# Version One\nFirst content"))
 		require.NoError(t, service.SavePlanVersion(ctx, "restore-test.md", sourcePlansDir, "# Version Two\nSecond content"))
 
-		err = service.RestorePlanVersion(ctx, "restore-test.md", sourcePlansDir, 1)
+		plan, err := service.GetPlanByFileName(ctx, "restore-test.md", sourcePlansDir)
 		require.NoError(t, err)
 
-		plan, err := service.GetPlanByFileName(ctx, "restore-test.md", sourcePlansDir)
+		err = service.RestorePlanVersion(ctx, plan.ID, 1)
+		require.NoError(t, err)
+
+		plan, err = service.GetPlanByFileName(ctx, "restore-test.md", sourcePlansDir)
 		require.NoError(t, err)
 		require.Equal(t, "Version One", plan.Title)
 		require.Equal(t, "# Version One\nFirst content", plan.Content)
@@ -1635,7 +1638,15 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.RestorePlanVersion(ctx, "restore-missing.md", sourcePlansDir, 99)
+		plan, err := service.GetPlanByFileName(ctx, "restore-missing.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		err = service.RestorePlanVersion(ctx, plan.ID, 99)
+		require.Error(t, err)
+	})
+
+	t.Run("RestorePlanVersion fails for non-existent plan id", func(t *testing.T) {
+		err := service.RestorePlanVersion(ctx, -1, 1)
 		require.Error(t, err)
 	})
 }

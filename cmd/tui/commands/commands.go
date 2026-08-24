@@ -81,7 +81,13 @@ func LoadVersionsForNavigationCmd(ctx context.Context, svc busquets.UnifiedServi
 		if err != nil {
 			return messages.ErrorMsg{Error: err}
 		}
+
+		var planID int64
+		if len(versions) > 0 {
+			planID = versions[0].PlanID
+		}
 		return messages.VersionsNavigationResultMsg{
+			PlanID:     planID,
 			PlanName:   planName,
 			SyncSource: syncSource,
 			Versions:   versions,
@@ -210,12 +216,12 @@ func SearchVersionsCmd(ctx context.Context, svc busquets.UnifiedService, current
 }
 
 // RestoreVersionCmd restores a plan to a previous version.
-func RestoreVersionCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string, versionNumber int64) tea.Cmd {
+func RestoreVersionCmd(ctx context.Context, svc busquets.UnifiedService, planID int64, planName string, versionNumber int64) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
-		err := svc.RestorePlanVersion(ctx, planName, syncSource, versionNumber)
+		err := svc.RestorePlanVersion(ctx, planID, versionNumber)
 		if err != nil {
 			return messages.RestoreResultMsg{Error: err}
 		}

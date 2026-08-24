@@ -253,6 +253,17 @@ func (r *Repository) GetPlanByFileName(ctx context.Context, fileName, syncSource
 	return planToDomain(p), nil
 }
 
+func (r *Repository) GetPlanByID(ctx context.Context, id int64) (dto.Plan, error) {
+	p, err := r.q.GetPlanByID(ctx, id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return dto.Plan{}, dto.ErrNotFound
+	}
+	if err != nil {
+		return dto.Plan{}, err
+	}
+	return planToDomain(p), nil
+}
+
 func (r *Repository) InsertPlan(ctx context.Context, params dto.InsertPlanParams, writeFile func(id int64) (string, error)) (int64, error) {
 	var id int64
 	err := r.withTx(ctx, func(q *Queries) error {
