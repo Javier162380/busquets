@@ -83,3 +83,30 @@ func TestVersionCopyKeyEmitsCopyMsg(t *testing.T) {
 		})
 	}
 }
+
+func TestVersionRestoreKeyEmitsRestoreMsgWithPlanID(t *testing.T) {
+	versions := []busquets.PlanVersionDetail{
+		{PlanVersion: busquets.PlanVersion{VersionNumber: 2, Content: "# v2\n\nbody", CreatedAt: time.Now()}},
+	}
+
+	for _, tc := range []struct {
+		name  string
+		focus types.Focus
+	}{
+		{"from list", types.FocusList},
+		{"from content", types.FocusContent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := NewVersionsScreenWithData(42, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false)
+			s.focus = tc.focus
+
+			_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})
+			require.NotNil(t, cmd)
+			msg, ok := cmd().(messages.RestoreVersionMsg)
+			require.True(t, ok)
+			require.Equal(t, int64(42), msg.PlanID)
+			require.Equal(t, "plan.md", msg.PlanName)
+			require.Equal(t, int64(2), msg.VersionNumber)
+		})
+	}
+}

@@ -147,8 +147,8 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName, syncSource strin
 // version's content back to the source and viewer files, updates the plan
 // row, and records the restore itself as a new version — atomically via
 // UpdatePlanContent, same as UpdatePlan/SavePlanLocal.
-func (s *Service) RestorePlanVersion(ctx context.Context, planName, syncSource string, versionNumber int64) error {
-	plan, err := s.db.GetPlanByFileName(ctx, planName, syncSource)
+func (s *Service) RestorePlanVersion(ctx context.Context, planID, versionNumber int64) error {
+	plan, err := s.db.GetPlanByID(ctx, planID)
 	if err != nil {
 		return fmt.Errorf("plan not found: %w", err)
 	}
@@ -158,7 +158,7 @@ func (s *Service) RestorePlanVersion(ctx context.Context, planName, syncSource s
 		return fmt.Errorf("version not found: %w", err)
 	}
 
-	sourcePath := filepath.Join(syncSource, planName)
+	sourcePath := filepath.Join(plan.SyncSource, plan.FileName)
 	viewerPath := plan.FilePath
 
 	title := extractTitle(version.Content)
@@ -173,8 +173,8 @@ func (s *Service) RestorePlanVersion(ctx context.Context, planName, syncSource s
 
 	_, err = s.db.UpdatePlanContent(ctx, dto.UpdatePlanContentParams{
 		Plan: dto.UpdatePlanParams{
-			FileName:   planName,
-			SyncSource: syncSource,
+			FileName:   plan.FileName,
+			SyncSource: plan.SyncSource,
 			Title:      title,
 			Content:    contentToStore,
 			IndexedAt:  now,

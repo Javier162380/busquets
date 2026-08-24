@@ -256,6 +256,29 @@ func (q *Queries) GetPlanByFileNameAndSource(ctx context.Context, arg GetPlanByF
 	return i, err
 }
 
+const getPlanByID = `-- name: GetPlanByID :one
+SELECT id, file_name, sync_source, file_path, title, content, created_at, modified_at, indexed_at, file_size, word_count FROM plans WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetPlanByID(ctx context.Context, id int32) (Plan, error) {
+	row := q.db.QueryRow(ctx, getPlanByID, id)
+	var i Plan
+	err := row.Scan(
+		&i.ID,
+		&i.FileName,
+		&i.SyncSource,
+		&i.FilePath,
+		&i.Title,
+		&i.Content,
+		&i.CreatedAt,
+		&i.ModifiedAt,
+		&i.IndexedAt,
+		&i.FileSize,
+		&i.WordCount,
+	)
+	return i, err
+}
+
 const getPlanCommentCounts = `-- name: GetPlanCommentCounts :many
 SELECT plan_id, COUNT(*) AS comment_count FROM plan_comments GROUP BY plan_id
 `

@@ -396,7 +396,6 @@ type VersionErrorMsg struct {
 type RestoreVersionMsg struct {
 	PlanID        int64
 	PlanName      string
-	SyncSource    string
 	VersionNumber int64
 }
 

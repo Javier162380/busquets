@@ -216,12 +216,12 @@ func SearchVersionsCmd(ctx context.Context, svc busquets.UnifiedService, current
 }
 
 // RestoreVersionCmd restores a plan to a previous version.
-func RestoreVersionCmd(ctx context.Context, svc busquets.UnifiedService, planID int64, planName, syncSource string, versionNumber int64) tea.Cmd {
+func RestoreVersionCmd(ctx context.Context, svc busquets.UnifiedService, planID int64, planName string, versionNumber int64) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
-		err := svc.RestorePlanVersion(ctx, planName, syncSource, versionNumber)
+		err := svc.RestorePlanVersion(ctx, planID, versionNumber)
 		if err != nil {
 			return messages.RestoreResultMsg{Error: err}
 		}

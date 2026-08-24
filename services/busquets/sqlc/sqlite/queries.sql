@@ -29,6 +29,9 @@ WHERE file_name = sqlc.arg(old_file_name) AND sync_source = sqlc.arg(sync_source
 -- name: GetPlanByFileNameAndSource :one
 SELECT * FROM plans WHERE file_name = ? AND sync_source = ? LIMIT 1;
 
+-- name: GetPlanByID :one
+SELECT * FROM plans WHERE id = ? LIMIT 1;
+
 -- name: ListAllPlans :many
 SELECT id, file_name, sync_source, title, created_at, modified_at, file_size, word_count
 FROM plans

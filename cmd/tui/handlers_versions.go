@@ -21,7 +21,7 @@ func (a *App) handleVersionsNavigation(msg messages.VersionsNavigationResultMsg)
 
 func (a *App) handleRestoreVersion(msg messages.RestoreVersionMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetLoading("Restoring version...")
-	return a, commands.RestoreVersionCmd(a.ctx, a.service, msg.PlanID, msg.PlanName, msg.SyncSource, msg.VersionNumber)
+	return a, commands.RestoreVersionCmd(a.ctx, a.service, msg.PlanID, msg.PlanName, msg.VersionNumber)
 }
 
 func (a *App) handleRestoreResult(msg messages.RestoreResultMsg) (tea.Model, tea.Cmd) {

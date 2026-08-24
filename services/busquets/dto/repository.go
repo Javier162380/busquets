@@ -11,6 +11,7 @@ type Repository interface {
 	// Plan operations
 	CountPlans(ctx context.Context) (int64, error)
 	GetPlanByFileName(ctx context.Context, fileName, syncSource string) (Plan, error)
+	GetPlanByID(ctx context.Context, id int64) (Plan, error)
 	// InsertPlan inserts a new plan row and, while the transaction is open,
 	// invokes writeFile with the newly assigned id so the caller can write
 	// the id-keyed mirror file, then persists the path writeFile returns —
