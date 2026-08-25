@@ -128,6 +128,8 @@ VERSION HISTORY (left panel):
   Ctrl+L         Clear the version search
   v              View the version fullscreen
   R              Restore the selected version
+  m              Mark/unmark the selected version as the diff base
+  d              Show a unified diff: marked base vs. selected version
   r              Toggle markdown rendering (raw vs rendered)
   l              Toggle line numbers
   c              Copy the version content to clipboard
@@ -138,6 +140,8 @@ VERSION VIEW (fullscreen):
   g / G          Jump to top / bottom
   Tab            Switch to the versions list
   R              Restore this version
+  m              Mark/unmark this version as the diff base
+  d              Show a unified diff: marked base vs. this version
   r              Toggle markdown rendering (raw vs rendered)
   l              Toggle line numbers
   c              Copy the version content to clipboard
@@ -145,6 +149,12 @@ VERSION VIEW (fullscreen):
   /              Search within the version content
   N / P          Jump to next / previous search match
   Ctrl+U         Clear the search highlight
+  Esc            Back to the versions list
+
+VERSION DIFF (fullscreen, d):
+  j/k, ↑/↓       Scroll the diff
+  g / G          Jump to top / bottom
+  c              Copy the diff to clipboard
   Esc            Back to the versions list
 
 CONNECTORS (left panel):

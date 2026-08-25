@@ -17,6 +17,7 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.44
 	github.com/modelcontextprotocol/go-sdk v1.6.0
 	github.com/muesli/termenv v0.16.0
+	github.com/pmezard/go-difflib v1.0.0
 	github.com/pressly/goose/v3 v3.27.1
 	github.com/stretchr/testify v1.11.1
 	github.com/testcontainers/testcontainers-go v0.42.0
@@ -89,7 +90,6 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.1 // indirect
-	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sahilm/fuzzy v0.1.2 // indirect
