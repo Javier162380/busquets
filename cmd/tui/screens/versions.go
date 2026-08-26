@@ -278,9 +278,6 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 			return s, s.restoreVersion()
 		}
 		return s, nil
-	case "m":
-		s.toggleBaseVersion()
-		return s, nil
 	case "r":
 		s.viewer.ToggleRenderMode()
 		return s, nil
@@ -371,7 +368,9 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 }
 
 // handleDiffKey handles keys while the fullscreen diff view (FocusDiff) is
-// showing, reached from either FocusList or FocusContent via "d".
+// showing, reached from FocusList via "d". Marking a base and diffing are
+// list-only actions — the content view is for reading one version at a
+// time, not comparing two.
 func (s *VersionsScreen) handleDiffKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
 	case "esc":

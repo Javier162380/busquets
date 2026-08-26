@@ -140,8 +140,6 @@ VERSION VIEW (fullscreen):
   g / G          Jump to top / bottom
   Tab            Switch to the versions list
   R              Restore this version
-  m              Mark/unmark this version as the diff base
-  d              Show a unified diff: marked base vs. this version
   r              Toggle markdown rendering (raw vs rendered)
   l              Toggle line numbers
   c              Copy the version content to clipboard
