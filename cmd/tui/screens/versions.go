@@ -281,8 +281,6 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 	case "m":
 		s.toggleBaseVersion()
 		return s, nil
-	case "d":
-		return s, s.diffAgainstBase()
 	case "r":
 		s.viewer.ToggleRenderMode()
 		return s, nil
@@ -731,7 +729,13 @@ func (s *VersionsScreen) diffAgainstBase() tea.Cmd {
 		}
 	}
 
-	s.diffPlain = buildUnifiedDiff(s.baseVersion, s.current)
+	diffText, err := buildUnifiedDiff(s.baseVersion, s.current)
+	if err != nil {
+		return func() tea.Msg {
+			return messages.ErrorMsg{Error: fmt.Errorf("failed to build diff: %w", err)}
+		}
+	}
+	s.diffPlain = diffText
 	s.diffViewport = viewport.New(s.width-4, s.height-8)
 	s.diffViewport.SetContent(colorizeDiff(s.diffPlain))
 	s.focus = types.FocusDiff
@@ -749,7 +753,7 @@ func (s *VersionsScreen) copyDiff() tea.Cmd {
 
 // buildUnifiedDiff renders a git-diff-style unified diff of base's content
 // against target's.
-func buildUnifiedDiff(base, target *busquets.PlanVersionDetail) string {
+func buildUnifiedDiff(base, target *busquets.PlanVersionDetail) (string, error) {
 	ud := difflib.UnifiedDiff{
 		A:        difflib.SplitLines(base.Content),
 		B:        difflib.SplitLines(target.Content),
@@ -757,8 +761,7 @@ func buildUnifiedDiff(base, target *busquets.PlanVersionDetail) string {
 		ToFile:   fmt.Sprintf("Version %d", target.VersionNumber),
 		Context:  3,
 	}
-	text, _ := difflib.GetUnifiedDiffString(ud)
-	return text
+	return difflib.GetUnifiedDiffString(ud)
 }
 
 // colorizeDiff applies git-diff-style coloring to a unified diff: green
