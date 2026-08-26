@@ -86,6 +86,24 @@ var (
 				Background(SearchCurrentMatchColor).
 				Foreground(lipgloss.Color("0")).
 				Bold(true)
+
+	// DiffAddStyle renders an added line in a unified diff. Foreground-only
+	// (not bold) so a full diff of many lines stays readable rather than
+	// shouting on every line.
+	DiffAddStyle = lipgloss.NewStyle().
+			Foreground(SuccessColor)
+
+	// DiffRemoveStyle renders a removed line in a unified diff.
+	DiffRemoveStyle = lipgloss.NewStyle().
+			Foreground(ErrorColor)
+
+	// DiffHeaderStyle renders a diff's "---"/"+++" file header lines.
+	DiffHeaderStyle = lipgloss.NewStyle().
+			Bold(true)
+
+	// DiffHunkStyle renders a diff's "@@ ... @@" hunk header lines.
+	DiffHunkStyle = lipgloss.NewStyle().
+			Foreground(AccentColor)
 )
 
 // StatusStyle returns a style for the status bar.

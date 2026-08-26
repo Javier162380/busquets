@@ -12,8 +12,10 @@ import (
 	"github.com/Javier162380/busquets/cmd/tui/types"
 	"github.com/Javier162380/busquets/services/busquets"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/pmezard/go-difflib/difflib"
 )
 
 // VersionsScreen handles version history browsing and viewing.
@@ -35,6 +37,11 @@ type VersionsScreen struct {
 	versions           []busquets.PlanVersionDetail
 	current            *busquets.PlanVersionDetail
 	pendingSearchError error // Set by the content-search onSubmit callback when a query has no matches; consumed by handleContentSearchModalUpdate.
+
+	// Diff state.
+	baseVersion  *busquets.PlanVersionDetail // marked diff base, nil if none marked
+	diffViewport viewport.Model              // scrollable rendered diff (colored)
+	diffPlain    string                      // same diff, no ANSI — used for clipboard copy
 
 	// Dimensions.
 	width  int
@@ -165,6 +172,8 @@ func (s *VersionsScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 		return s.handleContentKey(key, msg)
 	case types.FocusSearch:
 		return s.handleSearchKey(key, msg)
+	case types.FocusDiff:
+		return s.handleDiffKey(key, msg)
 	default:
 		return s, nil
 	}
@@ -216,6 +225,11 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 			return s, s.restoreVersion()
 		}
 		return s, nil
+	case "m":
+		s.toggleBaseVersion()
+		return s, nil
+	case "d":
+		return s, s.diffAgainstBase()
 	case "r":
 		s.viewer.ToggleRenderMode()
 	case "l":
@@ -353,6 +367,34 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 	return s, s.viewer.Update(msg)
 }
 
+// handleDiffKey handles keys while the fullscreen diff view (FocusDiff) is
+// showing, reached from FocusList via "d". Marking a base and diffing are
+// list-only actions — the content view is for reading one version at a
+// time, not comparing two.
+func (s *VersionsScreen) handleDiffKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
+	switch key {
+	case "esc":
+		s.layout = types.LayoutSplit
+		s.focus = types.FocusList
+		return s, nil
+	case "g":
+		s.diffViewport.GotoTop()
+		return s, nil
+	case "G":
+		s.diffViewport.GotoBottom()
+		return s, nil
+	case "c":
+		if s.baseVersion != nil && s.current != nil {
+			return s, s.copyDiff()
+		}
+		return s, nil
+	}
+
+	var cmd tea.Cmd
+	s.diffViewport, cmd = s.diffViewport.Update(msg)
+	return s, cmd
+}
+
 // handleContentSearchModalUpdate routes messages while the content search
 // modal is active. Mirrors PlansScreen.handleContentSearchModalUpdate:
 // Esc is intercepted before delegating to the modal so it also clears the
@@ -413,6 +455,10 @@ func (s *VersionsScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, te
 
 // View renders the screen.
 func (s *VersionsScreen) View() string {
+	if s.focus == types.FocusDiff {
+		return s.renderDiffView()
+	}
+
 	var mainContent string
 
 	switch s.layout {
@@ -487,6 +533,20 @@ func (s *VersionsScreen) renderFullscreenViewer() string {
 		Render(s.viewer.View())
 }
 
+// renderDiffView renders the fullscreen unified-diff view. Mirrors
+// renderFullscreenViewer's sizing so the diff occupies the same footprint as
+// a fullscreen version view.
+func (s *VersionsScreen) renderDiffView() string {
+	contentHeight := s.height - 4
+	s.diffViewport.Width = s.width - 4
+	s.diffViewport.Height = contentHeight - 4
+
+	return s.borderStyle.
+		Width(s.width).
+		Height(contentHeight).
+		Render(s.diffViewport.View())
+}
+
 // renderDivider renders a vertical divider.
 func (s *VersionsScreen) renderDivider(height int) string {
 	var sb strings.Builder
@@ -545,6 +605,10 @@ func (s *VersionsScreen) getViewerWidth() int {
 
 // ShortHelp returns key binding help.
 func (s *VersionsScreen) ShortHelp() string {
+	if s.focus == types.FocusDiff {
+		return "j/k, ↑/↓: scroll | g/G: top/bottom | c: copy diff | esc: back"
+	}
+
 	mode := "RAW"
 	if s.viewer.RenderMode() == components.RenderModeGlamour {
 		mode = "RENDERED"
@@ -559,7 +623,11 @@ func (s *VersionsScreen) ShortHelp() string {
 		if s.searchQuery != "" {
 			searchHelp = fmt.Sprintf("/: search | ctrl+l: clear [%s]", s.searchQuery)
 		}
-		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back | Versions: %d", mode, lines, searchHelp, len(s.versions))
+		baseHelp := "m: mark base"
+		if s.baseVersion != nil {
+			baseHelp = fmt.Sprintf("m: unmark base [v%d] | d: diff vs base", s.baseVersion.VersionNumber)
+		}
+		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | %s | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back | Versions: %d", baseHelp, mode, lines, searchHelp, len(s.versions))
 	case types.FocusContent:
 		if s.layout != types.LayoutFullscreen {
 			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | esc: back", mode, lines)
@@ -591,8 +659,12 @@ func (s *VersionsScreen) EditorMode() bool {
 func (s *VersionsScreen) updateListItems() {
 	items := make([]components.ListItem, len(s.versions))
 	for i, version := range s.versions {
+		title := fmt.Sprintf("Version %d", version.VersionNumber)
+		if s.baseVersion != nil && s.baseVersion.VersionNumber == version.VersionNumber {
+			title = "● " + title
+		}
 		items[i] = components.NewListItem(
-			fmt.Sprintf("Version %d", version.VersionNumber),
+			title,
 			fmt.Sprintf("%s | %d min read | Path: %s", version.CreatedAt.Format("2006-01-02 15:04"), version.ReadingTime, version.PlanVersion.FilePath),
 			version,
 		)
@@ -619,6 +691,98 @@ func (s *VersionsScreen) copyVersion() tea.Cmd {
 			Label: fmt.Sprintf("Version %d", s.current.VersionNumber),
 		}
 	}
+}
+
+// toggleBaseVersion marks s.current as the diff base, moves the mark to it
+// if a different version was already marked, or unmarks it if it's already
+// the base. No-op when nothing is selected.
+func (s *VersionsScreen) toggleBaseVersion() {
+	if s.current == nil {
+		return
+	}
+	if s.baseVersion != nil && s.baseVersion.VersionNumber == s.current.VersionNumber {
+		s.baseVersion = nil
+	} else {
+		base := *s.current
+		s.baseVersion = &base
+	}
+	s.updateListItems()
+}
+
+// diffAgainstBase builds a unified diff of the marked base version against
+// s.current and switches into the fullscreen diff view. Returns an
+// messages.ErrorMsg command (routed to the status bar by App) when no base
+// is marked or the base and current version are the same.
+func (s *VersionsScreen) diffAgainstBase() tea.Cmd {
+	if s.baseVersion == nil {
+		return func() tea.Msg {
+			return messages.ErrorMsg{Error: fmt.Errorf("mark a base version first (m)")}
+		}
+	}
+	if s.current == nil {
+		return nil
+	}
+	if s.baseVersion.VersionNumber == s.current.VersionNumber {
+		return func() tea.Msg {
+			return messages.ErrorMsg{Error: fmt.Errorf("select a different version to diff against the base")}
+		}
+	}
+
+	diffText, err := buildUnifiedDiff(s.baseVersion, s.current)
+	if err != nil {
+		return func() tea.Msg {
+			return messages.ErrorMsg{Error: fmt.Errorf("failed to build diff: %w", err)}
+		}
+	}
+	s.diffPlain = diffText
+	s.diffViewport = viewport.New(s.width-4, s.height-8)
+	s.diffViewport.SetContent(colorizeDiff(s.diffPlain))
+	s.focus = types.FocusDiff
+	return nil
+}
+
+func (s *VersionsScreen) copyDiff() tea.Cmd {
+	return func() tea.Msg {
+		return messages.CopyToClipboardMsg{
+			Text:  s.diffPlain,
+			Label: fmt.Sprintf("Diff v%d→v%d", s.baseVersion.VersionNumber, s.current.VersionNumber),
+		}
+	}
+}
+
+// buildUnifiedDiff renders a git-diff-style unified diff of base's content
+// against target's.
+func buildUnifiedDiff(base, target *busquets.PlanVersionDetail) (string, error) {
+	ud := difflib.UnifiedDiff{
+		A:        difflib.SplitLines(base.Content),
+		B:        difflib.SplitLines(target.Content),
+		FromFile: fmt.Sprintf("Version %d", base.VersionNumber),
+		ToFile:   fmt.Sprintf("Version %d", target.VersionNumber),
+		Context:  3,
+	}
+	return difflib.GetUnifiedDiffString(ud)
+}
+
+// colorizeDiff applies git-diff-style coloring to a unified diff: green
+// additions, red removals, bold file headers, accent-colored hunk headers.
+func colorizeDiff(diff string) string {
+	rawLines := strings.Split(diff, "\n")
+	lines := make([]string, len(rawLines))
+	for i, line := range rawLines {
+		switch {
+		case strings.HasPrefix(line, "+++"), strings.HasPrefix(line, "---"):
+			lines[i] = styles.DiffHeaderStyle.Render(line)
+		case strings.HasPrefix(line, "@@"):
+			lines[i] = styles.DiffHunkStyle.Render(line)
+		case strings.HasPrefix(line, "+"):
+			lines[i] = styles.DiffAddStyle.Render(line)
+		case strings.HasPrefix(line, "-"):
+			lines[i] = styles.DiffRemoveStyle.Render(line)
+		default:
+			lines[i] = line
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // Message types for versions screen.

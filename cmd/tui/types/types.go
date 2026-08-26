@@ -22,6 +22,7 @@ const (
 	FocusCommentList               // Navigating the comment list in the comment modal.
 	FocusCommentInput              // Composing a new comment in the comment modal.
 	FocusLabelPanel                // Left-side sync-label navigation panel.
+	FocusDiff                      // Viewing a fullscreen version diff (VersionsScreen).
 )
 
 // ModalState tracks which overlay is currently active on a screen
