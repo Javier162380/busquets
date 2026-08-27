@@ -88,6 +88,46 @@ func TestEditorJumpToLineScrollsViewport(t *testing.T) {
 	require.Equal(t, want, e.View())
 }
 
+// TestEditorDeleteCurrentLine guards against a regression where a single
+// KeyDelete from Home only removed the line break — which fully deletes an
+// already-empty line (nothing else to remove) but, on a line with content,
+// only ate the first character and left the rest of the line behind merged
+// into the next one.
+func TestEditorDeleteCurrentLine(t *testing.T) {
+	newEditorAt := func(t *testing.T, content string, line int) *Editor {
+		t.Helper()
+		e := NewEditor(80, 10)
+		e.SetContent(content)
+		e.Focus()
+		e.JumpToLine(line)
+		return e
+	}
+
+	t.Run("deletes a non-empty middle line, content included", func(t *testing.T) {
+		e := newEditorAt(t, "line 1\nline 2\nline 3", 2)
+		e.DeleteCurrentLine()
+		require.Equal(t, "line 1\nline 3", e.Content())
+	})
+
+	t.Run("deletes an already-empty line", func(t *testing.T) {
+		e := newEditorAt(t, "line 1\n\nline 3", 2)
+		e.DeleteCurrentLine()
+		require.Equal(t, "line 1\nline 3", e.Content())
+	})
+
+	t.Run("deletes the last line by merging into the previous one", func(t *testing.T) {
+		e := newEditorAt(t, "line 1\nline 2", 2)
+		e.DeleteCurrentLine()
+		require.Equal(t, "line 1", e.Content())
+	})
+
+	t.Run("deletes the only line, leaving the document empty", func(t *testing.T) {
+		e := newEditorAt(t, "only line", 1)
+		e.DeleteCurrentLine()
+		require.Equal(t, "", e.Content())
+	})
+}
+
 func TestEditorMarkSaved(t *testing.T) {
 	t.Run("does not touch the current textarea value", func(t *testing.T) {
 		e := NewEditor(80, 10)
