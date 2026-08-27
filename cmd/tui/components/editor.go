@@ -216,17 +216,12 @@ func (e *Editor) LineCount() int {
 }
 
 // DeleteCurrentLine deletes the entire line where the cursor is positioned,
-// content included. A single KeyDelete from Home only removes the line
-// break (correct for an already-empty line, which is why that alone looked
-// like it worked), so a non-empty line needs its content cleared first.
+// content included.
 func (e *Editor) DeleteCurrentLine() {
 	beforeLines := e.LineCount()
 	isLastLine := e.CurrentLine() == beforeLines
 
-	// Go to start of current line, then clear it. ctrl+k (DeleteAfterCursor)
-	// clears the row's text when it has any; when the row is already empty,
-	// bubbles' own textarea instead merges the next line up as a shortcut,
-	// which already fully removes the line — see the LineCount check below.
+	// Go to start of current line, then clear it. ctrl+k (DeleteAfterCursor).
 	e.textarea, _ = e.textarea.Update(tea.KeyMsg{Type: tea.KeyHome})
 	e.textarea, _ = e.textarea.Update(tea.KeyMsg{Type: tea.KeyCtrlK})
 
@@ -234,9 +229,7 @@ func (e *Editor) DeleteCurrentLine() {
 		// The row is cleared but still present (ctrl+k didn't merge it away
 		// on its own, meaning it had content to clear) — merge it into a
 		// neighbor so it disappears: pull the next line up, or on the last
-		// line, join into the previous one (nothing below to pull up). If
-		// this is also the only line, both merges are safe no-ops and it's
-		// left empty.
+		// line, join into the previous one (nothing below to pull up).
 		if isLastLine {
 			e.textarea, _ = e.textarea.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 		} else {
