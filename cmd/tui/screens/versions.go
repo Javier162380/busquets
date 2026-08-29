@@ -26,6 +26,7 @@ type VersionsScreen struct {
 	searchBar          *components.SearchBar
 	contentSearchModal *components.InputModal[string]
 	inputModal         *components.InputModal[int]
+	metadataModal      *components.MetadataModal
 
 	// State.
 	layout             types.Layout
@@ -64,6 +65,7 @@ func NewVersionsScreen(planID int64, planName, markdownRenderedTheme string, wid
 		searchBar:          components.NewSearchBar(panelWidth),
 		contentSearchModal: components.NewInputModal[string](),
 		inputModal:         components.NewInputModal[int](),
+		metadataModal:      components.NewMetadataModal(),
 		layout:             types.LayoutSplit,
 		focus:              types.FocusList,
 		planID:             planID,
@@ -114,6 +116,8 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s.handleContentSearchModalUpdate(msg)
 	case types.ModalTextInput:
 		return s.handleInputModalUpdate(msg)
+	case types.ModalMetadata:
+		return s.handleMetadataModalUpdate(msg)
 	default:
 		// ModalNone (the only other value VersionsScreen ever sets): handle normally below
 	}
@@ -227,6 +231,21 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 		return s, nil
 	case "m":
 		s.toggleBaseVersion()
+		return s, nil
+	case "M":
+		if s.current != nil {
+			s.activeModal = types.ModalMetadata
+			s.metadataModal.SetSize(min(60, s.width-4), min(16, s.height-2))
+			s.metadataModal.Open(
+				fmt.Sprintf("Version %d Metadata", s.current.VersionNumber),
+				[]components.MetadataRow{
+					{Label: "Source Path", Value: s.current.FilePath, Copyable: true},
+					{Label: "Size in Bytes", Value: strconv.Itoa(len(s.current.Content))},
+					{Label: "Reading Time", Value: fmt.Sprintf("%d min", s.current.ReadingTime)},
+					{Label: "Created At", Value: s.current.CreatedAt.Format("2006-01-02 15:04")},
+				},
+			)
+		}
 		return s, nil
 	case "d":
 		return s, s.diffAgainstBase()
@@ -429,6 +448,15 @@ func (s *VersionsScreen) handleInputModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
 	return s, cmd
 }
 
+// handleMetadataModalUpdate routes messages while the metadata modal is active.
+func (s *VersionsScreen) handleMetadataModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
+	cmd := s.metadataModal.Update(msg)
+	if !s.metadataModal.IsActive() {
+		s.activeModal = types.ModalNone
+	}
+	return s, cmd
+}
+
 // handleSearchKey handles keys in search mode.
 func (s *VersionsScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
@@ -479,6 +507,9 @@ func (s *VersionsScreen) View() string {
 
 	case types.ModalTextInput:
 		overlay := lipgloss.Place(s.width, s.height, lipgloss.Center, lipgloss.Center, s.inputModal.View())
+		return overlayContent(mainContent, overlay)
+	case types.ModalMetadata:
+		overlay := lipgloss.Place(s.width, s.height, lipgloss.Center, lipgloss.Center, s.metadataModal.View())
 		return overlayContent(mainContent, overlay)
 	default:
 		return mainContent
@@ -627,7 +658,7 @@ func (s *VersionsScreen) ShortHelp() string {
 		if s.baseVersion != nil {
 			baseHelp = fmt.Sprintf("m: unmark base [v%d] | d: diff vs base", s.baseVersion.VersionNumber)
 		}
-		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | %s | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back | Versions: %d", baseHelp, mode, lines, searchHelp, len(s.versions))
+		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | %s | M: metadata | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back | Versions: %d", baseHelp, mode, lines, searchHelp, len(s.versions))
 	case types.FocusContent:
 		if s.layout != types.LayoutFullscreen {
 			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | esc: back", mode, lines)

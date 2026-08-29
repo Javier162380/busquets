@@ -2,6 +2,7 @@ package screens
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -37,6 +38,7 @@ type PlansScreen struct {
 	renameModal        *components.RenameModal
 	inputModal         *components.InputModal[int]
 	contentSearchModal *components.InputModal[string]
+	metadataModal      *components.MetadataModal
 
 	// State.
 	layout types.Layout
@@ -89,6 +91,7 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 		renameModal:        components.NewRenameModal(),
 		inputModal:         components.NewInputModal[int](),
 		contentSearchModal: components.NewInputModal[string](),
+		metadataModal:      components.NewMetadataModal(),
 		tagFilter:          components.NewTagFilter(panelWidth),
 		layout:             types.LayoutSplit,
 		baseLayout:         types.LayoutSplit,
@@ -156,6 +159,8 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s.handleInputModalUpdate(msg)
 	case types.ModalContentSearch:
 		return s.handleContentSearchModalUpdate(msg)
+	case types.ModalMetadata:
+		return s.handleMetadataModalUpdate(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -592,6 +597,23 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		return s, func() tea.Msg {
 			return messages.OpenSettingsMsg{}
 		}
+
+	case "M":
+		if s.current != nil {
+			s.activeModal = types.ModalMetadata
+			s.metadataModal.SetSize(min(60, s.width-4), min(18, s.height-2))
+			s.metadataModal.Open(
+				"Plan Metadata",
+				[]components.MetadataRow{
+					{Label: "Source Path", Value: filepath.Join(s.current.SyncSource, s.current.FileName), Copyable: true},
+					{Label: "Destination Path", Value: s.current.FilePath, Copyable: true},
+					{Label: "Size in Bytes", Value: strconv.FormatInt(s.current.FileSize, 10)},
+					{Label: "Reading Time", Value: fmt.Sprintf("%d min", s.current.ReadingTime)},
+					{Label: "Modified At", Value: s.current.ModifiedAt.Format("2006-01-02 15:04")},
+				},
+			)
+		}
+		return s, nil
 
 	case "C":
 		return s, func() tea.Msg {
@@ -1109,6 +1131,15 @@ func (s *PlansScreen) handleRenameModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
 	return s, cmd
 }
 
+// handleMetadataModalUpdate routes messages while the metadata modal is active.
+func (s *PlansScreen) handleMetadataModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
+	cmd := s.metadataModal.Update(msg)
+	if !s.metadataModal.IsActive() {
+		s.activeModal = types.ModalNone
+	}
+	return s, cmd
+}
+
 // handleInputModalUpdate routes messages while the generic input modal is active.
 func (s *PlansScreen) handleInputModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
 	cmd := s.inputModal.Update(msg)
@@ -1256,6 +1287,16 @@ func (s *PlansScreen) View() string {
 			lipgloss.Left,
 			lipgloss.Top,
 			s.contentSearchModal.View(),
+		)
+		return overlayContent(mainContent, overlay)
+
+	case types.ModalMetadata:
+		overlay := lipgloss.Place(
+			s.width,
+			s.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			s.metadataModal.View(),
 		)
 		return overlayContent(mainContent, overlay)
 	}
@@ -1662,7 +1703,7 @@ func (s *PlansScreen) ShortHelp() string {
 		case s.labelPanel != nil:
 			tagNav = "shift+tab: labels | "
 		}
-		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | n: comments | r: rsync | d: dump | D: delete | R: rename | c: copy | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
+		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | n: comments | r: rsync | d: dump | D: delete | R: rename | M: metadata | c: copy | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
 	case types.FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeGlamour {

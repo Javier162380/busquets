@@ -256,27 +256,6 @@ func (s *Service) GetReadingSpeedForDisplay(ctx context.Context) int {
 	return int(setting.GetNumberValue())
 }
 
-// ValidateDateTimeValue validates ISO 8601 format datetime strings.
-// Returns parsed time.Time or error.
-func ValidateDateTimeValue(value string) (time.Time, error) {
-	// Try ISO 8601 formats
-	formats := []string{
-		time.RFC3339,          // "2024-03-15T10:30:00Z"
-		time.RFC3339Nano,      // "2024-03-15T10:30:00.000Z"
-		"2006-01-02",          // "2024-03-15"
-		"2006-01-02T15:04:05", // "2024-03-15T10:30:00"
-	}
-
-	for _, format := range formats {
-		t, err := time.Parse(format, value)
-		if err == nil {
-			return t, nil
-		}
-	}
-
-	return time.Time{}, dto.ErrInvalidDateFormat
-}
-
 // validateNumberValue validates numeric values with optional bounds.
 func validateNumberValue(value float64) error {
 	// Add specific validation for reading speed WPM if needed
