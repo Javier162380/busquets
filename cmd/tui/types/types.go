@@ -37,6 +37,7 @@ const (
 	ModalRenameFile               // rename-plan-file modal
 	ModalTextInput                // generic single-field input modal (e.g. go-to-line)
 	ModalContentSearch            // content search modal (viewer search)
+	ModalMetadata                 // metadata popup (paths, size, reading time, timestamps)
 )
 
 type EditorMode int

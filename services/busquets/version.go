@@ -272,11 +272,6 @@ func (s *Service) SearchVersions(ctx context.Context, planName, syncSource, quer
 		return nil, fmt.Errorf("search failed: %w", err)
 	}
 
-	tags, err := s.db.GetPlanTags(ctx, plan.ID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get plan tags: %w", err)
-	}
-
 	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
 
 	planVersionsDetail := make([]PlanVersionDetail, len(versions))
@@ -293,7 +288,7 @@ func (s *Service) SearchVersions(ctx context.Context, planName, syncSource, quer
 		planVersionsDetail[i] = PlanVersionDetail{
 			PlanVersion: planVersion,
 			ReadingTime: s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM),
-			Tags:        toTags(tags),
+			Tags:        toTags(plan.Tags),
 		}
 	}
 
