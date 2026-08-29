@@ -1208,72 +1208,26 @@ func (s *PlansScreen) View() string {
 		help := styles.MutedStyle.Render("s: save as comment  q/esc: close")
 		popup := lipgloss.JoinVertical(lipgloss.Left, title, panel, help)
 
-		overlay := lipgloss.Place(
-			s.width,
-			s.height,
-			lipgloss.Center,
-			lipgloss.Center,
-			popup,
-		)
-
-		return overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, popup)
 
 	case types.ModalTagManager:
-		modal := s.tagModal.View()
-
-		overlay := lipgloss.Place(
-			s.width,
-			s.height,
-			lipgloss.Center,
-			lipgloss.Center,
-			modal,
-		)
-
-		mainContent = overlayContent(mainContent, overlay)
+		mainContent = overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.tagModal.View())
 
 		// Overlay confirm dialog on top of the tag modal when active.
 		if s.confirmDialog.IsActive() {
-			dialogOverlay := lipgloss.Place(
-				s.width,
-				s.height,
-				lipgloss.Center,
-				lipgloss.Center,
-				s.confirmDialog.View(),
-			)
-			return overlayContent(mainContent, dialogOverlay)
+			return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.confirmDialog.View())
 		}
 
 		return mainContent
 
 	case types.ModalComment:
-		overlay := lipgloss.Place(
-			s.width,
-			s.height,
-			lipgloss.Center,
-			lipgloss.Center,
-			s.commentModal.View(),
-		)
-		return overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.commentModal.View())
 
 	case types.ModalRenameFile:
-		overlay := lipgloss.Place(
-			s.width,
-			s.height,
-			lipgloss.Center,
-			lipgloss.Center,
-			s.renameModal.View(),
-		)
-		return overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.renameModal.View())
 
 	case types.ModalTextInput:
-		overlay := lipgloss.Place(
-			s.width,
-			s.height,
-			lipgloss.Center,
-			lipgloss.Center,
-			s.inputModal.View(),
-		)
-		return overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.inputModal.View())
 
 	case types.ModalContentSearch:
 		// height-1, not height: App.View() appends one more row below this
@@ -1281,35 +1235,14 @@ func (s *PlansScreen) View() string {
 		// overlay placed against the full height overflows the terminal by
 		// one row — since row 0 is the box's own top border, that row is
 		// what scrolls off first.
-		overlay := lipgloss.Place(
-			s.width,
-			s.height-1,
-			lipgloss.Left,
-			lipgloss.Top,
-			s.contentSearchModal.View(),
-		)
-		return overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, s.width, s.height-1, lipgloss.Left, lipgloss.Top, s.contentSearchModal.View())
 
 	case types.ModalMetadata:
-		overlay := lipgloss.Place(
-			s.width,
-			s.height,
-			lipgloss.Center,
-			lipgloss.Center,
-			s.metadataModal.View(),
-		)
-		return overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.metadataModal.View())
 	}
 
 	if s.confirmDialog.IsActive() {
-		overlay := lipgloss.Place(
-			s.width,
-			s.height,
-			lipgloss.Center,
-			lipgloss.Center,
-			s.confirmDialog.View(),
-		)
-		return overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.confirmDialog.View())
 	}
 
 	return mainContent

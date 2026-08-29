@@ -502,15 +502,12 @@ func (s *VersionsScreen) View() string {
 		// this screen's own View() output, so a Top-aligned overlay placed
 		// against the full height overflows the terminal by one row —
 		// scrolling the box's own top border (row 0) off screen.
-		overlay := lipgloss.Place(s.width, s.height-1, lipgloss.Left, lipgloss.Top, s.contentSearchModal.View())
-		return overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, s.width, s.height-1, lipgloss.Left, lipgloss.Top, s.contentSearchModal.View())
 
 	case types.ModalTextInput:
-		overlay := lipgloss.Place(s.width, s.height, lipgloss.Center, lipgloss.Center, s.inputModal.View())
-		return overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.inputModal.View())
 	case types.ModalMetadata:
-		overlay := lipgloss.Place(s.width, s.height, lipgloss.Center, lipgloss.Center, s.metadataModal.View())
-		return overlayContent(mainContent, overlay)
+		return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.metadataModal.View())
 	default:
 		return mainContent
 	}
