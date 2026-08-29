@@ -50,7 +50,7 @@ func overlayContent(base string, width, height int, hPos, vPos lipgloss.Position
 	for _, l := range overlayLines {
 		if w := ansi.StringWidth(l); w > contentWidth {
 			contentWidth = w
-			if contentWidth >= width { // gap can't go positive again past here
+			if contentWidth >= width {
 				break
 			}
 		}
@@ -120,9 +120,9 @@ func spliceRow(base string, xOffset int, overlayLine string, overlayWidth int) s
 // PlaceHorizontal/PlaceVertical math bit-for-bit.
 func placePad(totalGap int, pos lipgloss.Position) int {
 	switch pos {
-	case lipgloss.Left: // == lipgloss.Top (0.0)
+	case lipgloss.Left:
 		return 0
-	case lipgloss.Right: // == lipgloss.Bottom (1.0)
+	case lipgloss.Right:
 		return totalGap
 	default:
 		v := math.Min(1, math.Max(0, float64(pos)))
