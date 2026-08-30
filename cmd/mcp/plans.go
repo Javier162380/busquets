@@ -14,7 +14,10 @@ func (h *Handler) registerPlanTools() error {
 	mcp.AddTool(h.server, &mcp.Tool{
 		Name:        "search_plans",
 		Description: "Search LLM/AI-assistant plan files by text content and/or tags. Returns plan summaries with metadata in TOON format. Use empty query to list all plans. Tag filtering supports AND (matchAll=true) or OR (matchAll=false) logic. Limit parameter: default=20, max=50.",
-	}, h.SearchPlansHandler)
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args SearchPlansArgs) (*mcp.CallToolResult, any, error) {
+		res, _, err := h.SearchPlansHandler(ctx, req, args)
+		return res, nil, err
+	})
 
 	mcp.AddTool(h.server, &mcp.Tool{
 		Name:        "get_plan",
@@ -24,7 +27,10 @@ func (h *Handler) registerPlanTools() error {
 	mcp.AddTool(h.server, &mcp.Tool{
 		Name:        "list_tools",
 		Description: "List all available MCP tools with descriptions and parameters. Useful for discovering capabilities.",
-	}, h.ListToolsHandler)
+	}, func(ctx context.Context, req *mcp.CallToolRequest, args struct{}) (*mcp.CallToolResult, any, error) {
+		res, _, err := h.ListToolsHandler(ctx, req, args)
+		return res, nil, err
+	})
 
 	return nil
 }
@@ -81,15 +87,4 @@ func (h *Handler) GetPlanHandler(ctx context.Context, req *mcp.CallToolRequest, 
 	}
 
 	return buildMCPResult(toonOutput), plan, nil
-}
-
-// ListToolsHandler handles the list_tools tool.
-func (h *Handler) ListToolsHandler(ctx context.Context, req *mcp.CallToolRequest, args struct{}) (*mcp.CallToolResult, string, error) {
-	// Format tools list using TOON
-	toonOutput, err := FormatToolsList()
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to format tools: %w", err)
-	}
-
-	return buildMCPResult(toonOutput), toonOutput, nil
 }
