@@ -24,14 +24,6 @@ func (h *Handler) registerPlanTools() error {
 		Description: "Retrieve the full content and metadata of a specific plan file by filename. Returns metadata in TOON format followed by markdown content.",
 	}, h.GetPlanHandler)
 
-	mcp.AddTool(h.server, &mcp.Tool{
-		Name:        "list_tools",
-		Description: "List all available MCP tools with descriptions and parameters. Useful for discovering capabilities.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args struct{}) (*mcp.CallToolResult, any, error) {
-		res, _, err := h.ListToolsHandler(ctx, req, args)
-		return res, nil, err
-	})
-
 	return nil
 }
 
