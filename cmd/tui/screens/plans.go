@@ -904,20 +904,14 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		return s, nil
 
 	case "d":
-		if s.editor.EditorMode() == types.EditorModeNavigation {
-			return s, nil
+		if s.editor.EditorMode() == types.EditorModeInsert {
+			return s, s.editor.Update(msg)
 		}
 
 		// Check for double-key press (dd = delete line).
 		now := time.Now()
 		if s.lastKey == key && now.Sub(s.lastKeyTime) < 500*time.Millisecond {
-			// Double-key detected, remove the first typed character.
 			s.lastKey = ""
-			// Simulate backspace to remove the first character.
-			backspaceMsg := tea.KeyMsg{
-				Type: tea.KeyBackspace,
-			}
-			s.editor.Update(backspaceMsg)
 
 			// Delete the current line using the editor's method.
 			s.editor.DeleteCurrentLine()
@@ -927,22 +921,16 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		// First key press or timeout expired, record and pass to editor.
 		s.lastKey = key
 		s.lastKeyTime = now
-		return s, s.editor.Update(msg)
+		return s, nil
 
 	case "o":
-		if s.editor.EditorMode() == types.EditorModeNavigation {
-			return s, nil
+		if s.editor.EditorMode() == types.EditorModeInsert {
+			return s, s.editor.Update(msg)
 		}
 		// Check for double-key press (oo = new line below).
 		now := time.Now()
 		if s.lastKey == key && now.Sub(s.lastKeyTime) < 500*time.Millisecond {
-			// Double-key detected, remove the first typed character.
 			s.lastKey = ""
-			// Simulate backspace to remove the first character.
-			backspaceMsg := tea.KeyMsg{
-				Type: tea.KeyBackspace,
-			}
-			s.editor.Update(backspaceMsg)
 
 			// Insert new line below using the editor's method.
 			s.editor.InsertNewLineBelow()
@@ -952,7 +940,7 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		// First key press or timeout expired, record and pass to editor.
 		s.lastKey = key
 		s.lastKeyTime = now
-		return s, s.editor.Update(msg)
+		return s, nil
 
 	case "enter":
 		switch {
@@ -1670,9 +1658,9 @@ func (s *PlansScreen) ShortHelp() string {
 
 		switch {
 		case s.editor.EditorMode() == types.EditorModeInsert:
-			return fmt.Sprintf("enter: [NAVIGATION] | ctrl+s: save | ctrl+l: go to line | dd: delete line | oo: new line | esc: cancel%s", modified)
+			return fmt.Sprintf("enter: [NAVIGATION] | ctrl+s: save | ctrl+l: go to line | esc: cancel%s", modified)
 		case s.editor.EditorMode() == types.EditorModeNavigation:
-			return fmt.Sprintf("enter: [INSERT] | ctrl+s: save | ctrl+l: go to line | tt/bb: top/bottom | esc: cancel%s", modified)
+			return fmt.Sprintf("enter: [INSERT] | ctrl+s: save | ctrl+l: go to line | tt/bb: top/bottom | dd: delete line | oo: new line | esc: cancel%s", modified)
 		default:
 			return ""
 		}

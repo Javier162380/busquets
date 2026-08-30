@@ -128,6 +128,35 @@ func TestEditorDeleteCurrentLine(t *testing.T) {
 	})
 }
 
+func TestEditorInsertNewLineBelow(t *testing.T) {
+	newEditorAt := func(t *testing.T, content string, line int) *Editor {
+		t.Helper()
+		e := NewEditor(80, 10)
+		e.SetContent(content)
+		e.Focus()
+		e.JumpToLine(line)
+		return e
+	}
+
+	t.Run("inserts a blank line below a non-empty line", func(t *testing.T) {
+		e := newEditorAt(t, "line 1\nline 2", 1)
+		e.InsertNewLineBelow()
+		require.Equal(t, "line 1\n\nline 2", e.Content())
+	})
+
+	t.Run("inserts a blank line below an already-blank line", func(t *testing.T) {
+		e := newEditorAt(t, "line 1\n\nline 3", 2)
+		e.InsertNewLineBelow()
+		require.Equal(t, "line 1\n\n\nline 3", e.Content())
+	})
+
+	t.Run("inserts a blank line below the last line", func(t *testing.T) {
+		e := newEditorAt(t, "only line", 1)
+		e.InsertNewLineBelow()
+		require.Equal(t, "only line\n", e.Content())
+	})
+}
+
 func TestEditorMarkSaved(t *testing.T) {
 	t.Run("does not touch the current textarea value", func(t *testing.T) {
 		e := NewEditor(80, 10)
