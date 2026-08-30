@@ -911,13 +911,7 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		// Check for double-key press (dd = delete line).
 		now := time.Now()
 		if s.lastKey == key && now.Sub(s.lastKeyTime) < 500*time.Millisecond {
-			// Double-key detected, remove the first typed character.
 			s.lastKey = ""
-			// Simulate backspace to remove the first character.
-			backspaceMsg := tea.KeyMsg{
-				Type: tea.KeyBackspace,
-			}
-			s.editor.Update(backspaceMsg)
 
 			// Delete the current line using the editor's method.
 			s.editor.DeleteCurrentLine()
@@ -936,13 +930,7 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		// Check for double-key press (oo = new line below).
 		now := time.Now()
 		if s.lastKey == key && now.Sub(s.lastKeyTime) < 500*time.Millisecond {
-			// Double-key detected, remove the first typed character.
 			s.lastKey = ""
-			// Simulate backspace to remove the first character.
-			backspaceMsg := tea.KeyMsg{
-				Type: tea.KeyBackspace,
-			}
-			s.editor.Update(backspaceMsg)
 
 			// Insert new line below using the editor's method.
 			s.editor.InsertNewLineBelow()
