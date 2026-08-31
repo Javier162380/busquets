@@ -294,45 +294,85 @@ More testing details.`
 	})
 }
 
-func TestListToolsHandler(t *testing.T) {
+func TestAddPlanComment(t *testing.T) {
 	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
 
-	// Create handler with nil service (not needed for this handler)
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test Plan\n\nContent.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+
 	handler := &Handler{
-		service: nil,
+		service: service,
 		server:  nil,
 	}
 
-	t.Run("successful list tools", func(t *testing.T) {
-		result, output, err := handler.ListToolsHandler(ctx, &mcp.CallToolRequest{}, struct{}{})
-
-		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.NotEmpty(t, output)
-
-		// Verify all tools are listed
-		expectedTools := []string{"search_plans", "get_plan", "list_tools"}
-		for _, tool := range expectedTools {
-			require.Contains(t, output, tool, "output should contain tool %q", tool)
+	t.Run("successful add comment", func(t *testing.T) {
+		args := AddPlanCommentArgs{
+			FileName:   "test-plan.md",
+			SyncSource: sourcePlansDir,
+			Comment:    "looks good",
 		}
 
+		result, comment, err := handler.AddPlanComment(ctx, &mcp.CallToolRequest{}, args)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.NotNil(t, comment)
+		require.Equal(t, "looks good", comment.Content)
 		require.NotEmpty(t, result.Content)
 	})
 
-	t.Run("verify TOON format structure", func(t *testing.T) {
-		result, output, err := handler.ListToolsHandler(ctx, &mcp.CallToolRequest{}, struct{}{})
+	t.Run("empty comment", func(t *testing.T) {
+		args := AddPlanCommentArgs{
+			FileName:   "test-plan.md",
+			SyncSource: sourcePlansDir,
+		}
 
-		require.NoError(t, err)
-		require.NotNil(t, result)
+		result, comment, err := handler.AddPlanComment(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Nil(t, comment)
+		require.Equal(t, "invalid argument, comment can't be empty", err.Error())
+	})
 
-		// Verify it's text content
-		textContent, ok := result.Content[0].(*mcp.TextContent)
-		require.True(t, ok, "result should be TextContent")
-		require.Contains(t, textContent.Text, "tools", "output should contain 'tools' TOON structure")
+	t.Run("empty filename", func(t *testing.T) {
+		args := AddPlanCommentArgs{
+			SyncSource: sourcePlansDir,
+			Comment:    "looks good",
+		}
 
-		// Verify tools have descriptions
-		require.Contains(t, output, "Search plans", "should have search_plans description")
-		require.Contains(t, output, "Retrieve full plan", "should have get_plan description")
-		require.Contains(t, output, "List all available", "should have list_tools description")
+		result, comment, err := handler.AddPlanComment(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Nil(t, comment)
+		require.Equal(t, "fileName is required", err.Error())
+	})
+
+	t.Run("empty sync source", func(t *testing.T) {
+		args := AddPlanCommentArgs{
+			FileName: "test-plan.md",
+			Comment:  "looks good",
+		}
+
+		result, comment, err := handler.AddPlanComment(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Nil(t, comment)
+		require.Equal(t, "syncSource is required", err.Error())
+	})
+
+	t.Run("plan not found", func(t *testing.T) {
+		args := AddPlanCommentArgs{
+			FileName:   "nonexistent-plan.md",
+			SyncSource: sourcePlansDir,
+			Comment:    "looks good",
+		}
+
+		result, comment, err := handler.AddPlanComment(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Nil(t, comment)
+		require.Equal(t, "failed to add comment: failed to get plan: not found", err.Error())
 	})
 }

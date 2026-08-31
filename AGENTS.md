@@ -78,7 +78,7 @@ Service Layer (busquets.Service)
     ↓
 MCP Handler (cmd/mcp) → TOON Formatter → MCP Tools
     ↓
-Tools: search_plans, get_plan, list_tools
+Tools: search_plans, get_plan, add_comment
 ```
 
 **Key Features**: Uses TOON format for 60% token reduction, no business logic in handlers, interface-based service dependency for testability.

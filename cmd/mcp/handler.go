@@ -2,7 +2,6 @@
 package mcp
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/Javier162380/busquets/services/busquets"
@@ -10,17 +9,9 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// planService defines the interface for plan operations needed by MCP handlers.
-type planService interface {
-	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]busquets.PlanSummary, error)
-	GetPlanDetailByFileName(ctx context.Context, fileName, syncSource string) (*busquets.PlanDetail, error)
-	LabelForSource(syncSource string) string
-	SourcePathForLabel(label string) string
-}
-
 // Handler wraps the service and handles MCP protocol concerns.
 type Handler struct {
-	service planService
+	service busquets.UnifiedService
 	server  *mcp.Server
 }
 

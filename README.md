@@ -272,7 +272,7 @@ Enable Claude Code — or any other MCP-capable AI assistant — to directly sea
 **MCP Features:**
 - `search_plans` - Search by text and/or tags with flexible filtering
 - `get_plan` - Retrieve full plan content and metadata
-- `list_tools` - Discover available MCP capabilities
+- `add_comment` - Add a comment to a plan
 - TOON format responses (60% fewer tokens than JSON)
 
 **Use Cases:**

@@ -3,6 +3,7 @@ package mcp
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Javier162380/busquets/services/busquets"
 
@@ -31,13 +32,6 @@ type planDetailTOON struct {
 	FileSize    int64  `toon:"file_size"`
 }
 
-// toolInfo represents a tool for TOON encoding.
-type toolInfo struct {
-	Name        string `toon:"name"`
-	Description string `toon:"description"`
-	Parameters  string `toon:"parameters"`
-}
-
 // planSearchResponse wraps the search results.
 type planSearchResponse struct {
 	Plans []planSummaryTOON `toon:"plans"`
@@ -48,9 +42,16 @@ type planResponse struct {
 	Plan planDetailTOON `toon:"plan"`
 }
 
-// toolsResponse wraps the tools list.
-type toolsResponse struct {
-	Tools []toolInfo `toon:"tools"`
+type addPlanCommentTOON struct {
+	ID        int64     `toon:"id"`
+	PlanID    int64     `toon:"plan_id"`
+	Comment   string    `toon:"comment"`
+	CreatedAt time.Time `toon:"created_at"`
+	UpdatedAt time.Time `toon:"updated_at"`
+}
+
+type planCommentResponse struct {
+	comment addPlanCommentTOON `toon:"comment"`
 }
 
 // FormatSearchResults formats plan summaries using TOON.
@@ -111,34 +112,27 @@ func FormatPlanDetail(plan *busquets.PlanDetail) (string, error) {
 	return sb.String(), nil
 }
 
-// FormatToolsList formats available tools using TOON.
-func FormatToolsList() (string, error) {
-	response := toolsResponse{
-		Tools: []toolInfo{
-			{
-				Name:        "search_plans",
-				Description: "Search plans by text and/or tags",
-				Parameters:  "query(string)|tags(array)|matchAll(bool)|limit(int64,max:50)",
-			},
-			{
-				Name:        "get_plan",
-				Description: "Retrieve full plan content",
-				Parameters:  "fileName(string,required)",
-			},
-			{
-				Name:        "list_tools",
-				Description: "List all available tools",
-				Parameters:  "none",
-			},
-		},
-	}
+func FormatAddPlanComment(planComment busquets.Comment) (string, error) {
+	// TOON comment.
+	comment := planCommentResponse{comment: addPlanCommentTOON{
+		ID:        planComment.ID,
+		PlanID:    planComment.PlanID,
+		CreatedAt: planComment.CreatedAt,
+		UpdatedAt: planComment.UpdatedAt,
+	}}
 
-	encoded, err := toon.Marshal(response)
+	encoded, err := toon.Marshal(comment)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal TOON: %w", err)
 	}
 
-	return string(encoded), nil
+	// Append markdown content
+	var sb strings.Builder
+	sb.WriteString(string(encoded))
+	sb.WriteString("\n\ncomment:\n")
+	sb.WriteString(planComment.Content)
+
+	return sb.String(), nil
 }
 
 // formatTagNames extracts tag names from a Tag slice and joins them.

@@ -13,3 +13,10 @@ type GetPlanArgs struct {
 	FileName   string `json:"fileName"`   // Plan filename (e.g., "my-plan.md")
 	SyncSource string `json:"syncSource"` // Source label as shown in sync_label of search_plans results (e.g., "personal")
 }
+
+// AddPlanCommentArgs contains arguments for the add_plan_comment tool.
+type AddPlanCommentArgs struct {
+	FileName   string `json:"fileName"`
+	SyncSource string `json:"syncSource"`
+	Comment    string `json:"comment"`
+}
