@@ -96,6 +96,8 @@ type Repository interface {
 	RemoveAllTagsFromPlan(ctx context.Context, planID int64) error
 	GetPlanTags(ctx context.Context, planID int64) ([]Tag, error)
 	SetPlanTags(ctx context.Context, planID int64, tagIDs []int64, assignedAt time.Time) error
+	SetPlanTagsAndGet(ctx context.Context, planID int64, tagIDs []int64, assignedAt time.Time) ([]Tag, error)
+	RemoveTagFromPlanAndGet(ctx context.Context, planID, tagID int64) ([]Tag, error)
 	GetTagPlanCounts(ctx context.Context) (map[string]int, error)
 	GetUntaggedPlanCount(ctx context.Context) (int64, error)
 	ListUntaggedPlans(ctx context.Context, sortCol, sortDir string, wpm int) ([]PlanSummary, error)

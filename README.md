@@ -272,7 +272,10 @@ Enable Claude Code — or any other MCP-capable AI assistant — to directly sea
 **MCP Features:**
 - `search_plans` - Search by text and/or tags with flexible filtering
 - `get_plan` - Retrieve full plan content and metadata
-- `add_comment` - Add a comment to a plan
+- `add_comment` / `get_plan_comments` / `delete_comment` - Manage comments on a plan
+- `get_all_tags` / `get_plan_tags` / `set_plan_tags` / `delete_tag` - Manage tags
+- `get_plan_version_history` / `get_plan_version` / `restore_plan_version` - Browse and restore plan versions
+- `sync_plans` / `rsync_plans` - Force a sync from/to the configured source directories
 - TOON format responses (60% fewer tokens than JSON)
 
 **Use Cases:**

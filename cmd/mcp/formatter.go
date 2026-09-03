@@ -13,6 +13,7 @@ import (
 // planSummaryTOON represents a plan summary for TOON encoding.
 type planSummaryTOON struct {
 	FileName    string `toon:"file_name"`
+	SyncSource  string `toon:"sync_source"`
 	SyncLabel   string `toon:"sync_label"`
 	Title       string `toon:"title"`
 	Tags        string `toon:"tags"`
@@ -23,6 +24,7 @@ type planSummaryTOON struct {
 // planDetailTOON represents plan metadata for TOON encoding.
 type planDetailTOON struct {
 	FileName    string `toon:"file_name"`
+	SyncSource  string `toon:"sync_source"`
 	SyncLabel   string `toon:"sync_label"`
 	Title       string `toon:"title"`
 	CreatedAt   string `toon:"created_at"`
@@ -42,7 +44,9 @@ type planResponse struct {
 	Plan planDetailTOON `toon:"plan"`
 }
 
-type addPlanCommentTOON struct {
+// commentTOON represents a comment for TOON encoding. Shared by the single-comment
+// (add_comment) and list (get_plan_comments) responses.
+type commentTOON struct {
 	ID        int64     `toon:"id"`
 	PlanID    int64     `toon:"plan_id"`
 	Comment   string    `toon:"comment"`
@@ -50,8 +54,42 @@ type addPlanCommentTOON struct {
 	UpdatedAt time.Time `toon:"updated_at"`
 }
 
-type planCommentResponse struct {
-	comment addPlanCommentTOON `toon:"comment"`
+type commentResponse struct {
+	Comment commentTOON `toon:"comment"`
+}
+
+type commentsResponse struct {
+	Comments []commentTOON `toon:"comments"`
+}
+
+// tagTOON represents a tag for TOON encoding.
+type tagTOON struct {
+	ID          int64  `toon:"id"`
+	Name        string `toon:"name"`
+	Description string `toon:"description"`
+	Color       string `toon:"color"`
+}
+
+type tagsResponse struct {
+	Tags []tagTOON `toon:"tags"`
+}
+
+// planVersionTOON represents a plan version for TOON encoding.
+type planVersionTOON struct {
+	ID            int64  `toon:"id"`
+	VersionNumber int64  `toon:"version_number"`
+	WordCount     int64  `toon:"word_count"`
+	CreatedAt     string `toon:"created_at"`
+	ReadingTime   string `toon:"reading_time"`
+	Tags          string `toon:"tags"`
+}
+
+type planVersionHistoryResponse struct {
+	Versions []planVersionTOON `toon:"versions"`
+}
+
+type planVersionResponse struct {
+	Version planVersionTOON `toon:"version"`
 }
 
 // FormatSearchResults formats plan summaries using TOON.
@@ -65,6 +103,7 @@ func FormatSearchResults(plans []busquets.PlanSummary) (string, error) {
 	for i, plan := range plans {
 		toonPlans[i] = planSummaryTOON{
 			FileName:    plan.FileName,
+			SyncSource:  plan.SyncSource,
 			SyncLabel:   plan.SyncLabel,
 			Title:       plan.Title,
 			Tags:        formatTagNames(plan.Tags),
@@ -88,6 +127,7 @@ func FormatPlanDetail(plan *busquets.PlanDetail) (string, error) {
 	metadata := planResponse{
 		Plan: planDetailTOON{
 			FileName:    plan.FileName,
+			SyncSource:  plan.SyncSource,
 			SyncLabel:   plan.SyncLabel,
 			Title:       plan.Title,
 			CreatedAt:   plan.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
@@ -112,16 +152,17 @@ func FormatPlanDetail(plan *busquets.PlanDetail) (string, error) {
 	return sb.String(), nil
 }
 
+// FormatAddPlanComment formats a single comment using TOON + its content.
 func FormatAddPlanComment(planComment busquets.Comment) (string, error) {
-	// TOON comment.
-	comment := planCommentResponse{comment: addPlanCommentTOON{
+	wrapped := commentResponse{Comment: commentTOON{
 		ID:        planComment.ID,
 		PlanID:    planComment.PlanID,
+		Comment:   planComment.Content,
 		CreatedAt: planComment.CreatedAt,
 		UpdatedAt: planComment.UpdatedAt,
 	}}
 
-	encoded, err := toon.Marshal(comment)
+	encoded, err := toon.Marshal(wrapped)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal TOON: %w", err)
 	}
@@ -133,6 +174,89 @@ func FormatAddPlanComment(planComment busquets.Comment) (string, error) {
 	sb.WriteString(planComment.Content)
 
 	return sb.String(), nil
+}
+
+// FormatPlanComments formats a list of comments using TOON.
+func FormatPlanComments(comments []busquets.Comment) (string, error) {
+	toonComments := make([]commentTOON, len(comments))
+	for i, c := range comments {
+		toonComments[i] = commentTOON{
+			ID:        c.ID,
+			PlanID:    c.PlanID,
+			Comment:   c.Content,
+			CreatedAt: c.CreatedAt,
+			UpdatedAt: c.UpdatedAt,
+		}
+	}
+
+	encoded, err := toon.Marshal(commentsResponse{Comments: toonComments})
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal TOON: %w", err)
+	}
+
+	return string(encoded), nil
+}
+
+// FormatTags formats a list of tags using TOON.
+func FormatTags(tags []busquets.Tag) (string, error) {
+	toonTags := make([]tagTOON, len(tags))
+	for i, t := range tags {
+		toonTags[i] = tagTOON{
+			ID:          t.ID,
+			Name:        t.Name,
+			Description: derefOrEmpty(t.Description),
+			Color:       derefOrEmpty(t.Color),
+		}
+	}
+
+	encoded, err := toon.Marshal(tagsResponse{Tags: toonTags})
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal TOON: %w", err)
+	}
+
+	return string(encoded), nil
+}
+
+// FormatPlanVersionHistory formats version history (metadata only, no content) using TOON.
+func FormatPlanVersionHistory(versions []busquets.PlanVersionDetail) (string, error) {
+	toonVersions := make([]planVersionTOON, len(versions))
+	for i, v := range versions {
+		toonVersions[i] = toPlanVersionTOON(v)
+	}
+
+	encoded, err := toon.Marshal(planVersionHistoryResponse{Versions: toonVersions})
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal TOON: %w", err)
+	}
+
+	return string(encoded), nil
+}
+
+// FormatPlanVersion formats a single version's metadata + content using TOON, mirroring
+// FormatPlanDetail's shape.
+func FormatPlanVersion(v *busquets.PlanVersionDetail) (string, error) {
+	encoded, err := toon.Marshal(planVersionResponse{Version: toPlanVersionTOON(*v)})
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal TOON: %w", err)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(string(encoded))
+	sb.WriteString("\n\ncontent:\n")
+	sb.WriteString(v.Content)
+
+	return sb.String(), nil
+}
+
+func toPlanVersionTOON(v busquets.PlanVersionDetail) planVersionTOON {
+	return planVersionTOON{
+		ID:            v.ID,
+		VersionNumber: v.VersionNumber,
+		WordCount:     v.WordCount,
+		CreatedAt:     v.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		ReadingTime:   formatReadingTime(v.ReadingTime),
+		Tags:          formatTagNames(v.Tags),
+	}
 }
 
 // formatTagNames extracts tag names from a Tag slice and joins them.
@@ -153,4 +277,12 @@ func formatReadingTime(minutes int) string {
 		return "1 min"
 	}
 	return fmt.Sprintf("%d min", minutes)
+}
+
+// derefOrEmpty dereferences a string pointer, or returns "" if nil.
+func derefOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }

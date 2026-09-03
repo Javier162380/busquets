@@ -223,7 +223,7 @@ More testing details.`
 	t.Run("successful get plan", func(t *testing.T) {
 		args := GetPlanArgs{
 			FileName:   "test-plan.md",
-			SyncSource: "test",
+			SyncSource: sourcePlansDir,
 		}
 
 		result, plan, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
@@ -245,13 +245,25 @@ More testing details.`
 		require.Error(t, err)
 		require.Nil(t, result)
 		require.Nil(t, plan)
-		require.Contains(t, err.Error(), "fileName is required")
+		require.Equal(t, "fileName is required", err.Error())
+	})
+
+	t.Run("empty sync source", func(t *testing.T) {
+		args := GetPlanArgs{
+			FileName: "test-plan.md",
+		}
+
+		result, plan, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Nil(t, plan)
+		require.Equal(t, "syncSource is required", err.Error())
 	})
 
 	t.Run("plan not found", func(t *testing.T) {
 		args := GetPlanArgs{
 			FileName:   "nonexistent-plan.md",
-			SyncSource: "test",
+			SyncSource: sourcePlansDir,
 		}
 
 		result, plan, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
@@ -261,23 +273,10 @@ More testing details.`
 		require.Contains(t, err.Error(), "failed to get plan")
 	})
 
-	t.Run("unknown source returns error", func(t *testing.T) {
-		args := GetPlanArgs{
-			FileName:   "test-plan.md",
-			SyncSource: "does-not-exist",
-		}
-
-		result, plan, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
-		require.Error(t, err)
-		require.Nil(t, result)
-		require.Nil(t, plan)
-		require.Contains(t, err.Error(), "unknown source")
-	})
-
 	t.Run("verify TOON format with content", func(t *testing.T) {
 		args := GetPlanArgs{
 			FileName:   "test-plan.md",
-			SyncSource: "test",
+			SyncSource: sourcePlansDir,
 		}
 
 		result, _, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
@@ -374,5 +373,334 @@ func TestAddPlanComment(t *testing.T) {
 		require.Nil(t, result)
 		require.Nil(t, comment)
 		require.Equal(t, "failed to add comment: failed to get plan: not found", err.Error())
+	})
+}
+
+func TestGetPlanComments(t *testing.T) {
+	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test\n\nContent.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+	_, err = service.AddComment(ctx, "test-plan.md", sourcePlansDir, "first comment")
+	require.NoError(t, err)
+
+	handler := &Handler{service: service, server: nil}
+
+	t.Run("lists comments", func(t *testing.T) {
+		args := GetPlanCommentsArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir}
+		result, res, err := handler.GetPlanComments(ctx, &mcp.CallToolRequest{}, args)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Len(t, res.Comments, 1)
+		require.Equal(t, "first comment", res.Comments[0].Content)
+	})
+
+	t.Run("missing syncSource", func(t *testing.T) {
+		args := GetPlanCommentsArgs{FileName: "test-plan.md"}
+		result, res, err := handler.GetPlanComments(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Empty(t, res.Comments)
+		require.Equal(t, "syncSource is required", err.Error())
+	})
+}
+
+func TestDeletePlanComment(t *testing.T) {
+	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test\n\nContent.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+	comment, err := service.AddComment(ctx, "test-plan.md", sourcePlansDir, "to be deleted")
+	require.NoError(t, err)
+
+	handler := &Handler{service: service, server: nil}
+
+	t.Run("deletes the comment", func(t *testing.T) {
+		args := DeleteCommentArgs{CommentID: comment.ID}
+		result, _, err := handler.DeletePlanComment(ctx, &mcp.CallToolRequest{}, args)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		remaining, err := service.GetPlanComments(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Empty(t, remaining)
+	})
+
+	t.Run("missing commentId", func(t *testing.T) {
+		result, _, err := handler.DeletePlanComment(ctx, &mcp.CallToolRequest{}, DeleteCommentArgs{})
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Equal(t, "commentId is required", err.Error())
+	})
+}
+
+func TestSyncPlansHandler(t *testing.T) {
+	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test\n\nContent.")
+
+	handler := &Handler{service: service, server: nil}
+
+	result, res, err := handler.SyncPlans(ctx, &mcp.CallToolRequest{}, struct{}{})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, 1, res.Count)
+}
+
+func TestRSyncPlansHandler(t *testing.T) {
+	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test\n\nContent.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+
+	handler := &Handler{service: service, server: nil}
+
+	result, _, err := handler.RSyncPlans(ctx, &mcp.CallToolRequest{}, struct{}{})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+}
+
+func TestGetPlanVersionHistory(t *testing.T) {
+	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test\n\nContent v1.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+	require.NoError(t, service.SavePlanVersion(ctx, "test-plan.md", sourcePlansDir, "Content v1."))
+	require.NoError(t, service.SavePlanVersion(ctx, "test-plan.md", sourcePlansDir, "Content v2."))
+
+	handler := &Handler{service: service, server: nil}
+
+	t.Run("lists version history", func(t *testing.T) {
+		args := GetPlanVersionHistoryArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir}
+		result, res, err := handler.GetPlanVersionHistory(ctx, &mcp.CallToolRequest{}, args)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Len(t, res.Versions, 2)
+	})
+
+	t.Run("missing syncSource", func(t *testing.T) {
+		args := GetPlanVersionHistoryArgs{FileName: "test-plan.md"}
+		result, res, err := handler.GetPlanVersionHistory(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Empty(t, res.Versions)
+		require.Equal(t, "syncSource is required", err.Error())
+	})
+}
+
+func TestGetPlanVersion(t *testing.T) {
+	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test\n\nContent v1.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+	require.NoError(t, service.SavePlanVersion(ctx, "test-plan.md", sourcePlansDir, "Content v1."))
+
+	handler := &Handler{service: service, server: nil}
+
+	t.Run("gets the version", func(t *testing.T) {
+		args := GetPlanVersionArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir, VersionNumber: 1}
+		result, version, err := handler.GetPlanVersion(ctx, &mcp.CallToolRequest{}, args)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.NotNil(t, version)
+		require.Equal(t, "Content v1.", version.Content)
+	})
+
+	t.Run("missing versionNumber", func(t *testing.T) {
+		args := GetPlanVersionArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir}
+		result, version, err := handler.GetPlanVersion(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Nil(t, version)
+		require.Equal(t, "versionNumber is required", err.Error())
+	})
+}
+
+func TestRestorePlanVersion(t *testing.T) {
+	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test\n\nContent v1.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+	require.NoError(t, service.SavePlanVersion(ctx, "test-plan.md", sourcePlansDir, "Content v1."))
+
+	handler := &Handler{service: service, server: nil}
+
+	t.Run("restores the version", func(t *testing.T) {
+		args := RestorePlanVersionArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir, VersionNumber: 1}
+		result, _, err := handler.RestorePlanVersion(ctx, &mcp.CallToolRequest{}, args)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		plan, err := service.GetPlanDetailByFileName(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, "Content v1.", plan.Content)
+	})
+
+	t.Run("missing versionNumber", func(t *testing.T) {
+		args := RestorePlanVersionArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir}
+		result, _, err := handler.RestorePlanVersion(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Equal(t, "versionNumber is required", err.Error())
+	})
+}
+
+func TestGetAllTags(t *testing.T) {
+	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test\n\nContent.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+	require.NoError(t, service.SetPlanTags(ctx, "test-plan.md", sourcePlansDir, []string{"api", "backend"}))
+
+	handler := &Handler{service: service, server: nil}
+
+	result, res, err := handler.GetAllTags(ctx, &mcp.CallToolRequest{}, struct{}{})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	names := make([]string, len(res.Tags))
+	for i, tag := range res.Tags {
+		names[i] = tag.Name
+	}
+	require.ElementsMatch(t, []string{"api", "backend"}, names)
+}
+
+func TestGetPlanTags(t *testing.T) {
+	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test\n\nContent.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+	require.NoError(t, service.SetPlanTags(ctx, "test-plan.md", sourcePlansDir, []string{"api"}))
+
+	handler := &Handler{service: service, server: nil}
+
+	t.Run("gets the plan's tags", func(t *testing.T) {
+		args := GetPlanTagsArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir}
+		result, res, err := handler.GetPlanTags(ctx, &mcp.CallToolRequest{}, args)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Len(t, res.Tags, 1)
+		require.Equal(t, "api", res.Tags[0].Name)
+	})
+
+	t.Run("missing syncSource", func(t *testing.T) {
+		args := GetPlanTagsArgs{FileName: "test-plan.md"}
+		result, res, err := handler.GetPlanTags(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Empty(t, res.Tags)
+		require.Equal(t, "syncSource is required", err.Error())
+	})
+}
+
+func TestSetPlanTags(t *testing.T) {
+	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test\n\nContent.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+
+	handler := &Handler{service: service, server: nil}
+
+	t.Run("sets tags", func(t *testing.T) {
+		args := SetPlanTagsArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir, Tags: []string{"api", "backend"}}
+		result, res, err := handler.SetPlanTags(ctx, &mcp.CallToolRequest{}, args)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		names := make([]string, len(res.Tags))
+		for i, tag := range res.Tags {
+			names[i] = tag.Name
+		}
+		require.ElementsMatch(t, []string{"api", "backend"}, names)
+	})
+
+	t.Run("second call replaces, not adds", func(t *testing.T) {
+		args := SetPlanTagsArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir, Tags: []string{"frontend"}}
+		_, res, err := handler.SetPlanTags(ctx, &mcp.CallToolRequest{}, args)
+		require.NoError(t, err)
+
+		names := make([]string, len(res.Tags))
+		for i, tag := range res.Tags {
+			names[i] = tag.Name
+		}
+		require.Equal(t, []string{"frontend"}, names)
+	})
+}
+
+func TestDeleteTag(t *testing.T) {
+	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test\n\nContent.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+	require.NoError(t, service.SetPlanTags(ctx, "test-plan.md", sourcePlansDir, []string{"api", "backend"}))
+
+	handler := &Handler{service: service, server: nil}
+
+	t.Run("removes only the named tag", func(t *testing.T) {
+		args := DeletePlanTagArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir, Tag: "api"}
+		result, res, err := handler.DeleteTag(ctx, &mcp.CallToolRequest{}, args)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		names := make([]string, len(res.Tags))
+		for i, tag := range res.Tags {
+			names[i] = tag.Name
+		}
+		require.Equal(t, []string{"backend"}, names)
+
+		remaining, err := service.GetPlanTags(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Len(t, remaining, 1)
+		require.Equal(t, "backend", remaining[0].Name)
+	})
+
+	t.Run("missing tag", func(t *testing.T) {
+		args := DeletePlanTagArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir}
+		result, res, err := handler.DeleteTag(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Empty(t, res.Tags)
+		require.Equal(t, "tag is required", err.Error())
+	})
+
+	t.Run("tag does not exist", func(t *testing.T) {
+		args := DeletePlanTagArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir, Tag: "nonexistent"}
+		result, res, err := handler.DeleteTag(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Empty(t, res.Tags)
+		require.Equal(t, `failed to remove tag: tag "nonexistent" not found`, err.Error())
 	})
 }

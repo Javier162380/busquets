@@ -1170,6 +1170,55 @@ func (r *Repository) SetPlanTags(ctx context.Context, planID int64, tagIDs []int
 	})
 }
 
+// SetPlanTagsAndGet atomically replaces a plan's tags and returns the resulting list.
+func (r *Repository) SetPlanTagsAndGet(ctx context.Context, planID int64, tagIDs []int64, assignedAt time.Time) ([]dto.Tag, error) {
+	var result []dto.Tag
+	err := r.withTx(ctx, func(q *Queries) error {
+		if err := q.RemoveAllTagsFromPlan(ctx, planID); err != nil {
+			return err
+		}
+		for _, tagID := range tagIDs {
+			if err := q.AddTagToPlan(ctx, AddTagToPlanParams{
+				PlanID:     planID,
+				TagID:      tagID,
+				AssignedAt: pgtype.Timestamptz{Time: assignedAt, Valid: true},
+			}); err != nil {
+				return err
+			}
+		}
+		rows, err := q.GetPlanTags(ctx, planID)
+		if err != nil {
+			return err
+		}
+		result = make([]dto.Tag, len(rows))
+		for i, row := range rows {
+			result[i] = tagToDomain(row)
+		}
+		return nil
+	})
+	return result, err
+}
+
+// RemoveTagFromPlanAndGet atomically removes one tag from one plan and returns the resulting list.
+func (r *Repository) RemoveTagFromPlanAndGet(ctx context.Context, planID, tagID int64) ([]dto.Tag, error) {
+	var result []dto.Tag
+	err := r.withTx(ctx, func(q *Queries) error {
+		if err := q.RemoveTagFromPlan(ctx, RemoveTagFromPlanParams{PlanID: planID, TagID: tagID}); err != nil {
+			return err
+		}
+		rows, err := q.GetPlanTags(ctx, planID)
+		if err != nil {
+			return err
+		}
+		result = make([]dto.Tag, len(rows))
+		for i, row := range rows {
+			result[i] = tagToDomain(row)
+		}
+		return nil
+	})
+	return result, err
+}
+
 func applyOrder(sb *sqlbuilder.SelectBuilder, col, dir string) {
 	if dir == "asc" {
 		sb.OrderByAsc(col)

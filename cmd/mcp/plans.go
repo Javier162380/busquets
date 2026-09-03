@@ -24,11 +24,6 @@ func (h *Handler) registerPlanTools() error {
 		Description: "Retrieve the full content and metadata of a specific plan file by filename. Returns metadata in TOON format followed by markdown content.",
 	}, h.GetPlanHandler)
 
-	mcp.AddTool(h.server, &mcp.Tool{
-		Name:        "add_comment",
-		Description: "Adds a comment to a plan.",
-	}, h.AddPlanComment)
-
 	return nil
 }
 
@@ -67,12 +62,11 @@ func (h *Handler) GetPlanHandler(ctx context.Context, req *mcp.CallToolRequest, 
 	if args.FileName == "" {
 		return nil, nil, fmt.Errorf("fileName is required")
 	}
-
-	syncSource := h.service.SourcePathForLabel(args.SyncSource)
-	if syncSource == "" {
-		return nil, nil, fmt.Errorf("unknown source %q: use a label from search_plans results", args.SyncSource)
+	if args.SyncSource == "" {
+		return nil, nil, fmt.Errorf("syncSource is required")
 	}
-	plan, err := h.service.GetPlanDetailByFileName(ctx, args.FileName, syncSource)
+
+	plan, err := h.service.GetPlanDetailByFileName(ctx, args.FileName, args.SyncSource)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get plan: %w", err)
 	}
@@ -84,29 +78,4 @@ func (h *Handler) GetPlanHandler(ctx context.Context, req *mcp.CallToolRequest, 
 	}
 
 	return buildMCPResult(toonOutput), plan, nil
-}
-
-func (h *Handler) AddPlanComment(ctx context.Context, req *mcp.CallToolRequest, args AddPlanCommentArgs) (*mcp.CallToolResult, *busquets.Comment, error) {
-	if args.Comment == "" {
-		return nil, nil, fmt.Errorf("invalid argument, comment can't be empty")
-	}
-
-	if args.FileName == "" {
-		return nil, nil, fmt.Errorf("fileName is required")
-	}
-
-	if args.SyncSource == "" {
-		return nil, nil, fmt.Errorf("syncSource is required")
-	}
-
-	comment, err := h.service.AddComment(ctx, args.FileName, args.SyncSource, args.Comment)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to add comment: %w", err)
-	}
-
-	toonOutput, err := FormatAddPlanComment(comment)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to format results: %w", err)
-	}
-	return buildMCPResult(toonOutput), &comment, nil
 }

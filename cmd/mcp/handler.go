@@ -28,6 +28,18 @@ func (h *Handler) Register() error {
 	if err := h.registerPlanTools(); err != nil {
 		return fmt.Errorf("failed to register plan tools: %w", err)
 	}
+	if err := h.registerCommentTools(); err != nil {
+		return fmt.Errorf("failed to register comment tools: %w", err)
+	}
+	if err := h.registerTagTools(); err != nil {
+		return fmt.Errorf("failed to register tag tools: %w", err)
+	}
+	if err := h.registerVersionTools(); err != nil {
+		return fmt.Errorf("failed to register version tools: %w", err)
+	}
+	if err := h.registerSyncTools(); err != nil {
+		return fmt.Errorf("failed to register sync tools: %w", err)
+	}
 
 	return nil
 }
