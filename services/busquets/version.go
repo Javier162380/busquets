@@ -38,10 +38,6 @@ func (s *Service) SavePlanVersion(ctx context.Context, planName, syncSource, con
 	versionFileName := fmt.Sprintf("%d-%s.md", nextVersionNum, timestamp)
 	versionFilePath := filepath.Join(versionsDir, versionFileName)
 
-	if err := os.WriteFile(versionFilePath, []byte(content), 0o600); err != nil {
-		return fmt.Errorf("failed to write version file: %w", err)
-	}
-
 	wordCount := CountWords(content)
 	err = s.db.InsertPlanVersion(ctx, dto.InsertPlanVersionParams{
 		PlanID:        plan.ID,
@@ -51,19 +47,30 @@ func (s *Service) SavePlanVersion(ctx context.Context, planName, syncSource, con
 		WordCount:     int64(wordCount),
 		CreatedAt:     now,
 	}, func() error {
-		if err := os.WriteFile(versionFilePath, []byte(content), 0o600); err != nil {
+		if err = os.WriteFile(versionFilePath, []byte(content), 0o600); err != nil {
 			r := retrier.NewRetrier(3, 1*time.Second)
 			deleteErr := r.Do(ctx, func(ctx context.Context) error {
-				return os.Remove(versionFilePath)
+				removeErr := os.Remove(versionFilePath)
+				switch {
+				case removeErr == nil:
+					return nil
+				case os.IsNotExist(removeErr):
+					return retrier.ErrNonRetriableError
+				default:
+					return removeErr
+				}
 			})
 			if deleteErr != nil {
 				//nolint:errorlint // Need to include cleanup error as context
-				return fmt.Errorf("failed to save version to database: %w (also failed to clean up file: %v)", err, deleteErr)
+				return fmt.Errorf("failed to write version file: %w (also failed to clean up file: %v)", err, deleteErr)
 			}
-			return fmt.Errorf("failed to save version to database: %w", err)
+			return fmt.Errorf("failed to write version file: %w", err)
 		}
 		return nil
 	})
+	if err != nil {
+		return fmt.Errorf("failed to save version to database: %w", err)
+	}
 
 	return nil
 }
