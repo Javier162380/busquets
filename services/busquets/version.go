@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Javier162380/busquets/internal/retrier"
 	"github.com/Javier162380/busquets/services/busquets/dto"
 )
 
@@ -49,15 +50,20 @@ func (s *Service) SavePlanVersion(ctx context.Context, planName, syncSource, con
 		Content:       content,
 		WordCount:     int64(wordCount),
 		CreatedAt:     now,
-	})
-	if err != nil {
-		deleteErr := os.Remove(versionFilePath)
-		if deleteErr != nil {
-			//nolint:errorlint // Need to include cleanup error as context
-			return fmt.Errorf("failed to save version to database: %w (also failed to clean up file: %v)", err, deleteErr)
+	}, func() error {
+		if err := os.WriteFile(versionFilePath, []byte(content), 0o600); err != nil {
+			r := retrier.NewRetrier(3, 1*time.Second)
+			deleteErr := r.Do(ctx, func(ctx context.Context) error {
+				return os.Remove(versionFilePath)
+			})
+			if deleteErr != nil {
+				//nolint:errorlint // Need to include cleanup error as context
+				return fmt.Errorf("failed to save version to database: %w (also failed to clean up file: %v)", err, deleteErr)
+			}
+			return fmt.Errorf("failed to save version to database: %w", err)
 		}
-		return fmt.Errorf("failed to save version to database: %w", err)
-	}
+		return nil
+	})
 
 	return nil
 }

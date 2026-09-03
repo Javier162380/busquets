@@ -772,14 +772,20 @@ func (r *Repository) matchesTagFilter(planTags []dto.Tag, filterTags []string, m
 
 // Plan version operations
 
-func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPlanVersionParams) error {
-	return r.q.InsertPlanVersion(ctx, InsertPlanVersionParams{
-		PlanID:        params.PlanID,
-		VersionNumber: params.VersionNumber,
-		FilePath:      params.FilePath,
-		Content:       params.Content,
-		WordCount:     params.WordCount,
-		CreatedAt:     params.CreatedAt,
+func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPlanVersionParams, writeFile func() error) error {
+	return r.withTx(ctx, func(queries *Queries) error {
+		err := r.q.InsertPlanVersion(ctx, InsertPlanVersionParams{
+			PlanID:        params.PlanID,
+			VersionNumber: params.VersionNumber,
+			FilePath:      params.FilePath,
+			Content:       params.Content,
+			WordCount:     params.WordCount,
+			CreatedAt:     params.CreatedAt,
+		})
+		if err != nil {
+			return err
+		}
+		return writeFile()
 	})
 }
 

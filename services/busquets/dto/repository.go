@@ -47,7 +47,7 @@ type Repository interface {
 	SearchPlansWithTags(ctx context.Context, params SearchParams) ([]PlanSummary, error)
 
 	// Plan version operations
-	InsertPlanVersion(ctx context.Context, params InsertPlanVersionParams) error
+	InsertPlanVersion(ctx context.Context, params InsertPlanVersionParams, writeFile func() error) error
 	GetPlanVersionHistory(ctx context.Context, params VersionHistoryParams) ([]PlanVersion, error)
 	GetPlanVersionByNumber(ctx context.Context, planID, versionNumber int64) (PlanVersion, error)
 	GetLatestVersionNumber(ctx context.Context, planID int64) (int64, error)

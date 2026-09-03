@@ -404,14 +404,15 @@ func (r *Repository) UpdatePlanContent(
 			return fmt.Errorf("failed to write version file: %w", err)
 		}
 
-		if err := q.InsertPlanVersion(ctx, InsertPlanVersionParams{
+		err = q.InsertPlanVersion(ctx, InsertPlanVersionParams{
 			PlanID:        plan.ID,
 			VersionNumber: nextVersionNum,
 			FilePath:      versionFilePath,
 			Content:       params.VersionContent,
 			WordCount:     versionWordCount,
 			CreatedAt:     timeToTimestamptz(params.VersionCreatedAt),
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("failed to save version to database: %w", err)
 		}
 
@@ -759,14 +760,21 @@ func (r *Repository) matchesTagFilter(planTags []dto.Tag, filterTags []string, m
 	return false
 }
 
-func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPlanVersionParams) error {
-	return r.q.InsertPlanVersion(ctx, InsertPlanVersionParams{
-		PlanID:        params.PlanID,
-		VersionNumber: params.VersionNumber,
-		FilePath:      params.FilePath,
-		Content:       params.Content,
-		WordCount:     params.WordCount,
-		CreatedAt:     timeToTimestamptz(params.CreatedAt),
+func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPlanVersionParams, writeFile func() error) error {
+	return r.withTx(ctx, func(queries *Queries) error {
+		err := r.q.InsertPlanVersion(ctx, InsertPlanVersionParams{
+			PlanID:        params.PlanID,
+			VersionNumber: params.VersionNumber,
+			FilePath:      params.FilePath,
+			Content:       params.Content,
+			WordCount:     params.WordCount,
+			CreatedAt:     timeToTimestamptz(params.CreatedAt),
+		})
+		if err != nil {
+			return err
+		}
+
+		return writeFile()
 	})
 }
 

@@ -2352,7 +2352,7 @@ func testConcurrentVersionSaves(t *testing.T, service *Service, sourcePlansDir s
 			Content:       "# Version 2 from first request",
 			WordCount:     5,
 			CreatedAt:     fixedTime,
-		})
+		}, nil)
 		require.NoError(t, err)
 
 		originalProvider := service.nowProvider
@@ -2368,7 +2368,7 @@ func testConcurrentVersionSaves(t *testing.T, service *Service, sourcePlansDir s
 			Content:       "# Version 2 from second request",
 			WordCount:     5,
 			CreatedAt:     fixedTime,
-		})
+		}, nil)
 		require.Error(t, err2)
 
 		os.Remove(versionFile)
@@ -3925,7 +3925,7 @@ func testMigrateStorageLayout(t *testing.T, b backendSetup) {
 			Content:       "# Versioned\n\nOld version body.",
 			WordCount:     3,
 			CreatedAt:     now,
-		}))
+		}, nil))
 
 		migrated, err := service.MigrateStorageLayout(ctx)
 		require.NoError(t, err)
@@ -3984,7 +3984,7 @@ func testMigrateStorageLayout(t *testing.T, b backendSetup) {
 			Content:       "# Half Done\n\nOld version body.",
 			WordCount:     4,
 			CreatedAt:     now,
-		}))
+		}, nil))
 
 		// The mirror is already on the new layout — the plan still counts as
 		// migrated because its stranded version gets picked up and fixed.
