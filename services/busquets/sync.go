@@ -6,11 +6,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/Javier162380/busquets/internal/config"
+	"github.com/Javier162380/busquets/internal/retrier"
 	"github.com/Javier162380/busquets/services/busquets/dto"
 
 	"golang.org/x/sync/errgroup"
@@ -381,6 +383,7 @@ func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileNa
 	}
 
 	now := s.nowProvider.Now()
+	timestamp := strconv.FormatInt(now.Unix(), 10)
 
 	if planExists {
 		destPath := s.mirrorPathFor(existingPlan.ID, fileName)
@@ -427,6 +430,45 @@ func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileNa
 			return "", err
 		}
 		return destPath, nil
+	}, func(id int64) (dto.InsertPlanVersionParams, func() error) {
+		versionFilePath := filepath.Join(s.versionsDirFor(id), fmt.Sprintf("0-%s.md", timestamp))
+		versionParams := dto.InsertPlanVersionParams{
+			PlanID:        id,
+			VersionNumber: 0,
+			FilePath:      versionFilePath,
+			Content:       string(content),
+			WordCount:     int64(wordCount),
+			CreatedAt:     now,
+		}
+		writeVersionFile := func() error {
+			if _, err := os.Stat(filepath.Dir(versionFilePath)); os.IsNotExist(err) {
+				if err := os.MkdirAll(filepath.Dir(versionFilePath), 0o750); err != nil {
+					return fmt.Errorf("failed to create versions directory: %w", err)
+				}
+			}
+			//nolint:gosec // G703: Path is controlled by application, not user input
+			if err := os.WriteFile(versionFilePath, content, 0o600); err != nil {
+				r := retrier.NewRetrier(3, 1*time.Second)
+				deleteErr := r.Do(ctx, func(ctx context.Context) error {
+					removeErr := os.Remove(versionFilePath)
+					switch {
+					case removeErr == nil:
+						return nil
+					case os.IsNotExist(removeErr):
+						return retrier.ErrNonRetriableError
+					default:
+						return removeErr
+					}
+				})
+				if deleteErr != nil {
+					//nolint:errorlint // Need to include cleanup error as context
+					return fmt.Errorf("failed to write initial version file: %w (also failed to clean up file: %v)", err, deleteErr)
+				}
+				return fmt.Errorf("failed to write initial version file: %w", err)
+			}
+			return nil
+		}
+		return versionParams, writeVersionFile
 	})
 	if err != nil {
 		return false, fmt.Errorf("failed to insert plan: %w", err)

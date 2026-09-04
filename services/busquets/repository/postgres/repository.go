@@ -253,7 +253,12 @@ func (r *Repository) GetPlanByID(ctx context.Context, id int64) (dto.Plan, error
 	return planToDomain(p), nil
 }
 
-func (r *Repository) InsertPlan(ctx context.Context, params dto.InsertPlanParams, writeFile func(id int64) (string, error)) (int64, error) {
+func (r *Repository) InsertPlan(
+	ctx context.Context,
+	params dto.InsertPlanParams,
+	writeFile func(id int64) (string, error),
+	version func(planID int64) (dto.InsertPlanVersionParams, func() error),
+) (int64, error) {
 	var id int64
 	err := r.withTx(ctx, func(q *Queries) error {
 		insertedID, err := q.InsertPlan(ctx, InsertPlanParams{
@@ -279,6 +284,23 @@ func (r *Repository) InsertPlan(ctx context.Context, params dto.InsertPlanParams
 
 		if err := q.UpdatePlanFilePath(ctx, UpdatePlanFilePathParams{FilePath: filePath, ID: insertedID}); err != nil {
 			return fmt.Errorf("failed to set plan file path: %w", err)
+		}
+
+		if version != nil {
+			versionParams, writeVersionFile := version(int64(insertedID))
+			if err := q.InsertPlanVersion(ctx, InsertPlanVersionParams{
+				PlanID:        versionParams.PlanID,
+				VersionNumber: versionParams.VersionNumber,
+				FilePath:      versionParams.FilePath,
+				Content:       versionParams.Content,
+				WordCount:     versionParams.WordCount,
+				CreatedAt:     timeToTimestamptz(versionParams.CreatedAt),
+			}); err != nil {
+				return fmt.Errorf("failed to save initial version to database: %w", err)
+			}
+			if err := writeVersionFile(); err != nil {
+				return fmt.Errorf("failed to write initial version file: %w", err)
+			}
 		}
 
 		id = int64(insertedID)
@@ -404,14 +426,15 @@ func (r *Repository) UpdatePlanContent(
 			return fmt.Errorf("failed to write version file: %w", err)
 		}
 
-		if err := q.InsertPlanVersion(ctx, InsertPlanVersionParams{
+		err = q.InsertPlanVersion(ctx, InsertPlanVersionParams{
 			PlanID:        plan.ID,
 			VersionNumber: nextVersionNum,
 			FilePath:      versionFilePath,
 			Content:       params.VersionContent,
 			WordCount:     versionWordCount,
 			CreatedAt:     timeToTimestamptz(params.VersionCreatedAt),
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("failed to save version to database: %w", err)
 		}
 
@@ -759,14 +782,24 @@ func (r *Repository) matchesTagFilter(planTags []dto.Tag, filterTags []string, m
 	return false
 }
 
-func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPlanVersionParams) error {
-	return r.q.InsertPlanVersion(ctx, InsertPlanVersionParams{
-		PlanID:        params.PlanID,
-		VersionNumber: params.VersionNumber,
-		FilePath:      params.FilePath,
-		Content:       params.Content,
-		WordCount:     params.WordCount,
-		CreatedAt:     timeToTimestamptz(params.CreatedAt),
+func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPlanVersionParams, writeFile func() error) error {
+	return r.withTx(ctx, func(queries *Queries) error {
+		err := queries.InsertPlanVersion(ctx, InsertPlanVersionParams{
+			PlanID:        params.PlanID,
+			VersionNumber: params.VersionNumber,
+			FilePath:      params.FilePath,
+			Content:       params.Content,
+			WordCount:     params.WordCount,
+			CreatedAt:     timeToTimestamptz(params.CreatedAt),
+		})
+		if err != nil {
+			return err
+		}
+		if writeFile == nil {
+			return nil
+		}
+
+		return writeFile()
 	})
 }
 
