@@ -382,6 +382,51 @@ func testSyncOperations(t *testing.T, setup serviceSetupFn) {
 		require.Greater(t, plan.WordCount, int64(0))
 	})
 
+	t.Run("SyncPlans creates a version-0 snapshot for a newly synced plan", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+		count, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+		require.Equal(t, 1, count)
+
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		versionCount, err := service.GetVersionCount(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), versionCount)
+
+		version, err := service.db.GetPlanVersionByNumber(ctx, plan.ID, 0)
+		require.NoError(t, err)
+		require.Equal(t, sampleMarkdown, version.Content)
+		require.FileExists(t, version.FilePath)
+		data, err := os.ReadFile(version.FilePath)
+		require.NoError(t, err)
+		require.Equal(t, sampleMarkdown, string(data))
+	})
+
+	t.Run("SyncPlans version-0 snapshot stores full content even when indexFullContent is false", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		service.indexFullContent = false
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, plan.Title, plan.Content, "content is truncated to the title when not indexing full content")
+
+		version, err := service.db.GetPlanVersionByNumber(ctx, plan.ID, 0)
+		require.NoError(t, err)
+		require.Equal(t, sampleMarkdown, version.Content, "the version-0 snapshot always keeps the full pristine content")
+	})
+
 	t.Run("SyncPlans updates modified file", func(t *testing.T) {
 		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()
@@ -963,7 +1008,7 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 
 		versions, err := service.GetPlanVersionHistory(ctx, "test-plan.md", sourcePlansDir, 0, 10)
 		require.NoError(t, err)
-		require.Len(t, versions, 1)
+		require.Len(t, versions, 2, "version 0 from the initial sync plus the version UpdatePlan just created")
 		require.Equal(t, int64(1), versions[0].VersionNumber)
 		require.Equal(t, sampleMarkdownUpdated, versions[0].Content)
 
@@ -1361,7 +1406,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		versionDir := service.versionsDirFor(plan.ID)
 		entries, err := os.ReadDir(versionDir)
 		require.NoError(t, err)
-		require.Equal(t, 1, len(entries))
+		require.Equal(t, 2, len(entries), "version 0 from the initial sync plus the version SavePlanVersion just created")
 		require.True(t, strings.HasSuffix(entries[0].Name(), ".md"))
 	})
 
@@ -1381,7 +1426,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 
 		count, err := service.GetVersionCount(ctx, "version-test.md", sourcePlansDir)
 		require.NoError(t, err)
-		require.Equal(t, int64(2), count)
+		require.Equal(t, int64(3), count, "version 0 from the initial sync plus the two versions just saved")
 	})
 
 	t.Run("GetPlanVersionHistory returns versions in reverse order", func(t *testing.T) {
@@ -1400,7 +1445,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 
 		versions, err := service.GetPlanVersionHistory(ctx, "history-test.md", sourcePlansDir, 0, 10)
 		require.NoError(t, err)
-		require.Equal(t, 3, len(versions))
+		require.Equal(t, 4, len(versions), "version 0 from the initial sync plus the three versions just saved")
 
 		for i := 0; i < len(versions)-1; i++ {
 			require.Greater(t, versions[i].VersionNumber, versions[i+1].VersionNumber)
@@ -1435,7 +1480,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 
 		count, err := service.GetVersionCount(ctx, "count-test.md", sourcePlansDir)
 		require.NoError(t, err)
-		require.Equal(t, int64(0), count)
+		require.Equal(t, int64(1), count, "version 0 from the initial sync")
 
 		for i := 0; i < 5; i++ {
 			err = service.SavePlanVersion(ctx, "count-test.md", sourcePlansDir, fmt.Sprintf("Version %d", i+1))
@@ -1444,7 +1489,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 
 		count, err = service.GetVersionCount(ctx, "count-test.md", sourcePlansDir)
 		require.NoError(t, err)
-		require.Equal(t, int64(5), count)
+		require.Equal(t, int64(6), count, "version 0 from the initial sync plus the five versions just saved")
 	})
 
 	t.Run("SavePlanVersion maintains file/database consistency on DB failure", func(t *testing.T) {
@@ -1467,8 +1512,8 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 
 		count, err := service.GetVersionCount(ctx, "consistency-test.md", sourcePlansDir)
 		require.NoError(t, err)
-		require.Equal(t, int64(1), count)
-		require.Equal(t, initialCount, 1)
+		require.Equal(t, int64(2), count, "version 0 from the initial sync plus the version just saved")
+		require.Equal(t, initialCount, 2)
 	})
 
 	t.Run("CleanupOldVersions keeps most recent versions", func(t *testing.T) {
@@ -1486,7 +1531,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 
 		count, err := service.GetVersionCount(ctx, "cleanup-test.md", sourcePlansDir)
 		require.NoError(t, err)
-		require.Equal(t, int64(7), count)
+		require.Equal(t, int64(8), count, "version 0 from the initial sync plus the seven versions just saved")
 
 		err = service.CleanupOldVersions(ctx, "cleanup-test.md", sourcePlansDir, 5)
 		require.NoError(t, err)
@@ -1628,7 +1673,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 
 		versions, err := service.GetPlanVersionHistory(ctx, "restore-test.md", sourcePlansDir, 0, 10)
 		require.NoError(t, err)
-		require.Len(t, versions, 3)
+		require.Len(t, versions, 4, "version 0 from the initial sync plus versions 1, 2, and the restore's own version 3")
 		require.Equal(t, int64(3), versions[0].VersionNumber)
 		require.Equal(t, "# Version One\nFirst content", versions[0].Content)
 	})
@@ -2378,7 +2423,7 @@ func testConcurrentVersionSaves(t *testing.T, service *Service, sourcePlansDir s
 
 		count, err := service.GetVersionCount(ctx, "concurrent-test.md", sourcePlansDir)
 		require.NoError(t, err)
-		require.Equal(t, int64(2), count, "should have 2 versions (first request succeeded, second was cleaned up)")
+		require.Equal(t, int64(3), count, "version 0 from the initial sync, version 1 from SavePlanVersion, and version 2 (first request succeeded, second was cleaned up)")
 
 		service.nowProvider = originalProvider
 	})
@@ -2935,8 +2980,8 @@ func testMultiDirSyncPlans(t *testing.T, b backendSetup) {
 		require.NoError(t, err)
 		versionsB, err := svc.GetPlanVersionHistory(ctx, "shared.md", dirs.sourceDir2, 0, 10)
 		require.NoError(t, err)
-		require.Len(t, versionsA, 1)
-		require.Len(t, versionsB, 1)
+		require.Len(t, versionsA, 2, "version 0 from the initial sync plus the version just saved")
+		require.Len(t, versionsB, 2, "version 0 from the initial sync plus the version just saved")
 
 		// Distinct, id-scoped versions directories — no shared "versions/shared.md/" bucket.
 		require.NotEqual(t, versionsA[0].FilePath, versionsB[0].FilePath)
@@ -2953,7 +2998,7 @@ func testMultiDirSyncPlans(t *testing.T, b backendSetup) {
 		require.NoError(t, err, "deleting plan A must not remove plan B's versions directory")
 		remainingB, err := svc.GetPlanVersionHistory(ctx, "shared.md", dirs.sourceDir2, 0, 10)
 		require.NoError(t, err)
-		require.Len(t, remainingB, 1)
+		require.Len(t, remainingB, 2)
 	})
 
 	t.Run("second sync is idempotent across dirs", func(t *testing.T) {
@@ -3359,7 +3404,7 @@ func testDeletePlan(t *testing.T, service *Service, sourcePlansDir string) {
 
 		versions, err := service.GetPlanVersionHistory(ctx, fileName, sourcePlansDir, 0, 10)
 		require.NoError(t, err)
-		require.Len(t, versions, 1)
+		require.Len(t, versions, 2, "version 0 from the initial sync plus the explicit SavePlanVersion call")
 
 		comments, err := service.GetPlanComments(ctx, fileName, sourcePlansDir)
 		require.NoError(t, err)
@@ -3420,7 +3465,7 @@ func testDeletePlan(t *testing.T, service *Service, sourcePlansDir string) {
 		}, func(int64) (string, error) {
 			// file_path points at a file directly inside the source directory.
 			return filepath.Join(sourcePlansDir, fileName), nil
-		})
+		}, nil)
 		require.NoError(t, err)
 		require.NoError(t, os.WriteFile(filepath.Join(sourcePlansDir, fileName), []byte(sampleMarkdown), 0o600))
 
@@ -3528,9 +3573,12 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 				fmt.Sprintf("# Version %d\n\nbody %d", i+1, i+1)))
 		}
 
+		// +1 for the version-0 snapshot SyncPlans already created above.
+		totalVersions := versionCount + 1
+
 		before, err := service.GetPlanVersionHistory(ctx, "ver.md", sourcePlansDir, 0, 100)
 		require.NoError(t, err)
-		require.Len(t, before, versionCount)
+		require.Len(t, before, totalVersions)
 
 		// Snapshot each version's exact path and on-disk content before the rename.
 		type versionSnapshot struct {
@@ -3553,12 +3601,12 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		require.DirExists(t, versionsDir)
 		entries, err := os.ReadDir(versionsDir)
 		require.NoError(t, err)
-		require.Len(t, entries, versionCount)
+		require.Len(t, entries, totalVersions)
 
 		// Every version row's path, and its file's content on disk, is unchanged by the rename.
 		after, err := service.GetPlanVersionHistory(ctx, "ver-renamed.md", sourcePlansDir, 0, 100)
 		require.NoError(t, err)
-		require.Len(t, after, versionCount)
+		require.Len(t, after, totalVersions)
 		for _, v := range after {
 			orig, ok := snapshots[v.VersionNumber]
 			require.True(t, ok)
@@ -3831,7 +3879,7 @@ func testMigrateStorageLayout(t *testing.T, b backendSetup) {
 			IndexedAt:  now,
 			FileSize:   1,
 			WordCount:  3,
-		}, func(int64) (string, error) { return oldPath, nil })
+		}, func(int64) (string, error) { return oldPath, nil }, nil)
 		require.NoError(t, err)
 
 		migrated, err := service.MigrateStorageLayout(ctx)
@@ -3878,7 +3926,7 @@ func testMigrateStorageLayout(t *testing.T, b backendSetup) {
 			IndexedAt:  now,
 			FileSize:   1,
 			WordCount:  4,
-		}, func(int64) (string, error) { return oldPath, nil })
+		}, func(int64) (string, error) { return oldPath, nil }, nil)
 		require.NoError(t, err)
 
 		migrated, err := service.MigrateStorageLayout(ctx)
@@ -3911,7 +3959,7 @@ func testMigrateStorageLayout(t *testing.T, b backendSetup) {
 			IndexedAt:  now,
 			FileSize:   1,
 			WordCount:  2,
-		}, func(int64) (string, error) { return oldPath, nil })
+		}, func(int64) (string, error) { return oldPath, nil }, nil)
 		require.NoError(t, err)
 
 		oldVersionsDir := filepath.Join(viewerDir, "versions", "versioned.md")
@@ -3970,7 +4018,7 @@ func testMigrateStorageLayout(t *testing.T, b backendSetup) {
 			require.NoError(t, os.MkdirAll(filepath.Dir(newPath), 0o750))
 			require.NoError(t, os.WriteFile(newPath, []byte("# Half Done\n\nCurrent."), 0o600))
 			return newPath, nil
-		})
+		}, nil)
 		require.NoError(t, err)
 
 		oldVersionsDir := filepath.Join(viewerDir, "versions", "half-done.md")
@@ -4027,7 +4075,7 @@ func testMigrateStorageLayout(t *testing.T, b backendSetup) {
 			IndexedAt:  now,
 			FileSize:   1,
 			WordCount:  4,
-		}, func(int64) (string, error) { return sharedOldPath, nil })
+		}, func(int64) (string, error) { return sharedOldPath, nil }, nil)
 		require.NoError(t, err)
 
 		idB, err := service.db.InsertPlan(ctx, dto.InsertPlanParams{
@@ -4040,7 +4088,7 @@ func testMigrateStorageLayout(t *testing.T, b backendSetup) {
 			IndexedAt:  now,
 			FileSize:   1,
 			WordCount:  4,
-		}, func(int64) (string, error) { return sharedOldPath, nil })
+		}, func(int64) (string, error) { return sharedOldPath, nil }, nil)
 		require.NoError(t, err)
 
 		migrated, err := service.MigrateStorageLayout(ctx)
@@ -4119,7 +4167,7 @@ func testInsertPlanRollbackOnWriteFileFailure(t *testing.T, b backendSetup) {
 	// First attempt: writeFile fails, so the insert must roll back entirely.
 	_, err := service.db.InsertPlan(ctx, params, func(int64) (string, error) {
 		return "", fmt.Errorf("simulated write failure")
-	})
+	}, nil)
 	require.Error(t, err)
 
 	// No zombie row: the plan must not exist after a rolled-back insert.
@@ -4129,11 +4177,98 @@ func testInsertPlanRollbackOnWriteFileFailure(t *testing.T, b backendSetup) {
 	// A subsequent, successful insert for the same file must work cleanly.
 	id, err := service.db.InsertPlan(ctx, params, func(id int64) (string, error) {
 		return service.mirrorPathFor(id, "rollback-me.md"), nil
-	})
+	}, nil)
 	require.NoError(t, err)
 	require.NotZero(t, id)
 
 	plan, err := service.db.GetPlanByFileName(ctx, "rollback-me.md", sourcePlansDir)
 	require.NoError(t, err)
 	require.Equal(t, id, plan.ID)
+}
+
+func TestInsertPlanRollbackOnVersionWriteFailure(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testInsertPlanRollbackOnVersionWriteFailure(t, b)
+		})
+	}
+}
+
+// testInsertPlanRollbackOnVersionWriteFailure proves the version-0 snapshot
+// and the plan row are one atomic unit: a failing version-file write rolls
+// back the entire insert (plan row, mirror file path, and version row
+// alike), and leaves no orphaned version file on disk either — the DB-row-
+// first, disk-write-second ordering means nothing is ever written before
+// the version row exists in the (uncommitted) transaction.
+func testInsertPlanRollbackOnVersionWriteFailure(t *testing.T, b backendSetup) {
+	t.Helper()
+	ctx := context.Background()
+
+	service, sourcePlansDir, _, cleanup := b.setupFn(t)
+	defer cleanup()
+
+	now := service.nowProvider.Now()
+	params := dto.InsertPlanParams{
+		FileName:   "rollback-version.md",
+		SyncSource: sourcePlansDir,
+		Title:      "Rollback Version",
+		Content:    "# Rollback Version\n\nContent.",
+		CreatedAt:  now,
+		ModifiedAt: now,
+		IndexedAt:  now,
+		FileSize:   1,
+		WordCount:  2,
+	}
+	writeFile := func(id int64) (string, error) {
+		return service.mirrorPathFor(id, "rollback-version.md"), nil
+	}
+
+	var capturedVersionFilePath string
+	failingVersion := func(planID int64) (dto.InsertPlanVersionParams, func() error) {
+		capturedVersionFilePath = filepath.Join(service.versionsDirFor(planID), "0-test.md")
+		return dto.InsertPlanVersionParams{
+				PlanID:        planID,
+				VersionNumber: 0,
+				FilePath:      capturedVersionFilePath,
+				Content:       "# Rollback Version\n\nContent.",
+				WordCount:     2,
+				CreatedAt:     now,
+			}, func() error {
+				return fmt.Errorf("simulated version write failure")
+			}
+	}
+
+	_, err := service.db.InsertPlan(ctx, params, writeFile, failingVersion)
+	require.Error(t, err)
+
+	// No zombie row: a failed version write must roll back the plan row too.
+	_, err = service.db.GetPlanByFileName(ctx, "rollback-version.md", sourcePlansDir)
+	require.True(t, dto.IsNotFound(err), "a rolled-back insert must not leave a persisted plan row")
+
+	// No orphaned file either: the version row is inserted before the file is
+	// ever written, so a failing write leaves nothing on disk to clean up.
+	require.NotEmpty(t, capturedVersionFilePath)
+	_, err = os.Stat(capturedVersionFilePath)
+	require.True(t, os.IsNotExist(err), "a rolled-back insert must not leave an orphaned version file on disk")
+
+	// A subsequent, successful insert (with a working version write) must work cleanly.
+	workingVersion := func(planID int64) (dto.InsertPlanVersionParams, func() error) {
+		versionFilePath := filepath.Join(service.versionsDirFor(planID), "0-test.md")
+		return dto.InsertPlanVersionParams{
+				PlanID:        planID,
+				VersionNumber: 0,
+				FilePath:      versionFilePath,
+				Content:       "# Rollback Version\n\nContent.",
+				WordCount:     2,
+				CreatedAt:     now,
+			}, func() error {
+				return os.MkdirAll(filepath.Dir(versionFilePath), 0o750)
+			}
+	}
+	id, err := service.db.InsertPlan(ctx, params, writeFile, workingVersion)
+	require.NoError(t, err)
+
+	versionCount, err := service.db.GetVersionCount(ctx, id)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), versionCount)
 }
