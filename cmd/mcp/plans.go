@@ -21,16 +21,12 @@ func (h *Handler) registerPlanTools() error {
 		Description: "Retrieve the full content and metadata of a specific plan file by filename. Returns metadata in TOON format followed by markdown content.",
 	}, h.GetPlanHandler)
 
-	mcp.AddTool(h.server, &mcp.Tool{
-		Name:        "list_tools",
-		Description: "List all available MCP tools with descriptions and parameters. Useful for discovering capabilities.",
-	}, h.ListToolsHandler)
-
 	return nil
 }
 
-// SearchPlansHandler handles the search_plans tool.
-func (h *Handler) SearchPlansHandler(ctx context.Context, req *mcp.CallToolRequest, args SearchPlansArgs) (*mcp.CallToolResult, []busquets.PlanSummary, error) {
+// SearchPlansHandler handles the search_plans tool. Returns PlanSearchResult (not a bare
+// slice) so it has a real output schema.
+func (h *Handler) SearchPlansHandler(ctx context.Context, req *mcp.CallToolRequest, args SearchPlansArgs) (*mcp.CallToolResult, PlanSearchResult, error) {
 	// Validate and set defaults
 	limit := args.Limit
 	if limit <= 0 {
@@ -40,9 +36,9 @@ func (h *Handler) SearchPlansHandler(ctx context.Context, req *mcp.CallToolReque
 	}
 
 	// Call service layer
-	plans, err := h.service.SearchPlansWithTags(ctx, args.Query, args.Tags, args.MatchAll)
+	plans, err := h.service.SearchPlansWithTags(ctx, args.Query, args.Tags, args.MatchAll) // TODO: optimize this call please.
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to search plans: %w", err)
+		return nil, PlanSearchResult{}, fmt.Errorf("failed to search plans: %w", err)
 	}
 
 	// Limit results
@@ -53,10 +49,10 @@ func (h *Handler) SearchPlansHandler(ctx context.Context, req *mcp.CallToolReque
 	// Format response using TOON
 	toonOutput, err := FormatSearchResults(plans)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to format results: %w", err)
+		return nil, PlanSearchResult{}, fmt.Errorf("failed to format results: %w", err)
 	}
 
-	return buildMCPResult(toonOutput), plans, nil
+	return buildMCPResult(toonOutput), PlanSearchResult{Plans: plans}, nil
 }
 
 // GetPlanHandler handles the get_plan tool.
@@ -64,12 +60,11 @@ func (h *Handler) GetPlanHandler(ctx context.Context, req *mcp.CallToolRequest, 
 	if args.FileName == "" {
 		return nil, nil, fmt.Errorf("fileName is required")
 	}
-
-	syncSource := h.service.SourcePathForLabel(args.SyncSource)
-	if syncSource == "" {
-		return nil, nil, fmt.Errorf("unknown source %q: use a label from search_plans results", args.SyncSource)
+	if args.SyncSource == "" {
+		return nil, nil, fmt.Errorf("syncSource is required")
 	}
-	plan, err := h.service.GetPlanDetailByFileName(ctx, args.FileName, syncSource)
+
+	plan, err := h.service.GetPlanDetailByFileName(ctx, args.FileName, args.SyncSource)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get plan: %w", err)
 	}
@@ -81,15 +76,4 @@ func (h *Handler) GetPlanHandler(ctx context.Context, req *mcp.CallToolRequest, 
 	}
 
 	return buildMCPResult(toonOutput), plan, nil
-}
-
-// ListToolsHandler handles the list_tools tool.
-func (h *Handler) ListToolsHandler(ctx context.Context, req *mcp.CallToolRequest, args struct{}) (*mcp.CallToolResult, string, error) {
-	// Format tools list using TOON
-	toonOutput, err := FormatToolsList()
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to format tools: %w", err)
-	}
-
-	return buildMCPResult(toonOutput), toonOutput, nil
 }

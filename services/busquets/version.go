@@ -215,6 +215,17 @@ func (s *Service) RestorePlanVersion(ctx context.Context, planID, versionNumber 
 	return nil
 }
 
+// RestorePlanVersionByFileName resolves a plan by fileName+syncSource and restores it to the
+// given version — same as RestorePlanVersion, but callers (like the MCP layer) don't need to
+// already know the plan's internal ID.
+func (s *Service) RestorePlanVersionByFileName(ctx context.Context, fileName, syncSource string, versionNumber int64) error {
+	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
+	if err != nil {
+		return fmt.Errorf("failed to get plan: %w", err)
+	}
+	return s.RestorePlanVersion(ctx, plan.ID, versionNumber)
+}
+
 // GetVersionCount returns the total number of versions for a plan.
 func (s *Service) GetVersionCount(ctx context.Context, planName, syncSource string) (int64, error) {
 	plan, err := s.db.GetPlanByFileName(ctx, planName, syncSource)

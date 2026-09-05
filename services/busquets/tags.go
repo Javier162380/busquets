@@ -178,6 +178,48 @@ func (s *Service) SetPlanTags(ctx context.Context, fileName, syncSource string, 
 	return s.db.SetPlanTags(ctx, plan.ID, tagIDs, now)
 }
 
+// SetPlanTagsAndGet replaces a plan's tags and returns the resulting list, atomically —
+// tag names will be normalized (lowercase, trimmed); unknown tags are created automatically.
+func (s *Service) SetPlanTagsAndGet(ctx context.Context, fileName, syncSource string, tagNames []string) ([]Tag, error) {
+	tagNames = NormalizeTags(tagNames)
+
+	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plan: %w", err)
+	}
+
+	now := s.nowProvider.Now()
+	tagIDs, err := s.resolveTagIDs(ctx, tagNames, now)
+	if err != nil {
+		return nil, err
+	}
+
+	tags, err := s.db.SetPlanTagsAndGet(ctx, plan.ID, tagIDs, now)
+	return toTags(tags), err
+}
+
+// RemovePlanTag removes one tag from one plan by name, atomically. Returns an error if
+// the tag doesn't exist at all, rather than silently succeeding as a no-op.
+func (s *Service) RemovePlanTag(ctx context.Context, fileName, syncSource, tagName string) ([]Tag, error) {
+	tagName = NormalizeTags([]string{tagName})[0]
+
+	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plan: %w", err)
+	}
+
+	tag, err := s.db.GetTagByName(ctx, tagName)
+	if dto.IsNotFound(err) {
+		return nil, fmt.Errorf("tag %q not found", tagName)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to look up tag: %w", err)
+	}
+
+	tags, err := s.db.RemoveTagFromPlanAndGet(ctx, plan.ID, tag.ID)
+	return toTags(tags), err
+}
+
 // GetPlanTags returns all tags associated with a plan.
 func (s *Service) GetPlanTags(ctx context.Context, fileName, syncSource string) ([]Tag, error) {
 	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)

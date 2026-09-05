@@ -13,6 +13,8 @@ type PlanService interface {
 	SearchPlansWithTags(ctx context.Context, query string, tags []string, matchAll bool) ([]PlanSummary, error)
 	DeleteTag(ctx context.Context, id int64) error
 	SetPlanTags(ctx context.Context, fileName, syncSource string, tagNames []string) error
+	SetPlanTagsAndGet(ctx context.Context, fileName, syncSource string, tagNames []string) ([]Tag, error)
+	RemovePlanTag(ctx context.Context, fileName, syncSource, tagName string) ([]Tag, error)
 	GetAllTags(ctx context.Context) ([]Tag, error)
 	GetPlanTags(ctx context.Context, fileName, syncSource string) ([]Tag, error)
 	ListUntaggedPlansWithReadingTime(ctx context.Context) ([]PlanSummary, error)
@@ -33,6 +35,7 @@ type VersionService interface {
 	GetPlanVersionHistory(ctx context.Context, planName, syncSource string, offset, limit int64) ([]PlanVersionDetail, error)
 	GetPlanVersion(ctx context.Context, planName, syncSource string, versionNumber int64) (*PlanVersionDetail, error)
 	RestorePlanVersion(ctx context.Context, planID, versionNumber int64) error
+	RestorePlanVersionByFileName(ctx context.Context, fileName, syncSource string, versionNumber int64) error
 }
 
 // SettingsService defines settings operations.

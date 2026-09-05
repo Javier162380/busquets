@@ -89,27 +89,3 @@ func TestFormatPlanDetail(t *testing.T) {
 		t.Errorf("Missing markdown content: %s", output)
 	}
 }
-
-func TestFormatToolsList(t *testing.T) {
-	output, err := FormatToolsList()
-	if err != nil {
-		t.Fatalf("FormatToolsList failed: %v", err)
-	}
-
-	// Verify all tools are listed
-	if !strings.Contains(output, "search_plans") {
-		t.Errorf("Missing search_plans tool: %s", output)
-	}
-
-	if !strings.Contains(output, "get_plan") {
-		t.Errorf("Missing get_plan tool: %s", output)
-	}
-
-	if !strings.Contains(output, "list_tools") {
-		t.Errorf("Missing list_tools tool: %s", output)
-	}
-
-	if !strings.Contains(output, "tools") {
-		t.Errorf("Missing tools header: %s", output)
-	}
-}
