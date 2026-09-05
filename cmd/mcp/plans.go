@@ -14,10 +14,7 @@ func (h *Handler) registerPlanTools() error {
 	mcp.AddTool(h.server, &mcp.Tool{
 		Name:        "search_plans",
 		Description: "Search LLM/AI-assistant plan files by text content and/or tags. Returns plan summaries with metadata in TOON format. Use empty query to list all plans. Tag filtering supports AND (matchAll=true) or OR (matchAll=false) logic. Limit parameter: default=20, max=50.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, args SearchPlansArgs) (*mcp.CallToolResult, any, error) {
-		res, _, err := h.SearchPlansHandler(ctx, req, args)
-		return res, nil, err
-	})
+	}, h.SearchPlansHandler)
 
 	mcp.AddTool(h.server, &mcp.Tool{
 		Name:        "get_plan",
@@ -38,7 +35,7 @@ func (h *Handler) SearchPlansHandler(ctx context.Context, req *mcp.CallToolReque
 	}
 
 	// Call service layer
-	plans, err := h.service.SearchPlansWithTags(ctx, args.Query, args.Tags, args.MatchAll)
+	plans, err := h.service.SearchPlansWithTags(ctx, args.Query, args.Tags, args.MatchAll) // TODO: optimize this call please.
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to search plans: %w", err)
 	}
