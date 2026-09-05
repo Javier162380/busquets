@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/Javier162380/busquets/internal/config"
@@ -89,11 +90,13 @@ func TestSearchPlansHandler(t *testing.T) {
 			Limit: 0, // Should default to 20
 		}
 
-		result, plans, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
+		result, searchResult, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Greater(t, len(plans), 0)
-		require.LessOrEqual(t, len(plans), 20)
+		// 62 plans match "test" (test-plan-1.md, test-plan-2.md, and 60 plan-limit-*.md
+		// files, all matched via LIKE '%test%' since "testing" contains "test"); default
+		// limit clamps that down to exactly 20.
+		require.Equal(t, 20, len(searchResult.Plans))
 		require.NotEmpty(t, result.Content)
 	})
 
@@ -103,10 +106,10 @@ func TestSearchPlansHandler(t *testing.T) {
 			Limit: 10,
 		}
 
-		result, plans, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
+		result, searchResult, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 10, len(plans))
+		require.Equal(t, 10, len(searchResult.Plans))
 	})
 
 	t.Run("search with limit exceeding max (50)", func(t *testing.T) {
@@ -115,10 +118,10 @@ func TestSearchPlansHandler(t *testing.T) {
 			Limit: 100, // Should be clamped to 50
 		}
 
-		result, plans, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
+		result, searchResult, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Equal(t, 50, len(plans))
+		require.Equal(t, 50, len(searchResult.Plans))
 	})
 
 	t.Run("search with tags AND logic", func(t *testing.T) {
@@ -129,19 +132,19 @@ func TestSearchPlansHandler(t *testing.T) {
 			Limit:    20,
 		}
 
-		result, plans, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
+		result, searchResult, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 
-		// Verify all returned plans have both tags
-		for _, plan := range plans {
-			tagNames := make([]string, len(plan.Tags))
-			for i, tag := range plan.Tags {
-				tagNames[i] = tag.Name
-			}
-			require.Contains(t, tagNames, "api")
-			require.Contains(t, tagNames, "auth")
+		// Only backend-auth.md carries both "api" and "auth".
+		require.Len(t, searchResult.Plans, 1)
+		require.Equal(t, "backend-auth.md", searchResult.Plans[0].FileName)
+
+		tagNames := make([]string, len(searchResult.Plans[0].Tags))
+		for i, tag := range searchResult.Plans[0].Tags {
+			tagNames[i] = tag.Name
 		}
+		require.ElementsMatch(t, []string{"api", "auth", "backend"}, tagNames)
 	})
 
 	t.Run("search with tags OR logic", func(t *testing.T) {
@@ -152,10 +155,13 @@ func TestSearchPlansHandler(t *testing.T) {
 			Limit:    20,
 		}
 
-		result, plans, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
+		result, searchResult, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Greater(t, len(plans), 0, "should find plans with either tag")
+
+		// Only test-plan-2.md carries "frontend" or "ui".
+		require.Len(t, searchResult.Plans, 1)
+		require.Equal(t, "test-plan-2.md", searchResult.Plans[0].FileName)
 	})
 
 	t.Run("empty results", func(t *testing.T) {
@@ -164,10 +170,10 @@ func TestSearchPlansHandler(t *testing.T) {
 			Limit: 20,
 		}
 
-		result, plans, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
+		result, searchResult, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Empty(t, plans)
+		require.Empty(t, searchResult.Plans)
 	})
 
 	t.Run("verify TOON format output", func(t *testing.T) {
@@ -176,15 +182,20 @@ func TestSearchPlansHandler(t *testing.T) {
 			Limit: 5,
 		}
 
-		result, _, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
+		result, searchResult, err := handler.SearchPlansHandler(ctx, &mcp.CallToolRequest{}, args)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.NotEmpty(t, result.Content)
+		require.Len(t, searchResult.Plans, 5)
 
-		// Verify it's text content
+		// Verify it's text content, with the exact TOON array header (row order isn't
+		// asserted here since it depends on modified_at, which can tie across files
+		// created in the same test run).
 		textContent, ok := result.Content[0].(*mcp.TextContent)
 		require.True(t, ok)
-		require.Contains(t, textContent.Text, "plans")
+		header, _, found := strings.Cut(textContent.Text, "\n")
+		require.True(t, found)
+		require.Equal(t, "plans[5]{file_name,sync_source,sync_label,title,tags,modified_at,reading_time}:", header)
 	})
 }
 
@@ -232,7 +243,7 @@ More testing details.`
 		require.NotNil(t, plan)
 		require.Equal(t, "test-plan.md", plan.FileName)
 		require.Equal(t, "Test Plan", plan.Title)
-		require.Contains(t, plan.Content, "comprehensive test plan")
+		require.Equal(t, testContent, plan.Content)
 		require.NotEmpty(t, result.Content)
 	})
 
@@ -270,7 +281,7 @@ More testing details.`
 		require.Error(t, err)
 		require.Nil(t, result)
 		require.Nil(t, plan)
-		require.Contains(t, err.Error(), "failed to get plan")
+		require.Equal(t, "failed to get plan: not found", err.Error())
 	})
 
 	t.Run("verify TOON format with content", func(t *testing.T) {
@@ -279,17 +290,21 @@ More testing details.`
 			SyncSource: sourcePlansDir,
 		}
 
-		result, _, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
+		result, plan, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		require.NotEmpty(t, result.Content)
 
-		// Verify it's text content
 		textContent, ok := result.Content[0].(*mcp.TextContent)
 		require.True(t, ok, "result should be TextContent")
-		require.Contains(t, textContent.Text, "plan")
-		require.Contains(t, textContent.Text, "content:")
-		require.Contains(t, textContent.Text, "comprehensive test plan")
+
+		firstLine, _, found := strings.Cut(textContent.Text, "\n")
+		require.True(t, found)
+		require.Equal(t, "plan:", firstLine)
+
+		_, content, found := strings.Cut(textContent.Text, "\n\ncontent:\n")
+		require.True(t, found)
+		require.Equal(t, plan.Content, content)
 	})
 }
 

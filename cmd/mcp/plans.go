@@ -24,8 +24,9 @@ func (h *Handler) registerPlanTools() error {
 	return nil
 }
 
-// SearchPlansHandler handles the search_plans tool.
-func (h *Handler) SearchPlansHandler(ctx context.Context, req *mcp.CallToolRequest, args SearchPlansArgs) (*mcp.CallToolResult, []busquets.PlanSummary, error) {
+// SearchPlansHandler handles the search_plans tool. Returns PlanSearchResult (not a bare
+// slice) so it has a real output schema.
+func (h *Handler) SearchPlansHandler(ctx context.Context, req *mcp.CallToolRequest, args SearchPlansArgs) (*mcp.CallToolResult, PlanSearchResult, error) {
 	// Validate and set defaults
 	limit := args.Limit
 	if limit <= 0 {
@@ -37,7 +38,7 @@ func (h *Handler) SearchPlansHandler(ctx context.Context, req *mcp.CallToolReque
 	// Call service layer
 	plans, err := h.service.SearchPlansWithTags(ctx, args.Query, args.Tags, args.MatchAll) // TODO: optimize this call please.
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to search plans: %w", err)
+		return nil, PlanSearchResult{}, fmt.Errorf("failed to search plans: %w", err)
 	}
 
 	// Limit results
@@ -48,10 +49,10 @@ func (h *Handler) SearchPlansHandler(ctx context.Context, req *mcp.CallToolReque
 	// Format response using TOON
 	toonOutput, err := FormatSearchResults(plans)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to format results: %w", err)
+		return nil, PlanSearchResult{}, fmt.Errorf("failed to format results: %w", err)
 	}
 
-	return buildMCPResult(toonOutput), plans, nil
+	return buildMCPResult(toonOutput), PlanSearchResult{Plans: plans}, nil
 }
 
 // GetPlanHandler handles the get_plan tool.

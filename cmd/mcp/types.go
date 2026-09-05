@@ -95,3 +95,8 @@ type TagsResult struct {
 type PlanVersionHistoryResult struct {
 	Versions []busquets.PlanVersionDetail `json:"versions"`
 }
+
+// PlanSearchResult wraps the plan list returned by search_plans.
+type PlanSearchResult struct {
+	Plans []busquets.PlanSummary `json:"plans"`
+}
