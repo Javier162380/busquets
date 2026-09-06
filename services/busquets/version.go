@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/Javier162380/busquets/internal/gitdiff"
 	"github.com/Javier162380/busquets/internal/retrier"
 	"github.com/Javier162380/busquets/services/busquets/dto"
 )
@@ -139,21 +140,50 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName, syncSource strin
 	readingSpeedWPM := s.GetReadingSpeedForDisplay(ctx)
 	readingTime := s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM)
 
-	planVersion := PlanVersion{
-		ID:            version.ID,
-		PlanID:        version.PlanID,
-		VersionNumber: version.VersionNumber,
-		FilePath:      version.FilePath,
-		Content:       version.Content,
-		WordCount:     version.WordCount,
-		CreatedAt:     version.CreatedAt,
-	}
-
 	return &PlanVersionDetail{
-		PlanVersion: planVersion,
+		PlanVersion: toPlanVersion(version),
 		ReadingTime: readingTime,
 		Tags:        toTags(tags),
 	}, nil
+}
+
+// toPlanVersion maps a dto.PlanVersion row to the domain PlanVersion type.
+func toPlanVersion(v dto.PlanVersion) PlanVersion {
+	return PlanVersion{
+		ID:            v.ID,
+		PlanID:        v.PlanID,
+		VersionNumber: v.VersionNumber,
+		FilePath:      v.FilePath,
+		Content:       v.Content,
+		WordCount:     v.WordCount,
+		CreatedAt:     v.CreatedAt,
+	}
+}
+
+// DiffPlanVersions returns a unified diff of fromVersion against toVersion,
+// plus both versions' metadata.
+func (s *Service) DiffPlanVersions(ctx context.Context, fileName, syncSource string, fromVersion, toVersion int64) (VersionDiff, error) {
+	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
+	if err != nil {
+		return VersionDiff{}, fmt.Errorf("plan not found: %w", err)
+	}
+
+	from, err := s.db.GetPlanVersionByNumber(ctx, plan.ID, fromVersion)
+	if err != nil {
+		return VersionDiff{}, fmt.Errorf("version %d not found: %w", fromVersion, err)
+	}
+	to, err := s.db.GetPlanVersionByNumber(ctx, plan.ID, toVersion)
+	if err != nil {
+		return VersionDiff{}, fmt.Errorf("version %d not found: %w", toVersion, err)
+	}
+
+	diff, err := gitdiff.Diff(from.Content, to.Content,
+		fmt.Sprintf("Version %d", from.VersionNumber), fmt.Sprintf("Version %d", to.VersionNumber))
+	if err != nil {
+		return VersionDiff{}, fmt.Errorf("failed to build diff: %w", err)
+	}
+
+	return VersionDiff{Diff: diff, From: toPlanVersion(from), To: toPlanVersion(to)}, nil
 }
 
 // RestorePlanVersion restores a plan to a previous version: writes that

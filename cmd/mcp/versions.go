@@ -26,6 +26,11 @@ func (h *Handler) registerVersionTools() error {
 		Description: "Restores a plan's content to a previous version (the restore itself is recorded as a new version).",
 	}, h.RestorePlanVersion)
 
+	mcp.AddTool(h.server, &mcp.Tool{
+		Name:        "diff_plan_versions",
+		Description: "Returns a unified (git-diff-style) diff of fromVersion's content against toVersion's, plus both versions' metadata.",
+	}, h.DiffPlanVersions)
+
 	return nil
 }
 
@@ -99,4 +104,38 @@ func (h *Handler) RestorePlanVersion(ctx context.Context, req *mcp.CallToolReque
 	}
 
 	return buildMCPResult(fmt.Sprintf("restored %s to version %d", args.FileName, args.VersionNumber)), nil, nil
+}
+
+// DiffPlanVersions handles the diff_plan_versions tool.
+func (h *Handler) DiffPlanVersions(ctx context.Context, req *mcp.CallToolRequest, args DiffPlanVersionsArgs) (*mcp.CallToolResult, DiffResult, error) {
+	if args.FileName == "" {
+		return nil, DiffResult{}, fmt.Errorf("fileName is required")
+	}
+	if args.SyncSource == "" {
+		return nil, DiffResult{}, fmt.Errorf("syncSource is required")
+	}
+	if args.FromVersion < 0 {
+		return nil, DiffResult{}, fmt.Errorf("fromVersion is required")
+	}
+	if args.ToVersion < 0 {
+		return nil, DiffResult{}, fmt.Errorf("toVersion is required")
+	}
+
+	vd, err := h.service.DiffPlanVersions(ctx, args.FileName, args.SyncSource, args.FromVersion, args.ToVersion)
+	if err != nil {
+		return nil, DiffResult{}, fmt.Errorf("failed to diff versions: %w", err)
+	}
+
+	toonOutput, err := FormatVersionDiff(vd)
+	if err != nil {
+		return nil, DiffResult{}, fmt.Errorf("failed to format diff: %w", err)
+	}
+
+	return buildMCPResult(toonOutput), DiffResult{
+		Diff:          vd.Diff,
+		FromVersion:   vd.From.VersionNumber,
+		FromCreatedAt: vd.From.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		ToVersion:     vd.To.VersionNumber,
+		ToCreatedAt:   vd.To.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+	}, nil
 }

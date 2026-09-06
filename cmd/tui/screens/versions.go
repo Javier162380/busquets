@@ -10,12 +10,12 @@ import (
 	"github.com/Javier162380/busquets/cmd/tui/messages"
 	"github.com/Javier162380/busquets/cmd/tui/styles"
 	"github.com/Javier162380/busquets/cmd/tui/types"
+	"github.com/Javier162380/busquets/internal/gitdiff"
 	"github.com/Javier162380/busquets/services/busquets"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/pmezard/go-difflib/difflib"
 )
 
 // VersionsScreen handles version history browsing and viewing.
@@ -756,7 +756,11 @@ func (s *VersionsScreen) diffAgainstBase() tea.Cmd {
 		}
 	}
 
-	diffText, err := buildUnifiedDiff(s.baseVersion, s.current)
+	diffText, err := gitdiff.Diff(
+		s.baseVersion.Content, s.current.Content,
+		fmt.Sprintf("Version %d", s.baseVersion.VersionNumber),
+		fmt.Sprintf("Version %d", s.current.VersionNumber),
+	)
 	if err != nil {
 		return func() tea.Msg {
 			return messages.ErrorMsg{Error: fmt.Errorf("failed to build diff: %w", err)}
@@ -776,19 +780,6 @@ func (s *VersionsScreen) copyDiff() tea.Cmd {
 			Label: fmt.Sprintf("Diff v%d→v%d", s.baseVersion.VersionNumber, s.current.VersionNumber),
 		}
 	}
-}
-
-// buildUnifiedDiff renders a git-diff-style unified diff of base's content
-// against target's.
-func buildUnifiedDiff(base, target *busquets.PlanVersionDetail) (string, error) {
-	ud := difflib.UnifiedDiff{
-		A:        difflib.SplitLines(base.Content),
-		B:        difflib.SplitLines(target.Content),
-		FromFile: fmt.Sprintf("Version %d", base.VersionNumber),
-		ToFile:   fmt.Sprintf("Version %d", target.VersionNumber),
-		Context:  3,
-	}
-	return difflib.GetUnifiedDiffString(ud)
 }
 
 // colorizeDiff applies git-diff-style coloring to a unified diff: green

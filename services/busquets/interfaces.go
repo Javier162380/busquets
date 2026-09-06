@@ -34,6 +34,7 @@ type VersionService interface {
 	SavePlanVersion(ctx context.Context, planName, syncSource, content string) error
 	GetPlanVersionHistory(ctx context.Context, planName, syncSource string, offset, limit int64) ([]PlanVersionDetail, error)
 	GetPlanVersion(ctx context.Context, planName, syncSource string, versionNumber int64) (*PlanVersionDetail, error)
+	DiffPlanVersions(ctx context.Context, fileName, syncSource string, fromVersion, toVersion int64) (VersionDiff, error)
 	RestorePlanVersion(ctx context.Context, planID, versionNumber int64) error
 	RestorePlanVersionByFileName(ctx context.Context, fileName, syncSource string, versionNumber int64) error
 }

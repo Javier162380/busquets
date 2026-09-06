@@ -580,6 +580,57 @@ func TestRestorePlanVersion(t *testing.T) {
 	})
 }
 
+func TestDiffPlanVersions(t *testing.T) {
+	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test\n\nContent v1.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+	require.NoError(t, service.SavePlanVersion(ctx, "test-plan.md", sourcePlansDir, "Content v1."))
+	require.NoError(t, service.SavePlanVersion(ctx, "test-plan.md", sourcePlansDir, "Content v2."))
+
+	handler := &Handler{service: service, server: nil}
+
+	t.Run("diffs two versions", func(t *testing.T) {
+		args := DiffPlanVersionsArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir, FromVersion: 1, ToVersion: 2}
+		result, res, err := handler.DiffPlanVersions(ctx, &mcp.CallToolRequest{}, args)
+		require.NoError(t, err)
+		require.NotNil(t, result)
+		require.Equal(t, "--- Version 1\n+++ Version 2\n@@ -1 +1 @@\n-Content v1.\n+Content v2.\n", res.Diff)
+		require.Equal(t, int64(1), res.FromVersion)
+		require.Equal(t, int64(2), res.ToVersion)
+	})
+
+	t.Run("missing fileName", func(t *testing.T) {
+		args := DiffPlanVersionsArgs{SyncSource: sourcePlansDir, FromVersion: 1, ToVersion: 2}
+		result, res, err := handler.DiffPlanVersions(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Empty(t, res.Diff)
+		require.Equal(t, "fileName is required", err.Error())
+	})
+
+	t.Run("missing syncSource", func(t *testing.T) {
+		args := DiffPlanVersionsArgs{FileName: "test-plan.md", FromVersion: 1, ToVersion: 2}
+		result, res, err := handler.DiffPlanVersions(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Empty(t, res.Diff)
+		require.Equal(t, "syncSource is required", err.Error())
+	})
+
+	t.Run("version not found", func(t *testing.T) {
+		args := DiffPlanVersionsArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir, FromVersion: 1, ToVersion: 99}
+		result, res, err := handler.DiffPlanVersions(ctx, &mcp.CallToolRequest{}, args)
+		require.Error(t, err)
+		require.Nil(t, result)
+		require.Empty(t, res.Diff)
+		require.Equal(t, "failed to diff versions: version 99 not found: not found", err.Error())
+	})
+}
+
 func TestGetAllTags(t *testing.T) {
 	ctx := context.Background()
 	service, sourcePlansDir, cleanup := setupTestService(t)

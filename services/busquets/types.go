@@ -79,6 +79,13 @@ type PlanVersionDetail struct {
 	Tags        []Tag
 }
 
+// VersionDiff is the result of comparing two plan versions.
+type VersionDiff struct {
+	Diff string
+	From PlanVersion
+	To   PlanVersion
+}
+
 func CalculateReadingTime(wordCount int) int {
 	minutes := float64(wordCount) / float64(AverageReadingSpeed)
 	return max(1, int(math.Ceil(minutes)))
