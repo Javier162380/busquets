@@ -56,6 +56,14 @@ type RestorePlanVersionArgs struct {
 	VersionNumber int64  `json:"versionNumber"`
 }
 
+// DiffPlanVersionsArgs contains arguments for the diff_plan_versions tool.
+type DiffPlanVersionsArgs struct {
+	FileName    string `json:"fileName"`
+	SyncSource  string `json:"syncSource"`
+	FromVersion int64  `json:"fromVersion"`
+	ToVersion   int64  `json:"toVersion"`
+}
+
 // DeletePlanTagArgs contains arguments for the delete_tag tool (removes one tag from one plan).
 type DeletePlanTagArgs struct {
 	FileName   string `json:"fileName"`
@@ -99,4 +107,14 @@ type PlanVersionHistoryResult struct {
 // PlanSearchResult wraps the plan list returned by search_plans.
 type PlanSearchResult struct {
 	Plans []busquets.PlanSummary `json:"plans"`
+}
+
+// DiffResult wraps the unified diff text and which two versions were compared,
+// returned by diff_plan_versions.
+type DiffResult struct {
+	Diff          string `json:"diff"`
+	FromVersion   int64  `json:"fromVersion"`
+	FromCreatedAt string `json:"fromCreatedAt"`
+	ToVersion     int64  `json:"toVersion"`
+	ToCreatedAt   string `json:"toCreatedAt"`
 }

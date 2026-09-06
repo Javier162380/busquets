@@ -38,3 +38,16 @@ func toComments(cs []dto.Comment) []Comment {
 	}
 	return out
 }
+
+// toPlanVersion maps a dto.PlanVersion row to the domain PlanVersion type.
+func toPlanVersion(v dto.PlanVersion) PlanVersion {
+	return PlanVersion{
+		ID:            v.ID,
+		PlanID:        v.PlanID,
+		VersionNumber: v.VersionNumber,
+		FilePath:      v.FilePath,
+		Content:       v.Content,
+		WordCount:     v.WordCount,
+		CreatedAt:     v.CreatedAt,
+	}
+}

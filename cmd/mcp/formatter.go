@@ -286,3 +286,36 @@ func derefOrEmpty(s *string) string {
 	}
 	return *s
 }
+
+// versionDiffTOON represents version-diff metadata for TOON encoding.
+type versionDiffTOON struct {
+	FromVersion   int64  `toon:"from_version"`
+	FromCreatedAt string `toon:"from_created_at"`
+	ToVersion     int64  `toon:"to_version"`
+	ToCreatedAt   string `toon:"to_created_at"`
+}
+
+type versionDiffResponse struct {
+	Diff versionDiffTOON `toon:"diff"`
+}
+
+// FormatVersionDiff formats diff metadata using TOON + the raw diff text.
+func FormatVersionDiff(vd busquets.VersionDiff) (string, error) {
+	metadata := versionDiffResponse{Diff: versionDiffTOON{
+		FromVersion:   vd.From.VersionNumber,
+		FromCreatedAt: vd.From.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		ToVersion:     vd.To.VersionNumber,
+		ToCreatedAt:   vd.To.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+	}}
+	encoded, err := toon.Marshal(metadata)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal TOON: %w", err)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(string(encoded))
+	sb.WriteString("\n\ndiff:\n")
+	sb.WriteString(vd.Diff)
+
+	return sb.String(), nil
+}
