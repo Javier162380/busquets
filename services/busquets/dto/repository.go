@@ -62,6 +62,7 @@ type Repository interface {
 
 	// Setting operations
 	GetSettingByName(ctx context.Context, name string) (Setting, error)
+	ListSettings(ctx context.Context, names []string) ([]Setting, error)
 	UpsertSetting(ctx context.Context, params UpsertSettingParams) error
 	DeleteSetting(ctx context.Context, name string) error
 

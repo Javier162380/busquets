@@ -2781,6 +2781,45 @@ func testSearchOverSetting(t *testing.T, setup serviceSetupFn) {
 	})
 }
 
+func TestSettingsOperations(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testSettingsOperations(t, b.setupFn)
+		})
+	}
+}
+
+func testSettingsOperations(t *testing.T, setup serviceSetupFn) {
+	t.Helper()
+	service, _, _, cleanup := setup(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	require.NoError(t, service.SetSetting(ctx, SettingClipboardMode, SettingValues{StringValue: new(ClipboardModeNative)}))
+	require.NoError(t, service.SetSetting(ctx, SettingReadingSpeedWPM, SettingValues{NumberValue: new(250.0)}))
+
+	t.Run("ListSettings returns only the stored names among those requested", func(t *testing.T) {
+		settings, err := service.ListSettings(ctx, []string{SettingClipboardMode, SettingReadingSpeedWPM, SettingDarkModeEnabled})
+		require.NoError(t, err)
+		require.Len(t, settings, 2)
+
+		clipboardMode := settings[SettingClipboardMode]
+		require.Equal(t, ClipboardModeNative, clipboardMode.GetStringValue())
+
+		readingSpeed := settings[SettingReadingSpeedWPM]
+		require.Equal(t, 250.0, readingSpeed.GetNumberValue())
+
+		_, exists := settings[SettingDarkModeEnabled]
+		require.False(t, exists)
+	})
+
+	t.Run("ListSettings with no stored matches returns an empty map", func(t *testing.T) {
+		settings, err := service.ListSettings(ctx, []string{SettingWatchModeEnabled})
+		require.NoError(t, err)
+		require.Empty(t, settings)
+	})
+}
+
 // ---- Multi-source setup helpers ----
 
 type multiSourceSetup struct {

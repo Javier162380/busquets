@@ -42,6 +42,7 @@ type VersionService interface {
 // SettingsService defines settings operations.
 type SettingsService interface {
 	GetSetting(ctx context.Context, variableName string) (Setting, bool, error)
+	ListSettings(ctx context.Context, names []string) (map[string]Setting, error)
 	SetSetting(ctx context.Context, varName string, values SettingValues) error
 }
 

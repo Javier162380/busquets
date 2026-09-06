@@ -891,6 +891,18 @@ func (r *Repository) GetSettingByName(ctx context.Context, name string) (dto.Set
 	return settingToDomain(s), nil
 }
 
+func (r *Repository) ListSettings(ctx context.Context, names []string) ([]dto.Setting, error) {
+	rows, err := r.q.ListSettingsByName(ctx, names)
+	if err != nil {
+		return nil, err
+	}
+	settings := make([]dto.Setting, len(rows))
+	for i, row := range rows {
+		settings[i] = settingToDomain(row)
+	}
+	return settings, nil
+}
+
 func (r *Repository) UpsertSetting(ctx context.Context, params dto.UpsertSettingParams) error {
 	return r.q.UpsertSetting(ctx, UpsertSettingParams{
 		VariableName:  params.VariableName,
