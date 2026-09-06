@@ -147,19 +147,6 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName, syncSource strin
 	}, nil
 }
 
-// toPlanVersion maps a dto.PlanVersion row to the domain PlanVersion type.
-func toPlanVersion(v dto.PlanVersion) PlanVersion {
-	return PlanVersion{
-		ID:            v.ID,
-		PlanID:        v.PlanID,
-		VersionNumber: v.VersionNumber,
-		FilePath:      v.FilePath,
-		Content:       v.Content,
-		WordCount:     v.WordCount,
-		CreatedAt:     v.CreatedAt,
-	}
-}
-
 // DiffPlanVersions returns a unified diff of fromVersion against toVersion,
 // plus both versions' metadata.
 func (s *Service) DiffPlanVersions(ctx context.Context, fileName, syncSource string, fromVersion, toVersion int64) (VersionDiff, error) {
