@@ -504,7 +504,7 @@ func TestGetPlanVersionHistory(t *testing.T) {
 		result, res, err := handler.GetPlanVersionHistory(ctx, &mcp.CallToolRequest{}, args)
 		require.NoError(t, err)
 		require.NotNil(t, result)
-		require.Len(t, res.Versions, 2)
+		require.Len(t, res.Versions, 3) // First sync add version 0.
 	})
 
 	t.Run("missing syncSource", func(t *testing.T) {
