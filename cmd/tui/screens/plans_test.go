@@ -10,18 +10,19 @@ import (
 	"github.com/Javier162380/busquets/services/busquets"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 )
 
 func TestPanelWidths(t *testing.T) {
 	t.Run("widths sum to total width", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		tagW, listW, viewW := s.panelWidths()
 		require.Equal(t, 100, tagW+listW+viewW+4)
 	})
 
 	t.Run("works for odd widths", func(t *testing.T) {
-		s := NewPlansScreen(99, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(99, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		tagW, listW, viewW := s.panelWidths()
 		require.Equal(t, 99, tagW+listW+viewW+4)
 	})
@@ -29,33 +30,127 @@ func TestPanelWidths(t *testing.T) {
 
 func TestGetViewerWidth(t *testing.T) {
 	t.Run("fullscreen layout returns width minus padding", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		s.layout = types.LayoutFullscreen
 		require.Equal(t, 96, s.getViewerWidth())
 	})
 
 	t.Run("split layout returns half width minus padding", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		require.Equal(t, 44, s.getViewerWidth())
 	})
 
 	t.Run("three-panel layout uses panelWidths third value", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		_, _, viewW := s.panelWidths()
 		require.Equal(t, viewW-4, s.getViewerWidth())
 	})
+
+	t.Run("vertical split layout returns full width minus padding", func(t *testing.T) {
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationVertical)
+		require.Equal(t, 94, s.getViewerWidth())
+	})
+
+	t.Run("vertical three-panel layout returns full width minus padding", func(t *testing.T) {
+		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationVertical)
+		require.Equal(t, 94, s.getViewerWidth())
+	})
+}
+
+// TestRenderOrientation asserts that switching orientation actually changes
+// the rendered layout's shape (dimensions, not styled content, which would be
+// brittle) — vertical mode should render narrower-or-equal and taller than
+// horizontal mode, for both the two-panel and three-panel layouts. Exact
+// figures were captured by running the renderers, not hand-derived.
+func TestRenderOrientation(t *testing.T) {
+	t.Run("two-panel split view", func(t *testing.T) {
+		h := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
+		v := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationVertical)
+
+		hLines := strings.Split(h.renderSplitView(), "\n")
+		vLines := strings.Split(v.renderSplitView(), "\n")
+
+		require.Equal(t, 38, len(hLines))
+		require.Equal(t, 101, lipgloss.Width(hLines[0]))
+
+		// 38, matching horizontal — not 40. An earlier version of this budget
+		// rendered vertical mode 2 rows taller than horizontal, which overflowed
+		// the terminal by 1 row once App appends its status-bar line: see
+		// TestRenderVerticalNeverOverflowsHeight below.
+		require.Equal(t, 38, len(vLines))
+		require.Equal(t, 100, lipgloss.Width(vLines[0]))
+	})
+
+	t.Run("three-panel view", func(t *testing.T) {
+		h := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
+		v := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationVertical)
+
+		hLines := strings.Split(h.renderThreePanelView(), "\n")
+		vLines := strings.Split(v.renderThreePanelView(), "\n")
+
+		// Horizontal's 102 (2 over the 100-wide terminal) is pre-existing,
+		// unchanged behavior in this codebase's original three-panel layout —
+		// not introduced or fixed here.
+		require.Equal(t, 38, len(hLines))
+		require.Equal(t, 102, lipgloss.Width(hLines[0]))
+
+		// Vertical mode renders exactly the terminal's width (unlike
+		// horizontal's pre-existing 2-over) — an actual overflow bug here was
+		// caught and fixed via this exact assertion during development: the
+		// side-panel+list top row was 2 columns too wide, which wraps in a
+		// real terminal and corrupts everything below it.
+		require.Equal(t, 38, len(vLines))
+		require.Equal(t, 100, lipgloss.Width(vLines[0]))
+	})
+}
+
+// TestRenderThreePanelViewVerticalNeverOverflowsWidth guards against
+// regressing the exact bug fixed above: vertical mode's rendered width must
+// never exceed the terminal's actual width, at any size — a wider-than-terminal
+// line wraps in a real terminal and corrupts the layout below it, which is how
+// this was originally reported ("top border of the panel is never
+// highlighted" — the wrapped overflow, not a missing style).
+func TestRenderThreePanelViewVerticalNeverOverflowsWidth(t *testing.T) {
+	for _, w := range []int{60, 80, 100, 120} {
+		s := NewPlansScreen(w, 30, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationVertical)
+		lines := strings.Split(s.renderThreePanelViewVertical(), "\n")
+		require.Equal(t, w, lipgloss.Width(lines[0]), "width=%d", w)
+	}
+}
+
+// TestRenderVerticalNeverOverflowsHeight guards against a second instance of
+// the same class of bug: App.View() appends one more line below whatever a
+// screen renders (the status bar), so a screen's own rendered height must
+// leave at least 1 row of slack under the terminal's actual height — every
+// other render function in this codebase already does (contentHeight :=
+// s.height-4 -> box height h-2 -> +1 status line -> h-1). An earlier version
+// of the vertical-orientation height budget didn't leave that slack, so
+// stacking two bordered panels rendered exactly h screen lines; adding the
+// status bar then overflowed the terminal by 1 row, scrolling the very first
+// line — the top panel's top border — off screen. This is what the original
+// "top border of the panel is never highlighted" report actually was.
+func TestRenderVerticalNeverOverflowsHeight(t *testing.T) {
+	for _, h := range []int{20, 24, 30, 40} {
+		twoPanel := NewPlansScreen(100, h, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationVertical)
+		twoPanelLines := strings.Split(twoPanel.renderSplitView(), "\n")
+		require.LessOrEqual(t, len(twoPanelLines)+1, h, "two-panel split, height=%d", h)
+
+		threePanel := NewPlansScreen(100, h, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationVertical)
+		threePanelLines := strings.Split(threePanel.renderThreePanelViewVertical(), "\n")
+		require.LessOrEqual(t, len(threePanelLines)+1, h, "three-panel, height=%d", h)
+	}
 }
 
 func TestUpdateListItems(t *testing.T) {
 	t.Run("empty plans produces empty list", func(t *testing.T) {
-		s := NewPlansScreen(80, 24, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(80, 24, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		s.plans = []busquets.PlanSummary{}
 		s.updateListItems()
 		require.Equal(t, 0, s.list.ItemCount())
 	})
 
 	t.Run("items count matches plans count", func(t *testing.T) {
-		s := NewPlansScreen(80, 24, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(80, 24, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		s.plans = []busquets.PlanSummary{
 			{Title: "Plan A", FileName: "a.md"},
 			{Title: "Plan B", FileName: "b.md"},
@@ -65,7 +160,7 @@ func TestUpdateListItems(t *testing.T) {
 	})
 
 	t.Run("item titles match plan titles", func(t *testing.T) {
-		s := NewPlansScreen(80, 24, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(80, 24, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		s.plans = []busquets.PlanSummary{
 			{Title: "My Plan", FileName: "plan.md", ModifiedAt: time.Now()},
 		}
@@ -78,7 +173,7 @@ func TestUpdateListItems(t *testing.T) {
 
 func TestRebuildTagPanelEntries(t *testing.T) {
 	t.Run("does not panic with populated tags and counts", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		s.allTags = []busquets.Tag{
 			{Name: "go"},
 			{Name: "api"},
@@ -89,7 +184,7 @@ func TestRebuildTagPanelEntries(t *testing.T) {
 	})
 
 	t.Run("counts from tagPlanCounts are used when set", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		s.allTags = []busquets.Tag{{Name: "backend"}}
 		s.tagPlanCounts = map[string]int{"backend": 7}
 		s.rebuildTagPanelEntries()
@@ -97,7 +192,7 @@ func TestRebuildTagPanelEntries(t *testing.T) {
 	})
 
 	t.Run("tags missing from counts appear without panic", func(t *testing.T) {
-		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "tag_plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		s.allTags = []busquets.Tag{{Name: "orphan"}}
 		s.tagPlanCounts = map[string]int{}
 		s.rebuildTagPanelEntries()
@@ -106,7 +201,7 @@ func TestRebuildTagPanelEntries(t *testing.T) {
 }
 
 func newLabelModeScreenWithPlans() *PlansScreen {
-	s := NewPlansScreen(120, 40, false, false, false, busquets.DisplayModeLabelPlanContent, busquets.MarkdownThemeASCII)
+	s := NewPlansScreen(120, 40, false, false, false, busquets.DisplayModeLabelPlanContent, busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 	s.allPlans = []busquets.PlanSummary{
 		{FileName: "a.md", SyncSource: "/srv/work", SyncLabel: "work", Title: "A"},
 		{FileName: "b.md", SyncSource: "/srv/work", SyncLabel: "work", Title: "B"},
@@ -228,7 +323,7 @@ func TestSidePanelFocusCycle(t *testing.T) {
 	} {
 		t.Run(tc.mode, func(t *testing.T) {
 			t.Run("shift+tab from the list reaches the side panel", func(t *testing.T) {
-				s := NewPlansScreen(120, 40, false, false, false, tc.mode, busquets.MarkdownThemeASCII)
+				s := NewPlansScreen(120, 40, false, false, false, tc.mode, busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 				s.focus = types.FocusList
 
 				screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
@@ -236,7 +331,7 @@ func TestSidePanelFocusCycle(t *testing.T) {
 			})
 
 			t.Run("tab from content reaches the side panel", func(t *testing.T) {
-				s := NewPlansScreen(120, 40, false, false, false, tc.mode, busquets.MarkdownThemeASCII)
+				s := NewPlansScreen(120, 40, false, false, false, tc.mode, busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 				s.focus = types.FocusContent
 
 				screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyTab})
@@ -246,7 +341,7 @@ func TestSidePanelFocusCycle(t *testing.T) {
 	}
 
 	t.Run("plan_content has no side panel to reach", func(t *testing.T) {
-		s := NewPlansScreen(120, 40, false, false, false, busquets.DisplayModePlanContent, busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(120, 40, false, false, false, busquets.DisplayModePlanContent, busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		s.focus = types.FocusList
 
 		screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyShiftTab})
@@ -255,7 +350,7 @@ func TestSidePanelFocusCycle(t *testing.T) {
 }
 
 func TestSetDisplayModeMountsOnePanel(t *testing.T) {
-	s := NewPlansScreen(120, 40, false, false, false, busquets.DisplayModePlanContent, busquets.MarkdownThemeASCII)
+	s := NewPlansScreen(120, 40, false, false, false, busquets.DisplayModePlanContent, busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 
 	s.SetDisplayMode(busquets.DisplayModeTagPlanContent)
 	require.NotNil(t, s.tagPanel)
@@ -282,7 +377,7 @@ func TestLeavingFullscreenRestoresThreePanelLayout(t *testing.T) {
 		busquets.DisplayModeLabelPlanContent,
 	} {
 		t.Run(mode, func(t *testing.T) {
-			s := NewPlansScreen(120, 40, false, false, false, mode, busquets.MarkdownThemeASCII)
+			s := NewPlansScreen(120, 40, false, false, false, mode, busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 			s.focus = types.FocusList
 			s.current = &busquets.PlanDetail{
 				PlanSummary: busquets.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "P"},
@@ -300,7 +395,7 @@ func TestLeavingFullscreenRestoresThreePanelLayout(t *testing.T) {
 }
 
 func TestDeleteConfirmDialogVisibleFromList(t *testing.T) {
-	s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+	s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 	s.focus = types.FocusList
 	s.plans = []busquets.PlanSummary{{FileName: "p.md", SyncSource: "/src", Title: "My Plan"}}
 	s.current = &busquets.PlanDetail{
@@ -318,7 +413,7 @@ func TestDeleteConfirmDialogVisibleFromList(t *testing.T) {
 
 func TestCopyKeyEmitsCopyMsg(t *testing.T) {
 	newScreen := func(focus types.Focus) *PlansScreen {
-		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		s.focus = focus
 		s.plans = []busquets.PlanSummary{{FileName: "p.md", SyncSource: "/src", Title: "My Plan"}}
 		s.current = &busquets.PlanDetail{
@@ -357,7 +452,7 @@ func TestTagFilterVisibleInBothDisplayModes(t *testing.T) {
 	}
 	for _, mode := range modes {
 		t.Run(mode, func(t *testing.T) {
-			s := NewPlansScreen(120, 40, false, false, false, mode, busquets.MarkdownThemeASCII)
+			s := NewPlansScreen(120, 40, false, false, false, mode, busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 			s.focus = types.FocusList
 
 			screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'T'}})
@@ -378,7 +473,7 @@ func TestSearchBarVisibleInBothDisplayModes(t *testing.T) {
 	}
 	for _, mode := range modes {
 		t.Run(mode, func(t *testing.T) {
-			s := NewPlansScreen(120, 40, false, false, false, mode, busquets.MarkdownThemeASCII)
+			s := NewPlansScreen(120, 40, false, false, false, mode, busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 			s.focus = types.FocusList
 
 			screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
@@ -392,7 +487,7 @@ func TestSearchBarVisibleInBothDisplayModes(t *testing.T) {
 }
 
 func TestCtrlLClearsFiltersFromList(t *testing.T) {
-	s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+	s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 	s.focus = types.FocusList
 	s.searchQuery = "needle"
 	s.plans = []busquets.PlanSummary{{FileName: "p.md", SyncSource: "/src", Title: "My Plan"}}
@@ -407,7 +502,7 @@ func TestCtrlLClearsFiltersFromList(t *testing.T) {
 
 func TestSaveResultMsgRefreshesContent(t *testing.T) {
 	newScreen := func() *PlansScreen {
-		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 		s.current = &busquets.PlanDetail{
 			PlanSummary: busquets.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "Old Title"},
 			Content:     "old content",
@@ -482,7 +577,7 @@ func TestSaveResultMsgRefreshesContent(t *testing.T) {
 }
 
 func TestEditorModeToggleAndEscReturnsToViewer(t *testing.T) {
-	s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII)
+	s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
 	s.current = &busquets.PlanDetail{
 		PlanSummary: busquets.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "My Plan"},
 		Content:     "some content",

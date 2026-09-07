@@ -70,3 +70,16 @@ func (a *App) handleDisplayModeChanged(msg messages.DisplayModeChangedMsg) (tea.
 	}
 	return a, nil
 }
+
+func (a *App) handleScreenOrientationChanged(msg messages.ScreenOrientationChangedMsg) (tea.Model, tea.Cmd) {
+	a.screenOrientation = msg.Orientation
+	for _, screen := range a.stack {
+		switch s := screen.(type) {
+		case *screens.PlansScreen:
+			s.SetScreenOrientation(msg.Orientation)
+		case *screens.VersionsScreen:
+			s.SetScreenOrientation(msg.Orientation)
+		}
+	}
+	return a, nil
+}

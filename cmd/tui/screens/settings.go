@@ -93,6 +93,13 @@ var KnownSettings = []SettingDefinition{
 		// MarkdownThemeASCII, so offering both is a dead step in the cycle.
 		AllowedValues: []string{busquets.MarkdownThemeDark, busquets.MarkdownThemeLight, busquets.MarkdownThemeTokyoNight, busquets.MarkdownThemeASCII, busquets.MarkdownThemeDracula, busquets.MarkdownThemePinkStyle},
 	},
+	{
+		Name:          busquets.SettingsScreenOrientation,
+		Description:   "Screen orientation, default: Horizontal",
+		Type:          busquets.SettingTypeString,
+		Default:       busquets.SettingValues{StringValue: new(busquets.DefaultScreenOrientation)},
+		AllowedValues: []string{busquets.ScreenOrientationHorizontal, busquets.ScreenOrientationVertical},
+	},
 }
 
 type SettingItem struct {
@@ -194,6 +201,12 @@ func (s *SettingsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 				newVal = *s.settings[s.cursor].Value.StringValue
 			}
 			return s, func() tea.Msg { return messages.MarkdownRenderedThemeChangedMsg{Theme: newVal} }
+		case busquets.SettingsScreenOrientation:
+			newVal := busquets.DefaultScreenOrientation
+			if s.settings[s.cursor].Value.StringValue != nil {
+				newVal = *s.settings[s.cursor].Value.StringValue
+			}
+			return s, func() tea.Msg { return messages.ScreenOrientationChangedMsg{Orientation: newVal} }
 		}
 
 		return s, nil

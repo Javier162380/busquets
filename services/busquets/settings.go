@@ -33,6 +33,7 @@ const (
 	SettingSearchOver              = "search_over"
 	SettingClipboardMode           = "clipboard_mode"
 	SettingMarkdownTheme           = "markdown_theme"
+	SettingsScreenOrientation      = "screen_orientation"
 )
 
 // Clipboard mode values for SettingClipboardMode. These mirror the modes in
@@ -87,6 +88,13 @@ const (
 	MarkdownThemePinkStyle  = styles.PinkStyle
 	MarkdownThemeASCII      = styles.AsciiStyle
 	DefaultMarkdownTheme    = MarkdownThemeTokyoNight
+)
+
+// Orientaton values for ScreenOrientation.
+const (
+	ScreenOrientationHorizontal = "horizontal"
+	ScreenOrientationVertical   = "vertical"
+	DefaultScreenOrientation    = ScreenOrientationHorizontal
 )
 
 // sortKeyToColumn maps a sort key setting value to the corresponding DB column name.
