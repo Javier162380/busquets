@@ -33,6 +33,7 @@ const (
 	SettingSearchOver              = "search_over"
 	SettingClipboardMode           = "clipboard_mode"
 	SettingMarkdownTheme           = "markdown_theme"
+	SettingsScreenOrientation      = "screen_orientation"
 )
 
 // Clipboard mode values for SettingClipboardMode. These mirror the modes in
@@ -84,10 +85,16 @@ const (
 	MarkdownThemeLight      = styles.LightStyle
 	MarkdownThemeDracula    = styles.DraculaStyle
 	MarkdownThemeTokyoNight = styles.TokyoNightStyle
-	MarkdownThemeNoTTYStyle = styles.NoTTYStyle
 	MarkdownThemePinkStyle  = styles.PinkStyle
 	MarkdownThemeASCII      = styles.AsciiStyle
 	DefaultMarkdownTheme    = MarkdownThemeTokyoNight
+)
+
+// Orientaton values for ScreenOrientation.
+const (
+	ScreenOrientationHorizontal = "horizontal"
+	ScreenOrientationVertical   = "vertical"
+	DefaultScreenOrientation    = ScreenOrientationHorizontal
 )
 
 // sortKeyToColumn maps a sort key setting value to the corresponding DB column name.
@@ -169,14 +176,34 @@ func (s *Service) GetSetting(ctx context.Context, variableName string) (Setting,
 		return Setting{}, false, err
 	}
 
-	setting := Setting{
-		SettingName: domainSetting.VariableName,
-		StringValue: domainSetting.StringValue,
-		NumberValue: domainSetting.NumberValue,
-		BoolValue:   domainSetting.BooleanValue,
-		DateValue:   domainSetting.DatetimeValue,
+	return toSetting(domainSetting), true, nil
+}
+
+// ListSettings returns every stored setting among names, keyed by name — one
+// query instead of one GetSetting call per name. A name with no stored row is
+// simply absent from the result, same as GetSetting's exists=false case.
+func (s *Service) ListSettings(ctx context.Context, names []string) (map[string]Setting, error) {
+	rows, err := s.db.ListSettings(ctx, names)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list settings: %w", err)
 	}
-	return setting, true, nil
+
+	settings := make(map[string]Setting, len(rows))
+	for _, row := range rows {
+		settings[row.VariableName] = toSetting(row)
+	}
+	return settings, nil
+}
+
+// toSetting maps a dto.Setting row to the domain Setting type.
+func toSetting(s dto.Setting) Setting {
+	return Setting{
+		SettingName: s.VariableName,
+		StringValue: s.StringValue,
+		NumberValue: s.NumberValue,
+		BoolValue:   s.BooleanValue,
+		DateValue:   s.DatetimeValue,
+	}
 }
 
 // SetSetting stores or updates a setting. Type is inferred from which field in values is set.

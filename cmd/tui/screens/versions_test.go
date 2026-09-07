@@ -1,6 +1,7 @@
 package screens
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -9,25 +10,64 @@ import (
 	"github.com/Javier162380/busquets/services/busquets"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/stretchr/testify/require"
 )
 
 func TestVersionsGetViewerWidth(t *testing.T) {
 	t.Run("fullscreen returns width minus padding", func(t *testing.T) {
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, nil, 100, 40, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, nil, 100, 40, false, false, busquets.ScreenOrientationHorizontal)
 		s.layout = types.LayoutFullscreen
 		require.Equal(t, 96, s.getViewerWidth())
 	})
 
 	t.Run("split layout returns half width minus padding", func(t *testing.T) {
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, nil, 100, 40, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, nil, 100, 40, false, false, busquets.ScreenOrientationHorizontal)
 		require.Equal(t, 44, s.getViewerWidth())
 	})
+
+	t.Run("vertical split layout returns full width minus padding", func(t *testing.T) {
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, nil, 100, 40, false, false, busquets.ScreenOrientationVertical)
+		require.Equal(t, 94, s.getViewerWidth())
+	})
+}
+
+// TestVersionsRenderOrientation asserts that switching orientation actually
+// changes the rendered split view's shape (dimensions, not styled content,
+// which would be brittle). Exact figures were captured by running the
+// renderer, not hand-derived.
+func TestVersionsRenderOrientation(t *testing.T) {
+	h := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, nil, 100, 40, false, false, busquets.ScreenOrientationHorizontal)
+	v := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, nil, 100, 40, false, false, busquets.ScreenOrientationVertical)
+
+	hLines := strings.Split(h.renderSplitView(), "\n")
+	vLines := strings.Split(v.renderSplitView(), "\n")
+
+	require.Equal(t, 38, len(hLines))
+	require.Equal(t, 101, lipgloss.Width(hLines[0]))
+
+	// 38, matching horizontal — see TestVersionsRenderVerticalNeverOverflowsHeight.
+	require.Equal(t, 38, len(vLines))
+	require.Equal(t, 100, lipgloss.Width(vLines[0]))
+}
+
+// TestVersionsRenderVerticalNeverOverflowsHeight mirrors
+// TestRenderVerticalNeverOverflowsHeight in plans_test.go: App.View() appends
+// one more line below whatever a screen renders (the status bar), so the
+// screen's own rendered height must leave at least 1 row of slack under the
+// terminal's actual height, or the status bar addition overflows the terminal
+// by 1 row and scrolls the top panel's top border off screen.
+func TestVersionsRenderVerticalNeverOverflowsHeight(t *testing.T) {
+	for _, h := range []int{20, 24, 30, 40} {
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, nil, 100, h, false, false, busquets.ScreenOrientationVertical)
+		lines := strings.Split(s.renderSplitView(), "\n")
+		require.LessOrEqual(t, len(lines)+1, h, "height=%d", h)
+	}
 }
 
 func TestVersionsUpdateListItems(t *testing.T) {
 	t.Run("empty versions produces empty list", func(t *testing.T) {
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, nil, 80, 24, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, nil, 80, 24, false, false, busquets.ScreenOrientationHorizontal)
 		require.Equal(t, 0, s.list.ItemCount())
 	})
 
@@ -36,7 +76,7 @@ func TestVersionsUpdateListItems(t *testing.T) {
 			{PlanVersion: busquets.PlanVersion{VersionNumber: 1, CreatedAt: time.Now()}},
 			{PlanVersion: busquets.PlanVersion{VersionNumber: 2, CreatedAt: time.Now()}},
 		}
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 80, 24, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 80, 24, false, false, busquets.ScreenOrientationHorizontal)
 		require.Equal(t, 2, s.list.ItemCount())
 	})
 
@@ -44,7 +84,7 @@ func TestVersionsUpdateListItems(t *testing.T) {
 		versions := []busquets.PlanVersionDetail{
 			{PlanVersion: busquets.PlanVersion{VersionNumber: 3, CreatedAt: time.Now()}},
 		}
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 80, 24, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 80, 24, false, false, busquets.ScreenOrientationHorizontal)
 		item := s.list.SelectedItem()
 		require.NotNil(t, item)
 		require.Contains(t, item.Title(), "3")
@@ -53,7 +93,7 @@ func TestVersionsUpdateListItems(t *testing.T) {
 
 func TestVersionsIsInputMode(t *testing.T) {
 	t.Run("false when search bar is inactive", func(t *testing.T) {
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, nil, 80, 24, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, nil, 80, 24, false, false, busquets.ScreenOrientationHorizontal)
 		require.False(t, s.IsInputMode())
 	})
 }
@@ -71,7 +111,7 @@ func TestVersionCopyKeyEmitsCopyMsg(t *testing.T) {
 		{"from content", types.FocusContent},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false)
+			s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false, busquets.ScreenOrientationHorizontal)
 			s.focus = tc.focus
 
 			_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
@@ -91,7 +131,7 @@ func TestVersionMarkBaseToggle(t *testing.T) {
 	}
 
 	t.Run("marks the selected version as base", func(t *testing.T) {
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false, busquets.ScreenOrientationHorizontal)
 
 		_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 		require.Nil(t, cmd)
@@ -101,7 +141,7 @@ func TestVersionMarkBaseToggle(t *testing.T) {
 	})
 
 	t.Run("pressing m again on the same version unmarks it", func(t *testing.T) {
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false, busquets.ScreenOrientationHorizontal)
 		s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 
 		_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
@@ -111,7 +151,7 @@ func TestVersionMarkBaseToggle(t *testing.T) {
 	})
 
 	t.Run("marking a different version moves the mark", func(t *testing.T) {
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false, busquets.ScreenOrientationHorizontal)
 		s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 
 		s.list.Select(1)
@@ -131,7 +171,7 @@ func TestVersionDiffAgainstBase(t *testing.T) {
 	}
 
 	t.Run("d without a marked base emits an error and stays out of diff view", func(t *testing.T) {
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false, busquets.ScreenOrientationHorizontal)
 
 		_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
 		require.NotNil(t, cmd)
@@ -141,7 +181,7 @@ func TestVersionDiffAgainstBase(t *testing.T) {
 	})
 
 	t.Run("d with base equal to current emits an error and stays out of diff view", func(t *testing.T) {
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false, busquets.ScreenOrientationHorizontal)
 		s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 
 		_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
@@ -152,7 +192,7 @@ func TestVersionDiffAgainstBase(t *testing.T) {
 	})
 
 	t.Run("d with a valid distinct base and current builds the expected unified diff", func(t *testing.T) {
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false, busquets.ScreenOrientationHorizontal)
 		s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 
 		s.list.Select(1)
@@ -169,7 +209,7 @@ func TestVersionDiffAgainstBase(t *testing.T) {
 	})
 
 	t.Run("esc from diff view returns to the list with the base still marked", func(t *testing.T) {
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false, busquets.ScreenOrientationHorizontal)
 		s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 		s.list.Select(1)
 		s.current = &versions[1]
@@ -183,7 +223,7 @@ func TestVersionDiffAgainstBase(t *testing.T) {
 	})
 
 	t.Run("c from diff view copies the plain diff to clipboard", func(t *testing.T) {
-		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false)
+		s := NewVersionsScreenWithData(1, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false, busquets.ScreenOrientationHorizontal)
 		s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'m'}})
 		s.list.Select(1)
 		s.current = &versions[1]
@@ -211,7 +251,7 @@ func TestVersionRestoreKeyEmitsRestoreMsgWithPlanID(t *testing.T) {
 		{"from content", types.FocusContent},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			s := NewVersionsScreenWithData(42, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false)
+			s := NewVersionsScreenWithData(42, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, false, busquets.ScreenOrientationHorizontal)
 			s.focus = tc.focus
 
 			_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'R'}})

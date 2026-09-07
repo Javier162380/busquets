@@ -346,6 +346,9 @@ type RenderMarkDownByDefaultMsg struct{ Enabled bool }
 // DisplayModeChangedMsg signals a display mode change.
 type DisplayModeChangedMsg struct{ Mode string }
 
+// ScreenOrientationChangedMsg signals a screen orientation change.
+type ScreenOrientationChangedMsg struct{ Orientation string }
+
 // PlansSortKeyChangedMsg signals a plans sort key change.
 type PlansSortKeyChangedMsg struct{ SortKey string }
 

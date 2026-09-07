@@ -8,6 +8,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"strings"
 	"time"
 )
 
@@ -1087,6 +1088,50 @@ func (q *Queries) ListPlanVersionsAll(ctx context.Context, planID int64) ([]Plan
 			&i.Content,
 			&i.WordCount,
 			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSettingsByName = `-- name: ListSettingsByName :many
+SELECT variable_name, variable_type, string_value, number_value, boolean_value, datetime_value FROM settings WHERE variable_name IN (/*SLICE:variable_names*/?)
+`
+
+func (q *Queries) ListSettingsByName(ctx context.Context, variableNames []string) ([]Setting, error) {
+	query := listSettingsByName
+	var queryParams []interface{}
+	if len(variableNames) > 0 {
+		for _, v := range variableNames {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:variable_names*/?", strings.Repeat(",?", len(variableNames))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:variable_names*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Setting{}
+	for rows.Next() {
+		var i Setting
+		if err := rows.Scan(
+			&i.VariableName,
+			&i.VariableType,
+			&i.StringValue,
+			&i.NumberValue,
+			&i.BooleanValue,
+			&i.DatetimeValue,
 		); err != nil {
 			return nil, err
 		}

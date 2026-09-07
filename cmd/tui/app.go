@@ -39,6 +39,7 @@ type App struct {
 	renderMarkDownByDefault bool
 	displayMode             string
 	markdownRenderedTheme   string
+	screenOrientation       string
 }
 
 // New creates a new TUI application.
@@ -57,38 +58,49 @@ func (a *App) SetDump(w io.Writer) {
 
 // Init initializes the application.
 func (a *App) Init() tea.Cmd {
-	// Initialize theme from settings.
-	setting, exists, _ := a.service.GetSetting(a.ctx, busquets.SettingDarkModeEnabled)
+	// Load all startup settings in one query instead of one GetSetting call each.
+	names := []string{
+		busquets.SettingDarkModeEnabled,
+		busquets.SettingRenderMarkdownByDefault,
+		busquets.SettingDefaultDisplayMode,
+		busquets.SettingMarkdownTheme,
+		busquets.SettingsScreenOrientation,
+	}
+	settings, _ := a.service.ListSettings(a.ctx, names) // missing/errored names are just absent
+
 	darkMode := true // default
-	if exists && setting.IsBoolean() {
+	if setting, ok := settings[busquets.SettingDarkModeEnabled]; ok && setting.IsBoolean() {
 		darkMode = setting.GetBooleanValue()
 	}
 	styles.SetDarkMode(darkMode)
 	a.isDarkModeEnabled = darkMode
 
-	setting, exists, _ = a.service.GetSetting(a.ctx, busquets.SettingRenderMarkdownByDefault)
 	renderMarkDownByDefault := false
-	if exists && setting.IsBoolean() {
+	if setting, ok := settings[busquets.SettingRenderMarkdownByDefault]; ok && setting.IsBoolean() {
 		renderMarkDownByDefault = setting.GetBooleanValue()
 	}
 	a.renderMarkDownByDefault = renderMarkDownByDefault
 
-	setting, exists, _ = a.service.GetSetting(a.ctx, busquets.SettingDefaultDisplayMode)
 	displayMode := busquets.DisplayModePlanContent
-	if exists && setting.IsString() {
+	if setting, ok := settings[busquets.SettingDefaultDisplayMode]; ok && setting.IsString() {
 		displayMode = setting.GetStringValue()
 	}
 	a.displayMode = displayMode
 
-	setting, exists, _ = a.service.GetSetting(a.ctx, busquets.SettingMarkdownTheme)
 	markdownRenderedTheme := busquets.DefaultMarkdownTheme
-	if exists && setting.IsString() {
+	if setting, ok := settings[busquets.SettingMarkdownTheme]; ok && setting.IsString() {
 		markdownRenderedTheme = setting.GetStringValue()
 	}
 	a.markdownRenderedTheme = markdownRenderedTheme
 
+	screenOrientation := busquets.DefaultScreenOrientation
+	if setting, ok := settings[busquets.SettingsScreenOrientation]; ok && setting.IsString() {
+		screenOrientation = setting.GetStringValue()
+	}
+	a.screenOrientation = screenOrientation
+
 	// Create initial plans screen.
-	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault, displayMode == busquets.DisplayModePlanContent, displayMode, markdownRenderedTheme)
+	plansScreen := screens.NewPlansScreen(a.width, a.height, darkMode, renderMarkDownByDefault, displayMode == busquets.DisplayModePlanContent, displayMode, markdownRenderedTheme, screenOrientation)
 	a.stack = append(a.stack, plansScreen)
 
 	// Start watching for watch results and load initial plans.
@@ -233,6 +245,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleMarkdownRenderedThemeChanged(msg)
 	case messages.DisplayModeChangedMsg:
 		return a.handleDisplayModeChanged(msg)
+	case messages.ScreenOrientationChangedMsg:
+		return a.handleScreenOrientationChanged(msg)
 	case messages.PlansSortKeyChangedMsg, messages.PlansSortDirChangedMsg:
 		return a, a.reloadPlans()
 	case messages.OpenConnectorsMsg:
@@ -365,7 +379,7 @@ func (a *App) popScreen() tea.Cmd { //nolint:unparam // ok for now.
 }
 
 func (a *App) pushVersionsScreenWithData(planID int64, planName string, versions []busquets.PlanVersionDetail) tea.Cmd {
-	versionsScreen := screens.NewVersionsScreenWithData(planID, planName, a.markdownRenderedTheme, versions, a.width, a.height, a.isDarkModeEnabled, a.renderMarkDownByDefault)
+	versionsScreen := screens.NewVersionsScreenWithData(planID, planName, a.markdownRenderedTheme, versions, a.width, a.height, a.isDarkModeEnabled, a.renderMarkDownByDefault, a.screenOrientation)
 	a.stack = append(a.stack, versionsScreen)
 	return versionsScreen.Init()
 }

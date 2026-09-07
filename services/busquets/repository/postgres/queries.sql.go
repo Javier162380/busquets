@@ -1059,6 +1059,37 @@ func (q *Queries) ListPlanVersionsAll(ctx context.Context, planID int64) ([]Plan
 	return items, nil
 }
 
+const listSettingsByName = `-- name: ListSettingsByName :many
+SELECT variable_name, variable_type, string_value, number_value, boolean_value, datetime_value FROM settings WHERE variable_name = ANY($1::text[])
+`
+
+func (q *Queries) ListSettingsByName(ctx context.Context, variableNames []string) ([]Setting, error) {
+	rows, err := q.db.Query(ctx, listSettingsByName, variableNames)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Setting{}
+	for rows.Next() {
+		var i Setting
+		if err := rows.Scan(
+			&i.VariableName,
+			&i.VariableType,
+			&i.StringValue,
+			&i.NumberValue,
+			&i.BooleanValue,
+			&i.DatetimeValue,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listUntaggedPlans = `-- name: ListUntaggedPlans :many
 SELECT id, file_name, sync_source, title, created_at, modified_at, file_size, word_count
 FROM plans

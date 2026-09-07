@@ -46,3 +46,31 @@ const (
 	EditorModeNavigation EditorMode = iota
 	EditorModeInsert
 )
+
+// Vertical-orientation split layout constants.
+const (
+	// VerticalHeightOverhead is how much of the terminal height goes to
+	// border rows, the divider, and the 1-row status-bar safety margin every
+	// render function reserves (App.View() appends a status-bar line below
+	// whatever a screen renders).
+	VerticalHeightOverhead = 7
+
+	// VerticalListRatioNum / VerticalListRatioDenom: the list (or, in
+	// three-panel mode, the side-panel+list row) gets this fraction of the
+	// remaining height; content gets the rest.
+	VerticalListRatioNum   = 3
+	VerticalListRatioDenom = 10
+)
+
+// Horizontal-orientation split layout constants, used by the two-panel
+// renderSplitView (list | content, side-by-side) in both PlansScreen and
+// VersionsScreen.
+const (
+	// HorizontalPanelWidthOverhead is subtracted from the terminal width
+	// before splitting it evenly between the two side-by-side panels.
+	HorizontalPanelWidthOverhead = 3
+
+	// HorizontalHeightOverhead is subtracted from the terminal height to get
+	// each panel's content height.
+	HorizontalHeightOverhead = 4
+)

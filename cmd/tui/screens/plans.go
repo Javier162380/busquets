@@ -62,6 +62,7 @@ type PlansScreen struct {
 	lastKey            string    // Last key pressed in editor (for double-key detection).
 	lastKeyTime        time.Time // Time of last key press in editor.
 	pendingSearchError error     // Set by the content-search onSubmit callback when a query has no matches; consumed by handleContentSearchModalUpdate.
+	screenOrientation  string    // busquets.ScreenOrientationHorizontal (side-by-side) or ...Vertical (stacked)
 
 	// Dimensions.
 	width  int
@@ -76,7 +77,7 @@ type PlansScreen struct {
 }
 
 // NewPlansScreen creates a new plans screen.
-func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefault, focus bool, displayMode, markdownRenderedTheme string) *PlansScreen {
+func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefault, focus bool, displayMode, markdownRenderedTheme, screenOrientation string) *PlansScreen {
 	panelWidth := (width - 3) / 2
 	contentHeight := height - 4
 
@@ -103,6 +104,7 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 			BorderForeground(styles.BorderColor),
 		isDarkModeEnabled: isDarkModeEnabled,
 		markdownTheme:     markdownRenderedTheme,
+		screenOrientation: screenOrientation,
 	}
 
 	if renderMarkdownByDefault {
@@ -1238,11 +1240,22 @@ func (s *PlansScreen) View() string {
 
 // renderSplitView renders the two-panel layout.
 func (s *PlansScreen) renderSplitView() string {
-	panelWidth := (s.width - 3) / 2
-	contentHeight := s.height - 4
+	vertical := s.screenOrientation == busquets.ScreenOrientationVertical
+
+	var panelWidth, listPanelHeight, contentPanelHeight int
+	if vertical {
+		panelWidth = s.width - 2
+		available := s.height - types.VerticalHeightOverhead
+		listPanelHeight = available * types.VerticalListRatioNum / types.VerticalListRatioDenom
+		contentPanelHeight = available - listPanelHeight
+	} else {
+		panelWidth = (s.width - types.HorizontalPanelWidthOverhead) / 2
+		listPanelHeight = s.height - types.HorizontalHeightOverhead
+		contentPanelHeight = s.height - types.HorizontalHeightOverhead
+	}
 
 	// Adjust list height if search bar or tag filter is active.
-	listHeight := contentHeight - 4
+	listHeight := listPanelHeight - 4
 	if s.searchBar.IsActive() {
 		listHeight -= 3 // Make room for search bar.
 	}
@@ -1252,7 +1265,7 @@ func (s *PlansScreen) renderSplitView() string {
 
 	// Update component sizes.
 	s.list.SetSize(panelWidth-4, listHeight)
-	s.viewer.SetSize(panelWidth-4, contentHeight-4)
+	s.viewer.SetSize(panelWidth-4, contentPanelHeight-4)
 	s.searchBar.SetWidth(panelWidth - 4)
 	s.tagFilter.SetWidth(panelWidth - 4)
 
@@ -1282,21 +1295,34 @@ func (s *PlansScreen) renderSplitView() string {
 
 	plansListView := plansListContentBorder.
 		Width(panelWidth).
-		Height(contentHeight).
+		Height(listPanelHeight).
 		Render(plansListContent)
 
 	planContentView := plansContentBorder.
 		Width(panelWidth).
-		Height(contentHeight).
+		Height(contentPanelHeight).
 		Render(s.viewer.View())
 
-	divider := s.renderDivider(contentHeight)
+	if vertical {
+		divider := s.renderHorizontalDivider(panelWidth)
+		return lipgloss.JoinVertical(lipgloss.Left, plansListView, divider, planContentView)
+	}
 
+	divider := s.renderDivider(listPanelHeight) // == contentPanelHeight in horizontal mode
 	return lipgloss.JoinHorizontal(lipgloss.Top, plansListView, divider, planContentView)
 }
 
 // renderThreePanelView renders the three-panel layout: tags or labels | list | content.
 func (s *PlansScreen) renderThreePanelView() string {
+	if s.screenOrientation == busquets.ScreenOrientationVertical {
+		return s.renderThreePanelViewVertical()
+	}
+	return s.renderThreePanelViewHorizontal()
+}
+
+// renderThreePanelViewHorizontal renders tags/labels | list | content as three
+// side-by-side columns (today's unchanged layout).
+func (s *PlansScreen) renderThreePanelViewHorizontal() string {
 	sideW, plansW, viewW := s.panelWidths()
 	contentHeight := s.height - 4
 	innerH := contentHeight - 4
@@ -1373,6 +1399,113 @@ func (s *PlansScreen) renderThreePanelView() string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, sidePanelView, listView, rightView)
 }
 
+// renderThreePanelViewVertical renders tags/labels and list sharing a
+// horizontally-split top row, with content dropped to a full-width bottom
+// row below them — side panel and list keep their existing side-by-side
+// relationship, only content moves off their row instead of stacking all
+// three regions uniformly.
+func (s *PlansScreen) renderThreePanelViewVertical() string {
+	sideW, _, _ := s.panelWidths()
+	// List takes the rest of the top row's width — there's no third column
+	// sharing this row in vertical mode, unlike the horizontal layout's viewW.
+	// -4, not -2: each of the two boxes on this row (side panel, list) adds
+	// its own 2-column border, so the row's actual rendered width is
+	// (sideW+2)+(listW+2) — budgeting only one box's border here made the
+	// whole row (and thus the view) 2 columns wider than the terminal, which
+	// wraps in a real terminal and corrupts the layout below it.
+	listW := s.width - sideW - 4
+
+	// Top row (side panel + list) gets 30%, content gets 70% (the remainder,
+	// so the two always sum exactly to available).
+	//
+	// -7, not -5: see the identical comment in renderSplitView — stacking two
+	// bordered rows plus a divider needs 2 more subtracted than the naive
+	// height-baseline-minus-divider count, to preserve the 1-row status-bar
+	// margin every other render function here relies on. Getting this wrong
+	// overflows by 1 row once App appends the status bar, scrolling the top
+	// row's top border off screen.
+	available := s.height - types.VerticalHeightOverhead
+	topHeight := available * types.VerticalListRatioNum / types.VerticalListRatioDenom
+	bottomHeight := available - topHeight
+	topInnerH := topHeight - 4
+
+	listInnerH := topInnerH
+	if s.searchBar.IsActive() {
+		listInnerH -= 3
+	}
+	if s.tagFilter.IsActive() {
+		listInnerH -= 3
+	}
+
+	s.sizeSidePanel()
+
+	var sidePanelContent string
+	sideFocused := false
+	switch {
+	case s.tagPanel != nil:
+		sidePanelContent = s.tagPanel.View()
+		sideFocused = s.focus == types.FocusTagPanel
+	case s.labelPanel != nil:
+		sidePanelContent = s.labelPanel.View()
+		sideFocused = s.focus == types.FocusLabelPanel
+	}
+
+	contentW := s.width - 2
+	s.list.SetSize(listW-4, listInnerH)
+	s.viewer.SetSize(contentW-4, bottomHeight-4)
+	s.searchBar.SetWidth(listW - 4)
+	s.tagFilter.SetWidth(listW - 4)
+
+	activeBorder := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.AccentColor)
+
+	sideBorder := s.borderStyle
+	listBorder := s.borderStyle
+	contentBorder := s.borderStyle
+	switch {
+	case sideFocused:
+		sideBorder = activeBorder
+	case s.focus == types.FocusList:
+		listBorder = activeBorder
+	case s.focus == types.FocusContent:
+		contentBorder = activeBorder
+	}
+
+	sidePanelView := sideBorder.
+		Width(sideW).
+		Height(topHeight).
+		Render(sidePanelContent)
+
+	var listContent string
+	if s.list.ItemCount() == 0 {
+		listContent = styles.InactiveStyle.Render("No items.")
+	} else {
+		listContent = s.list.View()
+	}
+	if s.searchBar.IsActive() {
+		listContent = lipgloss.JoinVertical(lipgloss.Left, listContent, s.searchBar.View())
+	}
+	if s.tagFilter.IsActive() {
+		listContent = lipgloss.JoinVertical(lipgloss.Left, listContent, s.tagFilter.View())
+	}
+	listView := listBorder.
+		Width(listW).
+		Height(topHeight).
+		Render(listContent)
+
+	topRow := lipgloss.JoinHorizontal(lipgloss.Top, sidePanelView, listView)
+
+	contentView := contentBorder.
+		Width(contentW).
+		Height(bottomHeight).
+		Render(s.viewer.View())
+
+	divider := s.renderHorizontalDivider(s.width)
+
+	return lipgloss.JoinVertical(lipgloss.Left, topRow, divider, contentView)
+}
+
 // renderFullscreenViewer renders fullscreen content view.
 func (s *PlansScreen) renderFullscreenViewer() string {
 	contentHeight := s.height - 4
@@ -1404,10 +1537,23 @@ func (s *PlansScreen) renderDivider(height int) string {
 	return strings.TrimSuffix(sb.String(), "\n")
 }
 
+// renderHorizontalDivider renders a horizontal divider, used between stacked
+// panels in vertical orientation.
+func (s *PlansScreen) renderHorizontalDivider(width int) string {
+	return strings.Repeat("─", width)
+}
+
 // SetSize updates screen dimensions.
 func (s *PlansScreen) SetSize(width, height int) {
 	s.width = width
 	s.height = height
+}
+
+// SetScreenOrientation updates the panel arrangement (horizontal side-by-side
+// vs vertical stacked). No rebuild needed — render functions read this field
+// directly on the next View() call.
+func (s *PlansScreen) SetScreenOrientation(orientation string) {
+	s.screenOrientation = orientation
 }
 
 // UpdateDarkMode updates the dark mode setting and regenerates content.
@@ -1446,13 +1592,21 @@ func (s *PlansScreen) RenderedMarkdownTheme(theme string) {
 
 // getViewerWidth calculates the current viewer width based on layout.
 func (s *PlansScreen) getViewerWidth() int {
+	vertical := s.screenOrientation == busquets.ScreenOrientationVertical
 	switch s.layout {
 	case types.LayoutFullscreen:
 		return s.width - 4
 	case types.LayoutThreePanel:
+		if vertical {
+			// Vertical three-panel: content is a full-width bottom row, not a third column.
+			return s.width - 2 - 4
+		}
 		_, _, viewW := s.panelWidths()
 		return viewW - 4
 	default:
+		if vertical {
+			return s.width - 2 - 4
+		}
 		panelWidth := (s.width - 3) / 2
 		return panelWidth - 4
 	}

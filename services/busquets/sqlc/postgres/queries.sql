@@ -82,6 +82,9 @@ SELECT COUNT(*) FROM plans;
 -- name: GetSettingByName :one
 SELECT * FROM settings WHERE variable_name = $1 LIMIT 1;
 
+-- name: ListSettingsByName :many
+SELECT * FROM settings WHERE variable_name = ANY(sqlc.arg('variable_names')::text[]);
+
 -- name: UpsertSetting :exec
 INSERT INTO settings (variable_name, variable_type, string_value, number_value, boolean_value, datetime_value)
 VALUES ($1, $2, $3, $4, $5, $6)

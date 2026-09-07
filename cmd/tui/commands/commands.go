@@ -232,18 +232,15 @@ func RestoreVersionCmd(ctx context.Context, svc busquets.UnifiedService, planID 
 	}
 }
 
-// LoadSettingsCmd loads settings by name.
+// LoadSettingsCmd loads settings by name, in one query.
 func LoadSettingsCmd(ctx context.Context, svc busquets.UnifiedService, settingNames []string) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
-		settings := make(map[string]busquets.Setting)
-		for _, name := range settingNames {
-			setting, exists, err := svc.GetSetting(ctx, name)
-			if err == nil && exists {
-				settings[name] = setting
-			}
+		settings, err := svc.ListSettings(ctx, settingNames)
+		if err != nil {
+			settings = map[string]busquets.Setting{}
 		}
 		return messages.SettingsLoadedMsg{Settings: settings}
 	}

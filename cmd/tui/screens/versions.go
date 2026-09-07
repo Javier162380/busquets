@@ -52,10 +52,11 @@ type VersionsScreen struct {
 	borderStyle lipgloss.Style
 
 	isDarkModeEnabled bool
+	screenOrientation string // busquets.ScreenOrientationHorizontal (side-by-side) or ...Vertical (stacked)
 }
 
 // NewVersionsScreen creates a new versions screen.
-func NewVersionsScreen(planID int64, planName, markdownRenderedTheme string, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
+func NewVersionsScreen(planID int64, planName, markdownRenderedTheme string, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool, screenOrientation string) *VersionsScreen {
 	panelWidth := (width - 3) / 2
 	contentHeight := height - 4
 
@@ -76,6 +77,7 @@ func NewVersionsScreen(planID int64, planName, markdownRenderedTheme string, wid
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(styles.BorderColor),
 		isDarkModeEnabled: isDarkModeEnabled,
+		screenOrientation: screenOrientation,
 	}
 
 	if renderMarkdownByDefault {
@@ -86,8 +88,8 @@ func NewVersionsScreen(planID int64, planName, markdownRenderedTheme string, wid
 }
 
 // NewVersionsScreenWithData creates a versions screen with pre-loaded data.
-func NewVersionsScreenWithData(planID int64, planName, markdownRenderedTheme string, versions []busquets.PlanVersionDetail, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool) *VersionsScreen {
-	s := NewVersionsScreen(planID, planName, markdownRenderedTheme, width, height, isDarkModeEnabled, renderMarkdownByDefault)
+func NewVersionsScreenWithData(planID int64, planName, markdownRenderedTheme string, versions []busquets.PlanVersionDetail, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool, screenOrientation string) *VersionsScreen {
+	s := NewVersionsScreen(planID, planName, markdownRenderedTheme, width, height, isDarkModeEnabled, renderMarkdownByDefault, screenOrientation)
 	s.versions = versions
 	s.updateListItems()
 	if len(versions) > 0 {
@@ -515,18 +517,33 @@ func (s *VersionsScreen) View() string {
 
 // renderSplitView renders the two-panel layout.
 func (s *VersionsScreen) renderSplitView() string {
-	panelWidth := (s.width - 3) / 2
-	contentHeight := s.height - 4
+	vertical := s.screenOrientation == busquets.ScreenOrientationVertical
+
+	var panelWidth, listPanelHeight, contentPanelHeight int
+	if vertical {
+		panelWidth = s.width - 2
+		// List gets 30%, content gets 70% (the remainder, so the two always sum
+		// exactly to available — computing both independently could round to a
+		// 1-row gap or overlap). See types.VerticalHeightOverhead's doc comment
+		// for why it's 7, not a plain height-minus-divider count.
+		available := s.height - types.VerticalHeightOverhead
+		listPanelHeight = available * types.VerticalListRatioNum / types.VerticalListRatioDenom
+		contentPanelHeight = available - listPanelHeight
+	} else {
+		panelWidth = (s.width - types.HorizontalPanelWidthOverhead) / 2
+		listPanelHeight = s.height - types.HorizontalHeightOverhead
+		contentPanelHeight = s.height - types.HorizontalHeightOverhead
+	}
 
 	// Adjust list height if search bar is active.
-	listHeight := contentHeight - 4
+	listHeight := listPanelHeight - 4
 	if s.searchBar.IsActive() {
 		listHeight -= 3 // Make room for search bar.
 	}
 
 	// Update component sizes.
 	s.list.SetSize(panelWidth-4, listHeight)
-	s.viewer.SetSize(panelWidth-4, contentHeight-4)
+	s.viewer.SetSize(panelWidth-4, contentPanelHeight-4)
 	s.searchBar.SetWidth(panelWidth - 4)
 
 	// Build left panel content.
@@ -537,16 +554,20 @@ func (s *VersionsScreen) renderSplitView() string {
 
 	leftPanel := s.borderStyle.
 		Width(panelWidth).
-		Height(contentHeight).
+		Height(listPanelHeight).
 		Render(leftContent)
 
 	rightPanel := s.borderStyle.
 		Width(panelWidth).
-		Height(contentHeight).
+		Height(contentPanelHeight).
 		Render(s.viewer.View())
 
-	divider := s.renderDivider(contentHeight)
+	if vertical {
+		divider := s.renderHorizontalDivider(panelWidth)
+		return lipgloss.JoinVertical(lipgloss.Left, leftPanel, divider, rightPanel)
+	}
 
+	divider := s.renderDivider(listPanelHeight) // == contentPanelHeight in horizontal mode
 	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, divider, rightPanel)
 }
 
@@ -584,10 +605,23 @@ func (s *VersionsScreen) renderDivider(height int) string {
 	return strings.TrimSuffix(sb.String(), "\n")
 }
 
+// renderHorizontalDivider renders a horizontal divider, used between stacked
+// panels in vertical orientation.
+func (s *VersionsScreen) renderHorizontalDivider(width int) string {
+	return strings.Repeat("─", width)
+}
+
 // SetSize updates screen dimensions.
 func (s *VersionsScreen) SetSize(width, height int) {
 	s.width = width
 	s.height = height
+}
+
+// SetScreenOrientation updates the panel arrangement (horizontal side-by-side
+// vs vertical stacked). No rebuild needed — render functions read this field
+// directly on the next View() call.
+func (s *VersionsScreen) SetScreenOrientation(orientation string) {
+	s.screenOrientation = orientation
 }
 
 // UpdateDarkMode updates the dark mode setting and regenerates content.
@@ -625,6 +659,10 @@ func (s *VersionsScreen) getViewerWidth() int {
 	if s.layout == types.LayoutFullscreen {
 		// Fullscreen: full width minus border padding
 		return s.width - 4
+	}
+	if s.screenOrientation == busquets.ScreenOrientationVertical {
+		// Stacked split: full width minus border padding
+		return s.width - 2 - 4
 	}
 	// Split view: half width minus divider and border padding
 	panelWidth := (s.width - 3) / 2
