@@ -856,11 +856,14 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		s.viewer.ScrollToContentLine(line)
 		s.lastKey = ""
 		s.editor.SetEditorMode(types.EditorModeNavigation)
+		s.editor.StashTextContent()
+		s.editor.ResetDraftContent()
 		return s, nil
 
 	case "ctrl+s":
 		// Save.
 		if s.current != nil {
+			s.editor.ResetDraftContent()
 			return s, s.savePlan()
 		}
 		return s, nil
@@ -924,6 +927,13 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		s.lastKey = key
 		s.lastKeyTime = now
 		return s, nil
+
+	case "D":
+		if s.editor.EditorMode() == types.EditorModeInsert {
+			return s, s.editor.Update(msg)
+		}
+		s.editor.SetDraftContent(s.editor.TextArea())
+		return s, s.stashPlan()
 
 	case "o":
 		if s.editor.EditorMode() == types.EditorModeInsert {
@@ -1814,7 +1824,7 @@ func (s *PlansScreen) ShortHelp() string {
 		case s.editor.EditorMode() == types.EditorModeInsert:
 			return fmt.Sprintf("enter: [NAVIGATION] | ctrl+s: save | ctrl+l: go to line | esc: cancel%s", modified)
 		case s.editor.EditorMode() == types.EditorModeNavigation:
-			return fmt.Sprintf("enter: [INSERT] | ctrl+s: save | ctrl+l: go to line | tt/bb: top/bottom | dd: delete line | oo: new line | esc: cancel%s", modified)
+			return fmt.Sprintf("enter: [INSERT] | ctrl+s: save | ctrl+l: go to line | tt/bb: top/bottom | dd: delete line | oo: new line | D: Stash content | esc: cancel%s", modified)
 		default:
 			return ""
 		}
@@ -1890,6 +1900,14 @@ func (s *PlansScreen) savePlan() tea.Cmd {
 			SyncSource: s.current.SyncSource,
 			Content:    s.editor.Content(),
 			Modified:   s.current.ModifiedAt,
+		}
+	}
+}
+
+func (s *PlansScreen) stashPlan() tea.Cmd {
+	return func() tea.Msg {
+		return messages.StashResultMsg{
+			FilePath: s.current.FilePath,
 		}
 	}
 }

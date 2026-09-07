@@ -9,12 +9,14 @@ import (
 
 // Editor wraps textarea with modification tracking.
 type Editor struct {
-	textarea     textarea.Model
-	editorStatus types.EditorMode
-	original     string
-	modified     bool
-	width        int
-	height       int
+	textarea        textarea.Model
+	draftTextArea   *textarea.Model
+	editorStatus    types.EditorMode
+	originalContent string
+	draftContent    string
+	modified        bool
+	width           int
+	height          int
 }
 
 // NewEditor creates a new editor component.
@@ -36,9 +38,28 @@ func NewEditor(width, height int) *Editor {
 
 // SetContent sets the editor content and resets modification state.
 func (e *Editor) SetContent(content string) {
-	e.original = content
+	e.originalContent = content
 	e.textarea.SetValue(content)
 	e.modified = false
+}
+
+// SetDraftContent sets a draft content not saved yet. It can be used to go back and forth between the viewer and the editor before storing a new version.
+func (e *Editor) SetDraftContent(textArea textarea.Model) {
+	e.draftContent = textArea.Value()
+	e.draftTextArea = &textArea
+}
+
+// ResetDraftContent reset the draft content.
+func (e *Editor) ResetDraftContent() {
+	e.draftContent = ""
+	e.draftTextArea = nil
+}
+
+// StashTextContent stash the draft content in to the current textarea.
+func (e *Editor) StashTextContent() {
+	if e.draftTextArea != nil {
+		e.textarea = *e.draftTextArea
+	}
 }
 
 // SetEditorMode sets editor mode.
@@ -53,6 +74,11 @@ func (e *Editor) EditorMode() types.EditorMode {
 // Content returns the current editor content.
 func (e *Editor) Content() string {
 	return e.textarea.Value()
+}
+
+// TextArea return the current textArea for the editor.
+func (e *Editor) TextArea() textarea.Model {
+	return e.textarea
 }
 
 // IsModified returns true if content has been modified.
@@ -100,7 +126,7 @@ func (e *Editor) Update(msg tea.Msg) tea.Cmd {
 	e.textarea, cmd = e.textarea.Update(msg)
 
 	// Check if content was modified.
-	if e.textarea.Value() != e.original {
+	if e.textarea.Value() != e.originalContent {
 		e.modified = true
 	}
 
@@ -114,7 +140,7 @@ func (e *Editor) View() string {
 
 // Reset restores the original content.
 func (e *Editor) Reset() {
-	e.textarea.SetValue(e.original)
+	e.textarea.SetValue(e.originalContent)
 	e.modified = false
 }
 
@@ -125,7 +151,7 @@ func (e *Editor) Reset() {
 // point, but the user's in-progress typing (and cursor position) must be
 // left alone, unlike SetContent which replaces the textarea outright.
 func (e *Editor) MarkSaved(content string) {
-	e.original = content
+	e.originalContent = content
 	e.modified = e.textarea.Value() != content
 }
 

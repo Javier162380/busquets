@@ -205,6 +205,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, commands.LoadConnectorSettingsCmd(a.ctx, a.service, msg.ConnectorName)
 	case messages.SaveResultMsg:
 		return a.handleSaveResult(msg)
+	case messages.StashResultMsg:
+		return a.handleStashResult(msg)
 	case messages.SyncPlansMsg:
 		return a.handleSyncPlans(msg)
 	case messages.SyncResultMsg:
