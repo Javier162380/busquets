@@ -524,21 +524,15 @@ func (s *VersionsScreen) renderSplitView() string {
 		panelWidth = s.width - 2
 		// List gets 30%, content gets 70% (the remainder, so the two always sum
 		// exactly to available — computing both independently could round to a
-		// 1-row gap or overlap).
-		//
-		// -7, not -5: see the identical comment in PlansScreen.renderSplitView —
-		// stacking two bordered boxes plus a divider needs 2 more subtracted
-		// than the naive height-baseline-minus-divider count, to preserve the
-		// 1-row status-bar margin every other render function here relies on.
-		// Getting this wrong overflows by 1 row once App appends the status
-		// bar, scrolling the top box's top border off screen.
-		available := s.height - 7
-		listPanelHeight = available * 3 / 10
+		// 1-row gap or overlap). See types.VerticalHeightOverhead's doc comment
+		// for why it's 7, not a plain height-minus-divider count.
+		available := s.height - types.VerticalHeightOverhead
+		listPanelHeight = available * types.VerticalListRatioNum / types.VerticalListRatioDenom
 		contentPanelHeight = available - listPanelHeight
 	} else {
-		panelWidth = (s.width - 3) / 2
-		listPanelHeight = s.height - 4
-		contentPanelHeight = s.height - 4
+		panelWidth = (s.width - types.HorizontalPanelWidthOverhead) / 2
+		listPanelHeight = s.height - types.HorizontalHeightOverhead
+		contentPanelHeight = s.height - types.HorizontalHeightOverhead
 	}
 
 	// Adjust list height if search bar is active.

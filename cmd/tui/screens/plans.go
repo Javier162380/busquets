@@ -1245,30 +1245,13 @@ func (s *PlansScreen) renderSplitView() string {
 	var panelWidth, listPanelHeight, contentPanelHeight int
 	if vertical {
 		panelWidth = s.width - 2
-		// List gets 30%, content gets 70% (the remainder, so the two always sum
-		// exactly to available — computing both independently could round to a
-		// 1-row gap or overlap).
-		//
-		// -7, not -5: stacking two bordered boxes (each +2 rows of border) plus
-		// a 1-row divider costs 5 rows of overhead on top of the two boxes'
-		// content — but the established -4/-2-total budget every other render
-		// function here uses already reserves exactly 1 row of slack below the
-		// terminal height for App's appended status-bar row (box height h-4
-		// -> rendered h-2 -> +1 status line -> h-1, one row under the actual
-		// terminal height). Stacking must preserve that same 1-row margin, so
-		// available (= listPanelHeight + contentPanelHeight) needs 2 more
-		// subtracted than a naive height-baseline-minus-divider count would
-		// give: available = (h-2 target total) - 5 (stack overhead) = h-7.
-		// Getting this wrong overflows by 1 row once the status bar is added,
-		// which scrolls the very first line — the top box's top border — off
-		// screen the moment the terminal is exactly this tall.
-		available := s.height - 7
-		listPanelHeight = available * 3 / 10
+		available := s.height - types.VerticalHeightOverhead
+		listPanelHeight = available * types.VerticalListRatioNum / types.VerticalListRatioDenom
 		contentPanelHeight = available - listPanelHeight
 	} else {
-		panelWidth = (s.width - 3) / 2
-		listPanelHeight = s.height - 4
-		contentPanelHeight = s.height - 4
+		panelWidth = (s.width - types.HorizontalPanelWidthOverhead) / 2
+		listPanelHeight = s.height - types.HorizontalHeightOverhead
+		contentPanelHeight = s.height - types.HorizontalHeightOverhead
 	}
 
 	// Adjust list height if search bar or tag filter is active.
@@ -1441,8 +1424,8 @@ func (s *PlansScreen) renderThreePanelViewVertical() string {
 	// margin every other render function here relies on. Getting this wrong
 	// overflows by 1 row once App appends the status bar, scrolling the top
 	// row's top border off screen.
-	available := s.height - 7
-	topHeight := available * 3 / 10
+	available := s.height - types.VerticalHeightOverhead
+	topHeight := available * types.VerticalListRatioNum / types.VerticalListRatioDenom
 	bottomHeight := available - topHeight
 	topInnerH := topHeight - 4
 
