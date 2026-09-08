@@ -9,12 +9,13 @@ import (
 
 // Editor wraps textarea with modification tracking.
 type Editor struct {
-	textarea     textarea.Model
-	editorStatus types.EditorMode
-	original     string
-	modified     bool
-	width        int
-	height       int
+	textarea        textarea.Model
+	stashedTextArea *textarea.Model
+	editorStatus    types.EditorMode
+	originalContent string
+	modified        bool
+	width           int
+	height          int
 }
 
 // NewEditor creates a new editor component.
@@ -36,9 +37,31 @@ func NewEditor(width, height int) *Editor {
 
 // SetContent sets the editor content and resets modification state.
 func (e *Editor) SetContent(content string) {
-	e.original = content
+	e.originalContent = content
 	e.textarea.SetValue(content)
 	e.modified = false
+}
+
+// Stash saves the current textarea content aside so it can be restored with
+// RestoreStash later. It can be used to go back and forth between the
+// viewer and the editor without losing in-progress edits before storing a
+// new version.
+func (e *Editor) Stash() {
+	ta := e.textarea
+	e.stashedTextArea = &ta
+}
+
+// ClearStash discards any stashed content.
+func (e *Editor) ClearStash() {
+	e.stashedTextArea = nil
+}
+
+// RestoreStash restores the stashed textarea, if any, back into the editor.
+func (e *Editor) RestoreStash() {
+	if e.stashedTextArea != nil {
+		e.textarea = *e.stashedTextArea
+		e.modified = e.textarea.Value() != e.originalContent
+	}
 }
 
 // SetEditorMode sets editor mode.
@@ -100,7 +123,7 @@ func (e *Editor) Update(msg tea.Msg) tea.Cmd {
 	e.textarea, cmd = e.textarea.Update(msg)
 
 	// Check if content was modified.
-	if e.textarea.Value() != e.original {
+	if e.textarea.Value() != e.originalContent {
 		e.modified = true
 	}
 
@@ -114,7 +137,7 @@ func (e *Editor) View() string {
 
 // Reset restores the original content.
 func (e *Editor) Reset() {
-	e.textarea.SetValue(e.original)
+	e.textarea.SetValue(e.originalContent)
 	e.modified = false
 }
 
@@ -125,7 +148,7 @@ func (e *Editor) Reset() {
 // point, but the user's in-progress typing (and cursor position) must be
 // left alone, unlike SetContent which replaces the textarea outright.
 func (e *Editor) MarkSaved(content string) {
-	e.original = content
+	e.originalContent = content
 	e.modified = e.textarea.Value() != content
 }
 

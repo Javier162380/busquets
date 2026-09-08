@@ -203,3 +203,45 @@ func TestEditorMarkSaved(t *testing.T) {
 		require.False(t, e.IsModified())
 	})
 }
+
+func TestEditorStash(t *testing.T) {
+	t.Run("RestoreStash brings back the stashed edit and reports modified", func(t *testing.T) {
+		e := NewEditor(80, 10)
+		e.SetContent("original")
+		e.textarea.SetValue("original plus edit")
+
+		e.Stash()
+		e.Reset() // what the esc handler does before restoring the stash
+		require.Equal(t, "original", e.Content())
+		require.False(t, e.IsModified())
+
+		e.RestoreStash()
+
+		require.Equal(t, "original plus edit", e.Content())
+		require.True(t, e.IsModified())
+	})
+
+	t.Run("ClearStash makes RestoreStash a no-op", func(t *testing.T) {
+		e := NewEditor(80, 10)
+		e.SetContent("original")
+		e.textarea.SetValue("original plus edit")
+		e.Stash()
+
+		e.ClearStash()
+		e.Reset()
+		e.RestoreStash()
+
+		require.Equal(t, "original", e.Content())
+		require.False(t, e.IsModified())
+	})
+
+	t.Run("RestoreStash without a prior Stash is a no-op", func(t *testing.T) {
+		e := NewEditor(80, 10)
+		e.SetContent("original")
+
+		e.RestoreStash()
+
+		require.Equal(t, "original", e.Content())
+		require.False(t, e.IsModified())
+	})
+}

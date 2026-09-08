@@ -62,6 +62,11 @@ type SaveResultMsg struct {
 	Plan   *busquets.PlanDetail
 }
 
+// StashResultMsg it happens when a message is stash.
+type StashResultMsg struct {
+	FilePath string
+}
+
 // SyncResultMsg is sent when sync completes.
 type SyncResultMsg struct {
 	Count int

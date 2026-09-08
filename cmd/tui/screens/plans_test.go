@@ -602,3 +602,54 @@ func TestEditorModeToggleAndEscReturnsToViewer(t *testing.T) {
 	require.Equal(t, types.FocusEditor, ps.focus)
 	require.Equal(t, types.EditorModeNavigation, ps.editor.EditorMode())
 }
+
+func TestStashPreservesEditAcrossEscAndBackToEditor(t *testing.T) {
+	s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
+	s.current = &busquets.PlanDetail{
+		PlanSummary: busquets.PlanSummary{FileName: "p.md", SyncSource: "/src", Title: "My Plan"},
+		Content:     "some content",
+	}
+	s.editor.SetContent("some content")
+	s.editor.Focus()
+	s.focus = types.FocusEditor
+	s.layout = types.LayoutFullscreen
+
+	// Enter insert mode and make an edit.
+	screen, _ := s.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	ps := screen.(*PlansScreen)
+	// Focus() leaves the cursor at the start of the document, so this prepends.
+	ps.editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("EDITED: ")})
+	require.True(t, ps.editor.IsModified())
+
+	// Back to navigation mode, then stash the edit before leaving.
+	screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	ps = screen.(*PlansScreen)
+	require.Equal(t, types.EditorModeNavigation, ps.editor.EditorMode())
+
+	screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")})
+	ps = screen.(*PlansScreen)
+
+	// esc: with a stash will save on the editor the content.
+	screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	ps = screen.(*PlansScreen)
+	require.Equal(t, types.FocusContent, ps.focus)
+
+	// Back into the editor: the stashed edit — and its modified state — must survive.
+	screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	ps = screen.(*PlansScreen)
+	require.Equal(t, types.FocusEditor, ps.focus)
+	require.Equal(t, "EDITED: some content", ps.editor.Content())
+	require.True(t, ps.editor.IsModified())
+
+	// esc: without a stash will discard all the stash changes.
+	screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	ps = screen.(*PlansScreen)
+	require.Equal(t, types.FocusContent, ps.focus)
+
+	// Back into the editor: the stashed edit — and its modified state — must survive.
+	screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	ps = screen.(*PlansScreen)
+	require.Equal(t, types.FocusEditor, ps.focus)
+	require.Equal(t, "some content", ps.editor.Content())
+	require.False(t, ps.editor.IsModified())
+}
