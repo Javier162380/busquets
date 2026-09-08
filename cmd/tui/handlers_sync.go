@@ -25,8 +25,7 @@ func (a *App) handleSaveResult(msg messages.SaveResultMsg) (tea.Model, tea.Cmd) 
 
 func (a *App) handleStashResult(msg messages.StashResultMsg) (tea.Model, tea.Cmd) {
 	a.statusBar.SetSuccess(fmt.Sprintf("Stash result for plan at %s", msg.FilePath))
-	_, delegateCmd := a.delegateToCurrentScreen(msg)
-	return a, tea.Batch(delegateCmd, commands.ClearStatusCmdWithDefaultDuration())
+	return a, commands.ClearStatusCmdWithDefaultDuration()
 }
 
 func (a *App) handleSyncPlans(_ messages.SyncPlansMsg) (tea.Model, tea.Cmd) {

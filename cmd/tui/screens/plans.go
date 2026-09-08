@@ -856,14 +856,14 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		s.viewer.ScrollToContentLine(line)
 		s.lastKey = ""
 		s.editor.SetEditorMode(types.EditorModeNavigation)
-		s.editor.StashTextContent()
-		s.editor.ResetDraftContent()
+		s.editor.RestoreStash()
+		s.editor.ClearStash()
 		return s, nil
 
 	case "ctrl+s":
 		// Save.
 		if s.current != nil {
-			s.editor.ResetDraftContent()
+			s.editor.ClearStash()
 			return s, s.savePlan()
 		}
 		return s, nil
@@ -932,7 +932,7 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		if s.editor.EditorMode() == types.EditorModeInsert {
 			return s, s.editor.Update(msg)
 		}
-		s.editor.SetDraftContent(s.editor.TextArea())
+		s.editor.Stash()
 		return s, s.stashPlan()
 
 	case "o":

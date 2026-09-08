@@ -10,10 +10,9 @@ import (
 // Editor wraps textarea with modification tracking.
 type Editor struct {
 	textarea        textarea.Model
-	draftTextArea   *textarea.Model
+	stashedTextArea *textarea.Model
 	editorStatus    types.EditorMode
 	originalContent string
-	draftContent    string
 	modified        bool
 	width           int
 	height          int
@@ -43,22 +42,25 @@ func (e *Editor) SetContent(content string) {
 	e.modified = false
 }
 
-// SetDraftContent sets a draft content not saved yet. It can be used to go back and forth between the viewer and the editor before storing a new version.
-func (e *Editor) SetDraftContent(textArea textarea.Model) {
-	e.draftContent = textArea.Value()
-	e.draftTextArea = &textArea
+// Stash saves the current textarea content aside so it can be restored with
+// RestoreStash later. It can be used to go back and forth between the
+// viewer and the editor without losing in-progress edits before storing a
+// new version.
+func (e *Editor) Stash() {
+	ta := e.textarea
+	e.stashedTextArea = &ta
 }
 
-// ResetDraftContent reset the draft content.
-func (e *Editor) ResetDraftContent() {
-	e.draftContent = ""
-	e.draftTextArea = nil
+// ClearStash discards any stashed content.
+func (e *Editor) ClearStash() {
+	e.stashedTextArea = nil
 }
 
-// StashTextContent stash the draft content in to the current textarea.
-func (e *Editor) StashTextContent() {
-	if e.draftTextArea != nil {
-		e.textarea = *e.draftTextArea
+// RestoreStash restores the stashed textarea, if any, back into the editor.
+func (e *Editor) RestoreStash() {
+	if e.stashedTextArea != nil {
+		e.textarea = *e.stashedTextArea
+		e.modified = e.textarea.Value() != e.originalContent
 	}
 }
 
@@ -74,11 +76,6 @@ func (e *Editor) EditorMode() types.EditorMode {
 // Content returns the current editor content.
 func (e *Editor) Content() string {
 	return e.textarea.Value()
-}
-
-// TextArea return the current textArea for the editor.
-func (e *Editor) TextArea() textarea.Model {
-	return e.textarea
 }
 
 // IsModified returns true if content has been modified.
