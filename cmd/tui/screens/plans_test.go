@@ -629,7 +629,7 @@ func TestStashPreservesEditAcrossEscAndBackToEditor(t *testing.T) {
 	screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("D")})
 	ps = screen.(*PlansScreen)
 
-	// esc: without a stash this would discard the edit via Reset().
+	// esc: with a stash will save on the editor the content.
 	screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	ps = screen.(*PlansScreen)
 	require.Equal(t, types.FocusContent, ps.focus)
@@ -640,4 +640,16 @@ func TestStashPreservesEditAcrossEscAndBackToEditor(t *testing.T) {
 	require.Equal(t, types.FocusEditor, ps.focus)
 	require.Equal(t, "EDITED: some content", ps.editor.Content())
 	require.True(t, ps.editor.IsModified())
+
+	// esc: without a stash will discard all the stash changes.
+	screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	ps = screen.(*PlansScreen)
+	require.Equal(t, types.FocusContent, ps.focus)
+
+	// Back into the editor: the stashed edit — and its modified state — must survive.
+	screen, _ = ps.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}})
+	ps = screen.(*PlansScreen)
+	require.Equal(t, types.FocusEditor, ps.focus)
+	require.Equal(t, "some content", ps.editor.Content())
+	require.False(t, ps.editor.IsModified())
 }
