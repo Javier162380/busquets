@@ -299,6 +299,43 @@ type versionDiffResponse struct {
 	Diff versionDiffTOON `toon:"diff"`
 }
 
+// tldrPromptTOON represents TLDR prompt metadata for TOON encoding. SystemPrompt is
+// short and constant so it fits fine as a scalar row; UserPrompt carries the whole
+// plan body and is appended as raw text below instead (same convention as
+// FormatPlanDetail, FormatAddPlanComment, FormatPlanVersion, and FormatVersionDiff:
+// bulky content stays out of the tabular TOON block).
+type tldrPromptTOON struct {
+	FileName     string `toon:"file_name"`
+	SyncSource   string `toon:"sync_source"`
+	SystemPrompt string `toon:"system_prompt"`
+}
+
+type tldrPromptResponse struct {
+	Tldr tldrPromptTOON `toon:"tldr"`
+}
+
+// FormatTLDRPrompt formats a TLDR prompt bundle (metadata + system prompt via TOON,
+// user prompt appended as raw text) using TOON.
+func FormatTLDRPrompt(p *TLDRPrompt) (string, error) {
+	metadata := tldrPromptResponse{Tldr: tldrPromptTOON{
+		FileName:     p.FileName,
+		SyncSource:   p.SyncSource,
+		SystemPrompt: p.SystemPrompt,
+	}}
+
+	encoded, err := toon.Marshal(metadata)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal TOON: %w", err)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(string(encoded))
+	sb.WriteString("\n\nuser_prompt:\n")
+	sb.WriteString(p.UserPrompt)
+
+	return sb.String(), nil
+}
+
 // FormatVersionDiff formats diff metadata using TOON + the raw diff text.
 func FormatVersionDiff(vd busquets.VersionDiff) (string, error) {
 	metadata := versionDiffResponse{Diff: versionDiffTOON{

@@ -34,6 +34,12 @@ type DeleteCommentArgs struct {
 	CommentID int64 `json:"commentId"`
 }
 
+// GenerateTLDRPromptArgs contains arguments for the generate_tldr_prompt tool.
+type GenerateTLDRPromptArgs struct {
+	FileName   string `json:"fileName"`
+	SyncSource string `json:"syncSource"`
+}
+
 // GetPlanVersionHistoryArgs contains arguments for the get_plan_version_history tool.
 type GetPlanVersionHistoryArgs struct {
 	FileName   string `json:"fileName"`
@@ -117,4 +123,17 @@ type DiffResult struct {
 	FromCreatedAt string `json:"fromCreatedAt"`
 	ToVersion     int64  `json:"toVersion"`
 	ToCreatedAt   string `json:"toCreatedAt"`
+}
+
+// TLDRPrompt bundles a plan's TLDR-generation request as the two-part shape any
+// LLM call actually takes: SystemPrompt (the fixed instructions) and UserPrompt
+// (the plan-specific request, title + content already folded in — mirrors exactly
+// what ollama.Connector.Send builds as its Prompt field). generate_tldr_prompt does
+// not call an LLM itself — the calling assistant is expected to write the summary
+// from these two fields, then optionally persist it via add_comment.
+type TLDRPrompt struct {
+	FileName     string `json:"fileName"`
+	SyncSource   string `json:"syncSource"`
+	SystemPrompt string `json:"systemPrompt"`
+	UserPrompt   string `json:"userPrompt"`
 }

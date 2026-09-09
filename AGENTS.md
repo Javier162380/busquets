@@ -80,7 +80,7 @@ MCP Handler (cmd/mcp) → TOON Formatter → MCP Tools
     ↓
 Tools: search_plans, get_plan, add_comment, get_plan_comments, delete_comment, get_all_tags,
 get_plan_tags, set_plan_tags, delete_tag, get_plan_version_history, get_plan_version,
-restore_plan_version, diff_plan_versions, sync_plans, rsync_plans
+restore_plan_version, diff_plan_versions, sync_plans, rsync_plans, generate_tldr_prompt
 ```
 
 **Key Features**: Uses TOON format for 60% token reduction, no business logic in handlers, interface-based service dependency for testability.

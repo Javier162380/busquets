@@ -18,13 +18,6 @@ const (
 
 	maxContentRunes = 12000
 	httpTimeout     = 60 * time.Second
-
-	systemPrompt = "You are a concise technical plan summarizer. " +
-		"Output exactly three bullet points covering goals, approach, and key outcomes. " +
-		"You must always match the following template:\n\n" +
-		"**Goal**: Here the plan goal.\n" +
-		"**Approach**: Here the plan approach.\n" +
-		"**Outcome**: Here the plan outcome."
 )
 
 // Connector implements the Ollama local LLM connector.
@@ -144,7 +137,7 @@ func (c *Connector) Send(ctx context.Context, title, content string) (*connector
 	reqBody := OllamaGenerateRequest{
 		Model:  c.model,
 		Prompt: fmt.Sprintf("Summarize this plan:\n\nTitle: %s\n\n%s", title, content),
-		System: systemPrompt,
+		System: connectors.SummarySystemPrompt,
 		Stream: false,
 	}
 

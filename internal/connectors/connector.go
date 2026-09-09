@@ -7,6 +7,17 @@ import (
 	planviewer "github.com/Javier162380/busquets"
 )
 
+// SummarySystemPrompt is the instruction template used to generate a plan TLDR.
+// Shared by generative summary connectors (e.g. ollama) and the generate_tldr_prompt
+// MCP tool, which hands this same template to the calling assistant instead of
+// calling a connector, so the output format is identical regardless of who writes it.
+const SummarySystemPrompt = "You are a concise technical plan summarizer. " +
+	"Output exactly three bullet points covering goals, approach, and key outcomes. " +
+	"You must always match the following template:\n\n" +
+	"**Goal**: Here the plan goal.\n" +
+	"**Approach**: Here the plan approach.\n" +
+	"**Outcome**: Here the plan outcome."
+
 // SendResult contains the result of a send/generate operation.
 type SendResult struct {
 	Success   bool

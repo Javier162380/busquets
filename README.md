@@ -277,6 +277,7 @@ Enable Claude Code — or any other MCP-capable AI assistant — to directly sea
 - `get_plan_version_history` / `get_plan_version` / `restore_plan_version` - Browse and restore plan versions
 - `diff_plan_versions` - Unified (git-diff-style) diff between any two versions of a plan
 - `sync_plans` / `rsync_plans` - Force a sync from/to the configured source directories
+- `generate_tldr_prompt` - Fetch a plan's TLDR system/user prompt for the calling assistant to summarize itself (no LLM call, no connector, no API key); pair with `add_comment` to save the result
 - TOON format responses (60% fewer tokens than JSON)
 
 **Use Cases:**
