@@ -172,6 +172,7 @@ func (m *CommentModal) handleListKey(msg tea.KeyMsg) tea.Cmd {
 	case "tab":
 		m.focus = types.FocusCommentInput
 		m.input.Focus()
+		m.refreshViewport()
 	case "esc":
 		m.Close()
 	}
@@ -196,6 +197,7 @@ func (m *CommentModal) handleInputKey(msg tea.KeyMsg) tea.Cmd {
 	case "tab":
 		m.focus = types.FocusCommentList
 		m.input.Blur()
+		m.refreshViewport()
 	case "esc":
 		if m.input.Value() != "" {
 			m.input.Reset()
@@ -295,6 +297,7 @@ func (m *CommentModal) refreshViewport() {
 		var prefix string
 		if i == m.selected && m.focus == types.FocusCommentList {
 			prefix = selectedStyle.Render("> ")
+			ts = selectedStyle.Render("[" + c.CreatedAt.Format(time.DateTime) + "]")
 		} else {
 			prefix = "  "
 		}
