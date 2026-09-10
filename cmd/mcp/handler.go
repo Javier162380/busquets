@@ -40,6 +40,9 @@ func (h *Handler) Register() error {
 	if err := h.registerSyncTools(); err != nil {
 		return fmt.Errorf("failed to register sync tools: %w", err)
 	}
+	if err := h.registerTLDRTools(); err != nil {
+		return fmt.Errorf("failed to register tldr tools: %w", err)
+	}
 
 	return nil
 }
