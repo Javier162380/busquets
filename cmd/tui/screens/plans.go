@@ -740,6 +740,22 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		s.viewer.ToggleLineNumbers()
 		return s, nil
 
+	case "n":
+		if s.layout != types.LayoutFullscreen {
+			return s, nil
+		}
+
+		if s.current != nil {
+			s.activeModal = types.ModalComment
+			s.commentModal.SetSize(s.width*3/4, s.height*3/4)
+			s.commentModal.SetDarkMode(s.isDarkModeEnabled)
+			s.commentModal.SetRenderMarkdown(s.viewer.RenderMode() == components.RenderModeGlamour)
+			return s, func() tea.Msg {
+				return messages.OpenCommentModalMsg{FileName: s.current.FileName, SyncSource: s.current.SyncSource}
+			}
+		}
+		return s, nil
+
 	case "c":
 		// Copy the plan's raw markdown to the clipboard.
 		if s.current != nil {
@@ -1813,7 +1829,7 @@ func (s *PlansScreen) ShortHelp() string {
 			current, total := s.viewer.SearchStatus()
 			contentSearchHelp = fmt.Sprintf("/: search | N/P: next/prev match | ctrl+u: clear [%s] | Hits %d/%d", query, current, total)
 		}
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | %s | e: edit | v: versions | t: transmit | esc: back", mode, lines, contentSearchHelp)
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | n: comments | %s | e: edit | v: versions | t: transmit | esc: back", mode, lines, contentSearchHelp)
 	case types.FocusEditor:
 		modified := ""
 		if s.editor.IsModified() {
