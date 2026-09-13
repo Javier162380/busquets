@@ -4,17 +4,17 @@ import (
 	"context"
 	"fmt"
 
-	planviewer "github.com/Javier162380/busquets"
+	domain "github.com/Javier162380/busquets"
 )
 
 // Manager orchestrates connector operations.
 type Manager struct {
 	registry *Registry
-	db       planviewer.Store
+	db       domain.Store
 }
 
 // NewManager creates a new connector manager.
-func NewManager(registry *Registry, db planviewer.Store) *Manager {
+func NewManager(registry *Registry, db domain.Store) *Manager {
 	return &Manager{
 		registry: registry,
 		db:       db,
@@ -23,7 +23,7 @@ func NewManager(registry *Registry, db planviewer.Store) *Manager {
 
 // GetEnabledConnector returns the transmit connector, if any.
 func (m *Manager) GetEnabledConnector(ctx context.Context) (Connector, error) {
-	name, found, err := m.db.GetConnectorForRole(ctx, planviewer.ConnectorRoleTransmit)
+	name, found, err := m.db.GetConnectorForRole(ctx, domain.ConnectorRoleTransmit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get transmit connector: %w", err)
 	}
@@ -49,14 +49,14 @@ func (m *Manager) GetEnabledConnector(ctx context.Context) (Connector, error) {
 func (m *Manager) EnableConnector(ctx context.Context, name string) error {
 	connector, ok := m.registry.Get(name)
 	if !ok {
-		return planviewer.ErrConnectorNotFound
+		return domain.ErrConnectorNotFound
 	}
 
 	if err := m.db.UpsertConnector(ctx, name, connector.DisplayName(), false); err != nil {
 		return fmt.Errorf("failed to upsert connector: %w", err)
 	}
 
-	if err := m.db.SetConnectorForRole(ctx, name, planviewer.ConnectorRoleTransmit); err != nil {
+	if err := m.db.SetConnectorForRole(ctx, name, domain.ConnectorRoleTransmit); err != nil {
 		return fmt.Errorf("failed to set transmit connector: %w", err)
 	}
 
@@ -65,21 +65,21 @@ func (m *Manager) EnableConnector(ctx context.Context, name string) error {
 
 // DisableConnector clears the transmit connector slot.
 func (m *Manager) DisableConnector(ctx context.Context) error {
-	return m.db.ClearConnectorForRole(ctx, planviewer.ConnectorRoleTransmit)
+	return m.db.ClearConnectorForRole(ctx, domain.ConnectorRoleTransmit)
 }
 
 // SetSummaryConnector assigns a connector to the summary slot.
 func (m *Manager) SetSummaryConnector(ctx context.Context, name string) error {
 	connector, ok := m.registry.Get(name)
 	if !ok {
-		return planviewer.ErrConnectorNotFound
+		return domain.ErrConnectorNotFound
 	}
 
 	if err := m.db.UpsertConnector(ctx, name, connector.DisplayName(), false); err != nil {
 		return fmt.Errorf("failed to upsert connector: %w", err)
 	}
 
-	if err := m.db.SetConnectorForRole(ctx, name, planviewer.ConnectorRoleSummary); err != nil {
+	if err := m.db.SetConnectorForRole(ctx, name, domain.ConnectorRoleSummary); err != nil {
 		return fmt.Errorf("failed to set summary connector: %w", err)
 	}
 
@@ -103,7 +103,7 @@ func (m *Manager) Send(ctx context.Context, title, content string) (*SendResult,
 		return nil, err
 	}
 	if connector == nil {
-		return nil, planviewer.ErrNoConnectorEnabled
+		return nil, domain.ErrNoConnectorEnabled
 	}
 
 	if err := connector.Validate(); err != nil {
@@ -118,23 +118,23 @@ func (m *Manager) ListAvailable(ctx context.Context) ([]ConnectorStatus, error) 
 	connectors := m.registry.All()
 	statuses := make([]ConnectorStatus, len(connectors))
 
-	transmitName, _, err := m.db.GetConnectorForRole(ctx, planviewer.ConnectorRoleTransmit)
+	transmitName, _, err := m.db.GetConnectorForRole(ctx, domain.ConnectorRoleTransmit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get transmit connector role: %w", err)
 	}
-	summaryName, _, err := m.db.GetConnectorForRole(ctx, planviewer.ConnectorRoleSummary)
+	summaryName, _, err := m.db.GetConnectorForRole(ctx, domain.ConnectorRoleSummary)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get summary connector role: %w", err)
 	}
 
 	for i, c := range connectors {
-		var role *planviewer.ConnectorRole
+		var role *domain.ConnectorRole
 		switch c.Name() {
 		case transmitName:
-			r := planviewer.ConnectorRoleTransmit
+			r := domain.ConnectorRoleTransmit
 			role = &r
 		case summaryName:
-			r := planviewer.ConnectorRoleSummary
+			r := domain.ConnectorRoleSummary
 			role = &r
 		}
 		statuses[i] = ConnectorStatus{
@@ -164,7 +164,7 @@ func (m *Manager) isConfigured(ctx context.Context, c Connector) bool {
 func (m *Manager) EnsureConnectorExists(ctx context.Context, name string) error {
 	connector, ok := m.registry.Get(name)
 	if !ok {
-		return planviewer.ErrConnectorNotFound
+		return domain.ErrConnectorNotFound
 	}
 
 	return m.db.UpsertConnector(ctx, name, connector.DisplayName(), false)
@@ -172,12 +172,12 @@ func (m *Manager) EnsureConnectorExists(ctx context.Context, name string) error 
 
 // GenerateSummary invokes the summary connector and returns its generated text response.
 func (m *Manager) GenerateSummary(ctx context.Context, title, content string) (string, error) {
-	name, found, err := m.db.GetConnectorForRole(ctx, planviewer.ConnectorRoleSummary)
+	name, found, err := m.db.GetConnectorForRole(ctx, domain.ConnectorRoleSummary)
 	if err != nil {
 		return "", fmt.Errorf("failed to read summarizer setting: %w", err)
 	}
 	if !found || name == "" {
-		return "", planviewer.ErrNoSummarizerConfigured
+		return "", domain.ErrNoSummarizerConfigured
 	}
 	connector, ok := m.registry.Get(name)
 	if !ok {
@@ -199,7 +199,7 @@ func (m *Manager) GenerateSummary(ctx context.Context, title, content string) (s
 		return "", err
 	}
 	if result.Response == nil {
-		return "", planviewer.ErrConnectorResponseEmpty
+		return "", domain.ErrConnectorResponseEmpty
 	}
 	return *result.Response, nil
 }
@@ -208,7 +208,7 @@ func (m *Manager) GenerateSummary(ctx context.Context, title, content string) (s
 func (m *Manager) GetConnectorRequiredSettings(connectorName string) ([]SettingDefinition, error) {
 	connector, ok := m.registry.Get(connectorName)
 	if !ok {
-		return nil, planviewer.ErrConnectorNotFound
+		return nil, domain.ErrConnectorNotFound
 	}
 	return connector.RequiredSettings(), nil
 }
@@ -217,7 +217,7 @@ func (m *Manager) GetConnectorRequiredSettings(connectorName string) ([]SettingD
 func (m *Manager) ValidateConnector(ctx context.Context, connectorName string) error {
 	connector, ok := m.registry.Get(connectorName)
 	if !ok {
-		return planviewer.ErrConnectorNotFound
+		return domain.ErrConnectorNotFound
 	}
 
 	// Load config if configurable

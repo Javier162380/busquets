@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	planviewer "github.com/Javier162380/busquets"
+	domain "github.com/Javier162380/busquets"
 )
 
 // Category represents the type of error for handling at different layers.
@@ -80,9 +80,9 @@ var (
 	ErrConnectorDisabled = &Error{Category: CategoryUnavailable, Message: "connector not initialized"}
 
 	// Re-exported from the root package so errors.Is checks work regardless of which side emitted the error.
-	ErrNoConnectorEnabled     = planviewer.ErrNoConnectorEnabled
-	ErrNoSummarizerConfigured = planviewer.ErrNoSummarizerConfigured
-	ErrConnectorResponseEmpty = planviewer.ErrConnectorResponseEmpty
+	ErrNoConnectorEnabled     = domain.ErrNoConnectorEnabled
+	ErrNoSummarizerConfigured = domain.ErrNoSummarizerConfigured
+	ErrConnectorResponseEmpty = domain.ErrConnectorResponseEmpty
 )
 
 // GetCategory extracts the error category, defaulting to Internal.

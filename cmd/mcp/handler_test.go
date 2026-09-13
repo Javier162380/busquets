@@ -867,7 +867,6 @@ func TestFormatTLDRPrompt(t *testing.T) {
 	output, err := FormatTLDRPrompt(prompt)
 	require.NoError(t, err)
 
-
 	expected := `tldr:
   file_name: test.md
   sync_source: /some/source

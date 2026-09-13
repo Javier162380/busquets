@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	planviewer "github.com/Javier162380/busquets"
+	domain "github.com/Javier162380/busquets"
 	clipboard_test "github.com/Javier162380/busquets/internal/clipboard/test"
 	"github.com/Javier162380/busquets/internal/config"
 	"github.com/Javier162380/busquets/internal/connectors"
@@ -1740,7 +1740,7 @@ func testConnectorManager(t *testing.T, setup serviceSetupFn) {
 
 		err := manager.EnableConnector(ctx, "non-existent")
 		require.Error(t, err)
-		require.True(t, planviewer.IsConnectorNotFound(err), "expected not found error, got: %v", err)
+		require.True(t, domain.IsConnectorNotFound(err), "expected not found error, got: %v", err)
 	})
 
 	t.Run("EnableConnector enables registered connector", func(t *testing.T) {
@@ -1919,7 +1919,7 @@ func testConnectorManager(t *testing.T, setup serviceSetupFn) {
 
 		err := manager.EnsureConnectorExists(ctx, "unregistered")
 		require.Error(t, err)
-		require.True(t, planviewer.IsConnectorNotFound(err), "expected not found error, got: %v", err)
+		require.True(t, domain.IsConnectorNotFound(err), "expected not found error, got: %v", err)
 	})
 
 	t.Run("GetConnectorRequiredSettings returns settings definitions", func(t *testing.T) {
@@ -2327,7 +2327,7 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, err)
 
 		_, err = service.GenerateSummary(ctx, "no-summarizer.md", sourcePlansDir)
-		require.ErrorIs(t, err, planviewer.ErrNoSummarizerConfigured)
+		require.ErrorIs(t, err, domain.ErrNoSummarizerConfigured)
 	})
 
 	t.Run("ClearSummaryConnector clears the summary slot", func(t *testing.T) {
@@ -2355,7 +2355,7 @@ func testServiceConnectorOperations(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, service.ClearSummaryConnector(ctx))
 
 		_, err = service.GenerateSummary(ctx, "clear-summary.md", sourcePlansDir)
-		require.ErrorIs(t, err, planviewer.ErrNoSummarizerConfigured)
+		require.ErrorIs(t, err, domain.ErrNoSummarizerConfigured)
 	})
 }
 

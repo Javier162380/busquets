@@ -4,7 +4,7 @@ package connectors
 import (
 	"context"
 
-	planviewer "github.com/Javier162380/busquets"
+	domain "github.com/Javier162380/busquets"
 )
 
 // SummarySystemPrompt is the instruction template used to generate a plan TLDR.
@@ -70,6 +70,6 @@ type SettingDefinition struct {
 type ConnectorStatus struct {
 	Name        string
 	DisplayName string
-	Role        *planviewer.ConnectorRole // nil if not assigned to any slot
+	Role        *domain.ConnectorRole // nil if not assigned to any slot
 	Configured  bool
 }
