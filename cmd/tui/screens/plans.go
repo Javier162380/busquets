@@ -872,8 +872,10 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 		s.viewer.ScrollToContentLine(line)
 		s.lastKey = ""
 		s.editor.SetEditorMode(types.EditorModeNavigation)
-		s.editor.RestoreStash()
-		s.editor.ClearStash()
+		if s.editor.GetStash() != nil {
+			s.editor.RestoreStash()
+			s.editor.ClearStash()
+		}
 		return s, nil
 
 	case "ctrl+s":

@@ -51,6 +51,10 @@ func (e *Editor) Stash() {
 	e.stashedTextArea = &ta
 }
 
+func (e *Editor) GetStash() *textarea.Model {
+	return e.stashedTextArea
+}
+
 // ClearStash discards any stashed content.
 func (e *Editor) ClearStash() {
 	e.stashedTextArea = nil
