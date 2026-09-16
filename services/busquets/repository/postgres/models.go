@@ -47,6 +47,19 @@ type PlanComment struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
+type PlanMemory struct {
+	ID                  int32              `json:"id"`
+	PlanID              int64              `json:"plan_id"`
+	FilePath            string             `json:"file_path"`
+	Content             string             `json:"content"`
+	Summary             string             `json:"summary"`
+	CoversUpToVersion   int64              `json:"covers_up_to_version"`
+	CoversUpToCommentID int64              `json:"covers_up_to_comment_id"`
+	GeneratedBy         string             `json:"generated_by"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
 type PlanTag struct {
 	PlanID     int64              `json:"plan_id"`
 	TagID      int64              `json:"tag_id"`

@@ -356,3 +356,128 @@ func FormatVersionDiff(vd busquets.VersionDiff) (string, error) {
 
 	return sb.String(), nil
 }
+
+// memoryEventTOON represents a timeline entry for TOON encoding.
+type memoryEventTOON struct {
+	EventKind     string `toon:"event_kind"`
+	RefID         int64  `toon:"ref_id"`
+	VersionNumber string `toon:"version_number"`
+	OccurredAt    string `toon:"occurred_at"`
+	Change        string `toon:"change"`
+}
+
+type memoryResponse struct {
+	Memory memoryMetaTOON    `toon:"memory"`
+	Events []memoryEventTOON `toon:"events"`
+}
+
+type memoryMetaTOON struct {
+	FileName            string `toon:"file_name"`
+	SyncSource          string `toon:"sync_source"`
+	PlanTitle           string `toon:"plan_title"`
+	Exists              bool   `toon:"exists"`
+	CoversUpToVersion   int64  `toon:"covers_up_to_version"`
+	CoversUpToCommentID int64  `toon:"covers_up_to_comment_id"`
+	GeneratedBy         string `toon:"generated_by"`
+	NewVersions         int    `toon:"new_versions"`
+	NewComments         int    `toon:"new_comments"`
+}
+
+// memoryEventChange renders an event's computed change stats for display.
+func memoryEventChange(event busquets.MemoryEvent) string {
+	switch {
+	case event.Kind == busquets.MemoryEventComment:
+		return "comment"
+	case event.Kind == busquets.MemoryEventRestore && event.RestoredFrom != nil:
+		return fmt.Sprintf("restored from v%d", *event.RestoredFrom)
+	case event.LinesAdded == 0 && event.LinesRemoved == 0:
+		return fmt.Sprintf("initial (%d words)", event.WordCount)
+	default:
+		return fmt.Sprintf("+%d -%d", event.LinesAdded, event.LinesRemoved)
+	}
+}
+
+func memoryEventsTOON(events []busquets.MemoryEvent) []memoryEventTOON {
+	out := make([]memoryEventTOON, len(events))
+	for i, event := range events {
+		versionNumber := ""
+		if event.VersionNumber != nil {
+			versionNumber = fmt.Sprintf("%d", *event.VersionNumber)
+		}
+		out[i] = memoryEventTOON{
+			EventKind:     string(event.Kind),
+			RefID:         event.RefID,
+			VersionNumber: versionNumber,
+			OccurredAt:    event.OccurredAt.UTC().Format("2006-01-02T15:04:05Z"),
+			Change:        memoryEventChange(event),
+		}
+	}
+	return out
+}
+
+// FormatPlanMemory formats a memory as TOON metadata plus its markdown document.
+func FormatPlanMemory(memory *busquets.PlanMemory, staleness busquets.MemoryStaleness) (string, error) {
+	encoded, err := toon.Marshal(memoryResponse{
+		Memory: memoryMetaTOON{
+			FileName:            memory.FileName,
+			SyncSource:          memory.SyncSource,
+			PlanTitle:           memory.PlanTitle,
+			Exists:              memory.Exists(),
+			CoversUpToVersion:   memory.CoversUpToVersion,
+			CoversUpToCommentID: memory.CoversUpToCommentID,
+			GeneratedBy:         memory.GeneratedBy,
+			NewVersions:         staleness.NewVersions,
+			NewComments:         staleness.NewComments,
+		},
+		Events: memoryEventsTOON(memory.Events),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal TOON: %w", err)
+	}
+
+	var sb strings.Builder
+	sb.WriteString(string(encoded))
+	if memory.Exists() {
+		sb.WriteString("\n\nmemory:\n")
+		sb.WriteString(memory.Content)
+	} else {
+		sb.WriteString("\n\nmemory:\n(not generated yet — call generate_memory_prompt, then save_plan_memory)")
+	}
+	return sb.String(), nil
+}
+
+// FormatMemoryPrompts formats the prompt set. The prompts themselves are emitted
+// verbatim rather than through TOON — they are instructions to follow, and the
+// per-event ones carry diffs whose whitespace must survive intact.
+func FormatMemoryPrompts(prompts *busquets.MemoryPromptSet) (string, error) {
+	var sb strings.Builder
+
+	fmt.Fprintf(&sb, "plan: %s\nfile_name: %s\nsync_source: %s\nmode: %s\nevents_to_narrate: %d\n",
+		prompts.PlanTitle, prompts.FileName, prompts.SyncSource, prompts.Mode, len(prompts.Events))
+
+	sb.WriteString("\nsummary_system_prompt:\n")
+	sb.WriteString(prompts.SummarySystemPrompt)
+	sb.WriteString("\n\nsummary_user_prompt:\n")
+	sb.WriteString(prompts.SummaryUserPrompt)
+	sb.WriteString("\n\nevent_system_prompt:\n")
+	sb.WriteString(prompts.EventSystemPrompt)
+
+	if len(prompts.Events) == 0 {
+		sb.WriteString("\n\nevents: none — this memory is already up to date.\n")
+		return sb.String(), nil
+	}
+
+	for _, prompt := range prompts.Events {
+		versionNumber := ""
+		if prompt.Event.VersionNumber != nil {
+			versionNumber = fmt.Sprintf(" version_number=%d", *prompt.Event.VersionNumber)
+		}
+		fmt.Fprintf(&sb, "\n\n--- event event_kind=%s ref_id=%d%s occurred_at=%s ---\n",
+			prompt.Event.Kind, prompt.Event.RefID, versionNumber,
+			prompt.Event.OccurredAt.UTC().Format("2006-01-02T15:04:05Z"))
+		sb.WriteString(prompt.UserPrompt)
+	}
+	sb.WriteString("\n")
+
+	return sb.String(), nil
+}

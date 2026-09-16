@@ -2,6 +2,7 @@ package busquets
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -4310,4 +4311,1012 @@ func testInsertPlanRollbackOnVersionWriteFailure(t *testing.T, b backendSetup) {
 	versionCount, err := service.db.GetVersionCount(ctx, id)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), versionCount)
+}
+
+func TestMemoryTimeline(t *testing.T) {
+	t.Run("buildTimeline orders a mixed history oldest first", func(t *testing.T) {
+		base := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+		versions := []dto.PlanVersion{
+			{ID: 30, VersionNumber: 2, Content: "one\ntwo\nthree\n", WordCount: 3, CreatedAt: base.Add(2 * time.Hour)},
+			{ID: 10, VersionNumber: 0, Content: "one\n", WordCount: 1, CreatedAt: base},
+			{ID: 20, VersionNumber: 1, Content: "one\ntwo\n", WordCount: 2, CreatedAt: base.Add(time.Hour)},
+		}
+		comments := []dto.Comment{
+			{ID: 5, Content: "looks good", CreatedAt: base.Add(90 * time.Minute)},
+		}
+
+		events := buildTimeline(versions, comments)
+		require.Len(t, events, 4)
+
+		require.Equal(t, MemoryEventVersion, events[0].Kind)
+		require.Equal(t, int64(0), *events[0].VersionNumber)
+		require.Equal(t, 0, events[0].LinesAdded)
+		require.Equal(t, 0, events[0].LinesRemoved)
+		require.Equal(t, 1, events[0].WordCount)
+
+		require.Equal(t, MemoryEventVersion, events[1].Kind)
+		require.Equal(t, int64(1), *events[1].VersionNumber)
+		require.Equal(t, 1, events[1].LinesAdded)
+		require.Equal(t, 0, events[1].LinesRemoved)
+
+		require.Equal(t, MemoryEventComment, events[2].Kind)
+		require.Equal(t, int64(5), events[2].RefID)
+		require.Equal(t, "looks good", events[2].Body)
+		require.Nil(t, events[2].VersionNumber)
+
+		require.Equal(t, MemoryEventVersion, events[3].Kind)
+		require.Equal(t, int64(2), *events[3].VersionNumber)
+	})
+
+	t.Run("buildTimeline diffs by version number, not by input order", func(t *testing.T) {
+		base := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+		// ListPlanVersionsAll has no ORDER BY, so a backend may return any order.
+		versions := []dto.PlanVersion{
+			{ID: 20, VersionNumber: 1, Content: "a\nb\nc\n", CreatedAt: base.Add(time.Hour)},
+			{ID: 10, VersionNumber: 0, Content: "a\n", CreatedAt: base},
+		}
+
+		events := buildTimeline(versions, nil)
+		require.Len(t, events, 2)
+		require.Equal(t, int64(0), *events[0].VersionNumber)
+		require.Equal(t, 2, events[1].LinesAdded)
+		require.Equal(t, 0, events[1].LinesRemoved)
+	})
+
+	t.Run("buildTimeline reports a repeated content as a restore", func(t *testing.T) {
+		base := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+		versions := []dto.PlanVersion{
+			{ID: 10, VersionNumber: 0, Content: "original\n", CreatedAt: base},
+			{ID: 20, VersionNumber: 1, Content: "edited\n", CreatedAt: base.Add(time.Hour)},
+			{ID: 30, VersionNumber: 2, Content: "original\n", CreatedAt: base.Add(2 * time.Hour)},
+		}
+
+		events := buildTimeline(versions, nil)
+		require.Len(t, events, 3)
+		require.Equal(t, MemoryEventVersion, events[1].Kind)
+		require.Equal(t, MemoryEventRestore, events[2].Kind)
+		require.Equal(t, int64(0), *events[2].RestoredFrom)
+	})
+
+	t.Run("buildTimeline puts a version before a comment sharing its timestamp", func(t *testing.T) {
+		at := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+		events := buildTimeline(
+			[]dto.PlanVersion{{ID: 10, VersionNumber: 0, Content: "x\n", CreatedAt: at}},
+			[]dto.Comment{{ID: 5, Content: "note", CreatedAt: at}},
+		)
+		require.Len(t, events, 2)
+		require.Equal(t, MemoryEventVersion, events[0].Kind)
+		require.Equal(t, MemoryEventComment, events[1].Kind)
+	})
+
+	t.Run("buildTimeline handles a plan with no versions or comments", func(t *testing.T) {
+		require.Empty(t, buildTimeline(nil, nil))
+	})
+}
+
+func TestMemoryOperations(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testMemoryOperations(t, b.setupFn)
+		})
+	}
+}
+
+func testMemoryOperations(t *testing.T, setup serviceSetupFn) {
+	t.Helper()
+
+	// syncedPlan creates a plan file, syncs it, and returns its name.
+	syncedPlan := func(t *testing.T, service *Service, sourceDir string) string {
+		t.Helper()
+		const name = "test-plan.md"
+		createTestPlanFile(t, sourceDir, name, sampleMarkdown)
+		_, err := service.SyncPlans(context.Background())
+		require.NoError(t, err)
+		return name
+	}
+
+	t.Run("BuildMemoryTimeline returns the v0 snapshot of a freshly synced plan", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+
+		events, err := service.BuildMemoryTimeline(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.Len(t, events, 1)
+		require.Equal(t, MemoryEventVersion, events[0].Kind)
+		require.Equal(t, int64(0), *events[0].VersionNumber)
+		require.Equal(t, 0, events[0].LinesAdded)
+		require.Equal(t, 0, events[0].LinesRemoved)
+	})
+
+	t.Run("BuildMemoryTimeline picks up edits and comments", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+
+		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+			FileName:         name,
+			SyncSource:       sourceDir,
+			NewContent:       sampleMarkdown + "\nA new line.\n",
+			LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+
+		_, err = service.AddComment(ctx, name, sourceDir, "worth revisiting")
+		require.NoError(t, err)
+
+		events, err := service.BuildMemoryTimeline(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.Len(t, events, 3)
+
+		require.Equal(t, MemoryEventVersion, events[0].Kind)
+		require.Equal(t, MemoryEventVersion, events[1].Kind)
+		require.Greater(t, events[1].LinesAdded, 0)
+
+		require.Equal(t, MemoryEventComment, events[2].Kind)
+		require.Equal(t, "worth revisiting", events[2].Body)
+	})
+
+	t.Run("BuildMemoryTimeline errors for an unknown plan", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+
+		_, err := service.BuildMemoryTimeline(context.Background(), "missing.md", sourceDir)
+		require.Error(t, err)
+	})
+
+	t.Run("GetPlanMemory returns a timeline before any memory is generated", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+
+		memory, err := service.GetPlanMemory(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.False(t, memory.Exists())
+		require.Equal(t, NoMemoryCoverage, memory.CoversUpToVersion)
+		require.Empty(t, memory.Content)
+		require.Len(t, memory.Events, 1)
+		require.Equal(t, "Test Plan", memory.PlanTitle)
+	})
+
+	t.Run("GetPlanMemory returns the stored document once one exists", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+
+		now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+		path := service.memoryPathFor(plan.ID)
+		_, err = service.db.UpsertPlanMemory(ctx, dto.UpsertPlanMemoryParams{
+			PlanID:              plan.ID,
+			FilePath:            path,
+			Content:             "# Memory\n\nIt began.\n",
+			Summary:             "It began.",
+			CoversUpToVersion:   0,
+			CoversUpToCommentID: 0,
+			GeneratedBy:         "mcp",
+			CreatedAt:           now,
+			UpdatedAt:           now,
+		}, func() error {
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
+			return os.WriteFile(path, []byte("# Memory\n\nIt began.\n"), 0o600)
+		})
+		require.NoError(t, err)
+
+		memory, err := service.GetPlanMemory(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.True(t, memory.Exists())
+		require.Equal(t, "# Memory\n\nIt began.\n", memory.Content)
+		require.Equal(t, "It began.", memory.Summary)
+		require.Equal(t, int64(0), memory.CoversUpToVersion)
+		require.Equal(t, "mcp", memory.GeneratedBy)
+		require.FileExists(t, path)
+	})
+
+	t.Run("UpsertPlanMemory rolls the row back when the file write fails", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+
+		_, err = service.db.UpsertPlanMemory(ctx, dto.UpsertPlanMemoryParams{
+			PlanID:      plan.ID,
+			FilePath:    service.memoryPathFor(plan.ID),
+			Content:     "never written",
+			Summary:     "never written",
+			GeneratedBy: "mcp",
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}, func() error {
+			return errors.New("disk on fire")
+		})
+		require.Error(t, err)
+
+		_, err = service.db.GetPlanMemoryByPlanID(ctx, plan.ID)
+		require.True(t, dto.IsNotFound(err), "no memory row should survive a failed file write")
+	})
+
+	t.Run("UpsertPlanMemory replaces the existing memory rather than adding one", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+
+		first := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+		params := dto.UpsertPlanMemoryParams{
+			PlanID:      plan.ID,
+			FilePath:    service.memoryPathFor(plan.ID),
+			Content:     "first",
+			Summary:     "first",
+			GeneratedBy: "mcp",
+			CreatedAt:   first,
+			UpdatedAt:   first,
+		}
+		created, err := service.db.UpsertPlanMemory(ctx, params, nil)
+		require.NoError(t, err)
+
+		params.Content = "second"
+		params.Summary = "second"
+		params.CoversUpToVersion = 3
+		params.UpdatedAt = first.Add(time.Hour)
+		updated, err := service.db.UpsertPlanMemory(ctx, params, nil)
+		require.NoError(t, err)
+
+		require.Equal(t, created.ID, updated.ID)
+		require.Equal(t, "second", updated.Content)
+		require.Equal(t, int64(3), updated.CoversUpToVersion)
+	})
+
+	t.Run("MemoryStaleness counts every event when no memory exists", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		_, err := service.AddComment(ctx, name, sourceDir, "a note")
+		require.NoError(t, err)
+
+		staleness, err := service.MemoryStaleness(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.False(t, staleness.HasMemory)
+		require.Equal(t, 1, staleness.NewVersions)
+		require.Equal(t, 1, staleness.NewComments)
+		require.True(t, staleness.IsStale())
+	})
+
+	t.Run("MemoryStaleness reports nothing new when the memory is current", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+
+		now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+		_, err = service.db.UpsertPlanMemory(ctx, dto.UpsertPlanMemoryParams{
+			PlanID:            plan.ID,
+			FilePath:          service.memoryPathFor(plan.ID),
+			Content:           "covered",
+			Summary:           "covered",
+			CoversUpToVersion: 0,
+			GeneratedBy:       "mcp",
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		}, nil)
+		require.NoError(t, err)
+
+		staleness, err := service.MemoryStaleness(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.True(t, staleness.HasMemory)
+		require.Equal(t, 0, staleness.NewVersions)
+		require.Equal(t, 0, staleness.NewComments)
+		require.False(t, staleness.IsStale())
+	})
+
+	t.Run("MemoryStaleness counts a new version after an edit", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+
+		now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+		_, err = service.db.UpsertPlanMemory(ctx, dto.UpsertPlanMemoryParams{
+			PlanID:            plan.ID,
+			FilePath:          service.memoryPathFor(plan.ID),
+			Content:           "covered",
+			Summary:           "covered",
+			CoversUpToVersion: 0,
+			GeneratedBy:       "mcp",
+			CreatedAt:         now,
+			UpdatedAt:         now,
+		}, nil)
+		require.NoError(t, err)
+
+		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+			FileName:         name,
+			SyncSource:       sourceDir,
+			NewContent:       sampleMarkdown + "\nAnother line.\n",
+			LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+
+		staleness, err := service.MemoryStaleness(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.Equal(t, 1, staleness.NewVersions)
+		require.Equal(t, 0, staleness.NewComments)
+		require.True(t, staleness.IsStale())
+	})
+
+	t.Run("DeletePlan removes the memory row and its directory", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+
+		now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+		path := service.memoryPathFor(plan.ID)
+		_, err = service.db.UpsertPlanMemory(ctx, dto.UpsertPlanMemoryParams{
+			PlanID:      plan.ID,
+			FilePath:    path,
+			Content:     "remembered",
+			Summary:     "remembered",
+			GeneratedBy: "mcp",
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}, func() error {
+			require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o750))
+			return os.WriteFile(path, []byte("remembered"), 0o600)
+		})
+		require.NoError(t, err)
+		require.FileExists(t, path)
+
+		require.NoError(t, service.DeletePlan(ctx, name, sourceDir))
+
+		_, err = service.db.GetPlanMemoryByPlanID(ctx, plan.ID)
+		require.True(t, dto.IsNotFound(err), "memory row should be gone with the plan")
+		require.NoFileExists(t, path)
+	})
+}
+
+func TestMemoryRendering(t *testing.T) {
+	at := time.Date(2026, 9, 2, 14, 2, 0, 0, time.UTC)
+	version := func(n int64, added, removed, words int) MemoryEvent {
+		return MemoryEvent{
+			Kind: MemoryEventVersion, RefID: 10 + n, VersionNumber: &n,
+			OccurredAt: at, LinesAdded: added, LinesRemoved: removed, WordCount: words,
+		}
+	}
+
+	t.Run("headings carry computed facts only", func(t *testing.T) {
+		initial := version(0, 0, 0, 1240)
+		require.Equal(t, "v0 — 2026-09-02 14:02 UTC · initial · 1240 words", memoryEventHeading(initial))
+
+		changed := version(1, 38, 12, 1310)
+		require.Equal(t, "v1 — 2026-09-02 14:02 UTC · +38 −12", memoryEventHeading(changed))
+
+		from := int64(0)
+		restored := version(2, 4, 96, 1240)
+		restored.Kind = MemoryEventRestore
+		restored.RestoredFrom = &from
+		require.Equal(t, "v2 — 2026-09-02 14:02 UTC · restored from v0", memoryEventHeading(restored))
+
+		comment := MemoryEvent{Kind: MemoryEventComment, RefID: 5, OccurredAt: at}
+		require.Equal(t, "Comment — 2026-09-02 14:02 UTC", memoryEventHeading(comment))
+	})
+
+	t.Run("document carries title, summary and timeline", func(t *testing.T) {
+		event := version(0, 0, 0, 10)
+		event.Narrative = "Sets out the shape of the thing."
+		doc := renderMemoryDocument("Test Plan", "It began.", renderMemorySections([]MemoryEvent{event}))
+
+		require.Equal(t,
+			"# Memory: Test Plan\n\nIt began.\n\n## Timeline\n\n"+
+				"### v0 — 2026-09-02 14:02 UTC · initial · 10 words\n\n"+
+				"Sets out the shape of the thing.\n",
+			doc)
+	})
+
+	t.Run("comment sections quote the comment body", func(t *testing.T) {
+		event := MemoryEvent{
+			Kind: MemoryEventComment, RefID: 5, OccurredAt: at,
+			Body: "needs a rethink", Narrative: "Flagged the approach as unsettled.",
+		}
+		sections := renderMemorySections([]MemoryEvent{event})
+		require.Contains(t, sections, "> needs a rethink\n")
+		require.Contains(t, sections, "Flagged the approach as unsettled.")
+	})
+
+	t.Run("existingMemorySections round-trips the timeline", func(t *testing.T) {
+		event := version(0, 0, 0, 10)
+		event.Narrative = "First."
+		sections := renderMemorySections([]MemoryEvent{event})
+		doc := renderMemoryDocument("Test Plan", "Summary.", sections)
+
+		require.Equal(t, strings.TrimSpace(sections), existingMemorySections(doc))
+	})
+
+	t.Run("existingMemorySections yields nothing for a document without the marker", func(t *testing.T) {
+		require.Empty(t, existingMemorySections("# Hand written\n\nno marker here\n"))
+	})
+
+	t.Run("advanceWatermark stops at a gap", func(t *testing.T) {
+		ordered := []int64{0, 1, 2, 3}
+		require.Equal(t, int64(1), advanceWatermark(ordered, map[int64]bool{0: true, 1: true, 3: true}, NoMemoryCoverage))
+		require.Equal(t, int64(3), advanceWatermark(ordered, map[int64]bool{0: true, 1: true, 2: true, 3: true}, NoMemoryCoverage))
+		require.Equal(t, NoMemoryCoverage, advanceWatermark(ordered, map[int64]bool{1: true}, NoMemoryCoverage))
+	})
+}
+
+func TestMemoryWrites(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testMemoryWrites(t, b.setupFn)
+		})
+	}
+}
+
+func testMemoryWrites(t *testing.T, setup serviceSetupFn) {
+	t.Helper()
+
+	// narrateAll saves a narrative for every event currently on the timeline.
+	narrateAll := func(t *testing.T, service *Service, name, sourceDir, summary string, mode MemoryMode) *PlanMemory {
+		t.Helper()
+		ctx := context.Background()
+		events, err := service.BuildMemoryTimeline(ctx, name, sourceDir)
+		require.NoError(t, err)
+
+		saves := make([]SavePlanMemoryEvent, len(events))
+		for i, event := range events {
+			saves[i] = SavePlanMemoryEvent{
+				Kind:      event.Kind,
+				RefID:     event.RefID,
+				Narrative: fmt.Sprintf("narrative for %s %d", event.Kind, event.RefID),
+			}
+		}
+
+		memory, err := service.SavePlanMemory(ctx, SavePlanMemoryRequest{
+			FileName: name, SyncSource: sourceDir, Mode: mode, Summary: summary, Events: saves,
+		})
+		require.NoError(t, err)
+		return memory
+	}
+
+	syncedPlan := func(t *testing.T, service *Service, sourceDir string) string {
+		t.Helper()
+		const name = "test-plan.md"
+		createTestPlanFile(t, sourceDir, name, sampleMarkdown)
+		_, err := service.SyncPlans(context.Background())
+		require.NoError(t, err)
+		return name
+	}
+
+	t.Run("SavePlanMemory writes the row, the file and the watermarks", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		memory := narrateAll(t, service, name, sourceDir, "The plan begins.", MemoryModeIncremental)
+
+		require.True(t, memory.Exists())
+		require.Equal(t, "The plan begins.", memory.Summary)
+		require.Equal(t, int64(0), memory.CoversUpToVersion)
+		require.Equal(t, "mcp", memory.GeneratedBy)
+		require.Contains(t, memory.Content, "# Memory: Test Plan")
+		require.Contains(t, memory.Content, "## Timeline")
+
+		require.FileExists(t, memory.FilePath)
+		onDisk, err := os.ReadFile(memory.FilePath)
+		require.NoError(t, err)
+		require.Equal(t, memory.Content, string(onDisk))
+
+		staleness, err := service.MemoryStaleness(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.False(t, staleness.IsStale())
+	})
+
+	t.Run("SavePlanMemory rejects an event that is not on the timeline", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+
+		_, err := service.SavePlanMemory(ctx, SavePlanMemoryRequest{
+			FileName: name, SyncSource: sourceDir,
+			Events: []SavePlanMemoryEvent{
+				{Kind: MemoryEventVersion, RefID: 9999, Narrative: "invented"},
+			},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "not in the computed timeline")
+	})
+
+	t.Run("SavePlanMemory rejects an empty narrative", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		events, err := service.BuildMemoryTimeline(ctx, name, sourceDir)
+		require.NoError(t, err)
+
+		_, err = service.SavePlanMemory(ctx, SavePlanMemoryRequest{
+			FileName: name, SyncSource: sourceDir,
+			Events: []SavePlanMemoryEvent{{Kind: events[0].Kind, RefID: events[0].RefID, Narrative: "   "}},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "empty narrative")
+	})
+
+	t.Run("SavePlanMemory accepts a restore event labelled as a version", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+
+		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+			FileName: name, SyncSource: sourceDir,
+			NewContent: sampleMarkdown + "\nEdited.\n", LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+		require.NoError(t, service.RestorePlanVersionByFileName(ctx, name, sourceDir, 0))
+
+		events, err := service.BuildMemoryTimeline(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.Len(t, events, 3)
+		require.Equal(t, MemoryEventRestore, events[2].Kind)
+
+		// The identity is the refId; the label the caller happens to send is not.
+		_, err = service.SavePlanMemory(ctx, SavePlanMemoryRequest{
+			FileName: name, SyncSource: sourceDir,
+			Events: []SavePlanMemoryEvent{
+				{Kind: MemoryEventVersion, RefID: events[0].RefID, Narrative: "first"},
+				{Kind: MemoryEventVersion, RefID: events[1].RefID, Narrative: "second"},
+				{Kind: MemoryEventVersion, RefID: events[2].RefID, Narrative: "reverted"},
+			},
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("incremental save appends to the existing timeline", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		first := narrateAll(t, service, name, sourceDir, "First pass.", MemoryModeIncremental)
+		require.Equal(t, 1, strings.Count(first.Content, "### "))
+
+		_, err := service.AddComment(ctx, name, sourceDir, "a thought")
+		require.NoError(t, err)
+
+		events, err := service.BuildMemoryTimeline(ctx, name, sourceDir)
+		require.NoError(t, err)
+		newest := events[len(events)-1]
+		require.Equal(t, MemoryEventComment, newest.Kind)
+
+		second, err := service.SavePlanMemory(ctx, SavePlanMemoryRequest{
+			FileName: name, SyncSource: sourceDir, Mode: MemoryModeIncremental,
+			Events: []SavePlanMemoryEvent{{Kind: newest.Kind, RefID: newest.RefID, Narrative: "Someone pushed back."}},
+		})
+		require.NoError(t, err)
+
+		require.Equal(t, 2, strings.Count(second.Content, "### "), "the earlier section should survive")
+		require.Contains(t, second.Content, "Someone pushed back.")
+		require.Equal(t, "First pass.", second.Summary, "an omitted summary keeps the stored one")
+		require.Equal(t, newest.RefID, second.CoversUpToCommentID)
+	})
+
+	t.Run("rebuild replaces the timeline instead of appending", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+
+		name := syncedPlan(t, service, sourceDir)
+		narrateAll(t, service, name, sourceDir, "First pass.", MemoryModeIncremental)
+		rebuilt := narrateAll(t, service, name, sourceDir, "Second pass.", MemoryModeRebuild)
+
+		require.Equal(t, 1, strings.Count(rebuilt.Content, "### "))
+		require.Equal(t, "Second pass.", rebuilt.Summary)
+	})
+
+	t.Run("a skipped event stops the watermark advancing past it", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+			FileName: name, SyncSource: sourceDir,
+			NewContent: sampleMarkdown + "\nEdited.\n", LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+
+		events, err := service.BuildMemoryTimeline(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.Len(t, events, 2)
+
+		// Narrate v1 but not v0: the watermark must stay below v0, or v0 would be
+		// silently treated as covered.
+		memory, err := service.SavePlanMemory(ctx, SavePlanMemoryRequest{
+			FileName: name, SyncSource: sourceDir,
+			Events: []SavePlanMemoryEvent{{Kind: events[1].Kind, RefID: events[1].RefID, Narrative: "second only"}},
+		})
+		require.NoError(t, err)
+		require.Equal(t, NoMemoryCoverage, memory.CoversUpToVersion)
+
+		staleness, err := service.MemoryStaleness(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.Equal(t, 2, staleness.NewVersions)
+	})
+
+	t.Run("BuildMemoryPrompts returns only events past the watermark", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+
+		prompts, err := service.BuildMemoryPrompts(ctx, name, sourceDir, MemoryModeIncremental)
+		require.NoError(t, err)
+		require.Len(t, prompts.Events, 1)
+		require.Equal(t, connectors.SummarySystemPrompt, prompts.SummarySystemPrompt)
+		require.Equal(t, connectors.MemoryEventSystemPrompt, prompts.EventSystemPrompt)
+		require.Contains(t, prompts.Events[0].UserPrompt, "first snapshot")
+
+		narrateAll(t, service, name, sourceDir, "Done.", MemoryModeIncremental)
+
+		prompts, err = service.BuildMemoryPrompts(ctx, name, sourceDir, MemoryModeIncremental)
+		require.NoError(t, err)
+		require.Empty(t, prompts.Events)
+
+		prompts, err = service.BuildMemoryPrompts(ctx, name, sourceDir, MemoryModeRebuild)
+		require.NoError(t, err)
+		require.Len(t, prompts.Events, 1, "rebuild ignores the watermark")
+	})
+
+	t.Run("BuildMemoryPrompts carries a diff for a changed version", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+			FileName: name, SyncSource: sourceDir,
+			NewContent: sampleMarkdown + "\nA distinctive new line.\n", LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+
+		prompts, err := service.BuildMemoryPrompts(ctx, name, sourceDir, MemoryModeIncremental)
+		require.NoError(t, err)
+		require.Len(t, prompts.Events, 2)
+		require.Contains(t, prompts.Events[1].UserPrompt, "The plan changed")
+		require.Contains(t, prompts.Events[1].UserPrompt, "+A distinctive new line.")
+	})
+
+	t.Run("BuildMemoryPrompts carries the comment body", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		_, err := service.AddComment(ctx, name, sourceDir, "please reconsider the storage layer")
+		require.NoError(t, err)
+
+		prompts, err := service.BuildMemoryPrompts(ctx, name, sourceDir, MemoryModeIncremental)
+		require.NoError(t, err)
+		require.Len(t, prompts.Events, 2)
+		require.Contains(t, prompts.Events[1].UserPrompt, "please reconsider the storage layer")
+	})
+
+	t.Run("DeletePlanMemory removes the row and the file", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		memory := narrateAll(t, service, name, sourceDir, "Gone soon.", MemoryModeIncremental)
+		require.FileExists(t, memory.FilePath)
+
+		require.NoError(t, service.DeletePlanMemory(ctx, name, sourceDir))
+		require.NoFileExists(t, memory.FilePath)
+
+		after, err := service.GetPlanMemory(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.False(t, after.Exists())
+		require.Len(t, after.Events, 1, "deleting a memory leaves the plan's timeline intact")
+	})
+
+	t.Run("DeletePlanMemory reports a plan with no memory", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+
+		name := syncedPlan(t, service, sourceDir)
+		err := service.DeletePlanMemory(context.Background(), name, sourceDir)
+		require.Error(t, err)
+		require.True(t, dto.IsNotFound(err))
+	})
+}
+
+// setupMockGenerativeConnector builds a generative connector wired into the
+// summary role, so GeneratePlanMemory can reach it.
+func setupMockGenerativeConnector(t *testing.T, ctrl *gomock.Controller, service *Service) *connectors_test.MockGenerativeConnector {
+	t.Helper()
+
+	mock := connectors_test.NewMockGenerativeConnector(ctrl)
+	mock.EXPECT().Name().Return("mock-generative").AnyTimes()
+	mock.EXPECT().DisplayName().Return("Mock Generative").AnyTimes()
+	mock.EXPECT().RequiredSettings().Return([]connectors.SettingDefinition{}).AnyTimes()
+	mock.EXPECT().Validate().Return(nil).AnyTimes()
+
+	registry := connectors.NewRegistry()
+	require.NoError(t, registry.Register(mock))
+
+	manager := connectors.NewManager(registry, service.DB())
+	service.SetConnectorManager(manager)
+	require.NoError(t, manager.SetSummaryConnector(context.Background(), "mock-generative"))
+
+	return mock
+}
+
+func response(text string) *connectors.SendResult {
+	return &connectors.SendResult{Success: true, Response: &text}
+}
+
+func TestMemoryGeneration(t *testing.T) {
+	for _, b := range registeredBackends {
+		t.Run(b.name, func(t *testing.T) {
+			testMemoryGeneration(t, b.setupFn)
+		})
+	}
+}
+
+func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
+	t.Helper()
+
+	syncedPlan := func(t *testing.T, service *Service, sourceDir string) string {
+		t.Helper()
+		const name = "test-plan.md"
+		createTestPlanFile(t, sourceDir, name, sampleMarkdown)
+		_, err := service.SyncPlans(context.Background())
+		require.NoError(t, err)
+		return name
+	}
+
+	t.Run("GeneratePlanMemory narrates each event and writes the memory", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		mock := setupMockGenerativeConnector(t, ctrl, service)
+
+		// One call per event, then one for the header summary.
+		mock.EXPECT().
+			Generate(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, opts connectors.GeneratorOpts) (*connectors.SendResult, error) {
+				if opts.SystemPrompt == connectors.MemoryEventSystemPrompt {
+					return response("It set out the initial shape."), nil
+				}
+				return response("**Goal**: ship it."), nil
+			}).Times(2)
+
+		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		require.NoError(t, err)
+		require.True(t, memory.Exists())
+		require.Equal(t, "ollama", memory.GeneratedBy)
+		require.Equal(t, "**Goal**: ship it.", memory.Summary)
+		require.Contains(t, memory.Content, "It set out the initial shape.")
+		require.Equal(t, int64(0), memory.CoversUpToVersion)
+		require.FileExists(t, memory.FilePath)
+	})
+
+	t.Run("GeneratePlanMemory is a no-op when nothing is new", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		mock := setupMockGenerativeConnector(t, ctrl, service)
+		mock.EXPECT().Generate(gomock.Any(), gomock.Any()).Return(response("something"), nil).Times(2)
+
+		_, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		require.NoError(t, err)
+
+		// No further Generate calls are expected: the gomock controller fails the
+		// test if this run reaches the connector at all.
+		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		require.NoError(t, err)
+		require.True(t, memory.Exists())
+	})
+
+	t.Run("GeneratePlanMemory marks narratives written from truncated content", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		mock := setupMockGenerativeConnector(t, ctrl, service)
+
+		mock.EXPECT().
+			Generate(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, opts connectors.GeneratorOpts) (*connectors.SendResult, error) {
+				result := response("Partial view of the change.")
+				result.Truncated = opts.SystemPrompt == connectors.MemoryEventSystemPrompt
+				return result, nil
+			}).Times(2)
+
+		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		require.NoError(t, err)
+		require.Contains(t, memory.Content, "_(written from truncated content)_")
+	})
+
+	t.Run("GeneratePlanMemory caps how many events one run narrates", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+			FileName: name, SyncSource: sourceDir,
+			NewContent: sampleMarkdown + "\nSecond.\n", LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+
+		cap := float64(1)
+		require.NoError(t, service.SetSetting(ctx, SettingMemoryMaxEventsPerRun, SettingValues{NumberValue: &cap}))
+
+		mock := setupMockGenerativeConnector(t, ctrl, service)
+		// One event (the cap) plus the summary, not both events.
+		mock.EXPECT().Generate(gomock.Any(), gomock.Any()).Return(response("narrative"), nil).Times(2)
+
+		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		require.NoError(t, err)
+		require.Equal(t, int64(0), memory.CoversUpToVersion, "only the first event is covered")
+
+		staleness, err := service.MemoryStaleness(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.Equal(t, 1, staleness.NewVersions, "the rest waits for the next run")
+	})
+
+	t.Run("GeneratePlanMemory fails when the first event cannot be narrated", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		mock := setupMockGenerativeConnector(t, ctrl, service)
+		mock.EXPECT().Generate(gomock.Any(), gomock.Any()).Return(nil, errors.New("model is down")).Times(1)
+
+		_, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "model is down")
+
+		memory, err := service.GetPlanMemory(ctx, name, sourceDir)
+		require.NoError(t, err)
+		require.False(t, memory.Exists(), "a failed run writes nothing")
+	})
+
+	t.Run("GeneratePlanMemory keeps what it narrated when a later event fails", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+			FileName: name, SyncSource: sourceDir,
+			NewContent: sampleMarkdown + "\nSecond.\n", LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+
+		mock := setupMockGenerativeConnector(t, ctrl, service)
+		gomock.InOrder(
+			mock.EXPECT().Generate(gomock.Any(), gomock.Any()).Return(response("first event"), nil),
+			mock.EXPECT().Generate(gomock.Any(), gomock.Any()).Return(nil, errors.New("model is down")),
+			mock.EXPECT().Generate(gomock.Any(), gomock.Any()).Return(response("summary"), nil),
+		)
+
+		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		require.NoError(t, err)
+		require.Contains(t, memory.Content, "first event")
+		require.Equal(t, int64(0), memory.CoversUpToVersion, "the failed event stays pending")
+	})
+
+	t.Run("GeneratePlanMemory reports a summary connector that cannot take prompts", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+
+		// A plain Connector, like Telegram: no Generate method.
+		plain := setupMockConnector(ctrl, "mock-plain", "Mock Plain")
+		registry := connectors.NewRegistry()
+		require.NoError(t, registry.Register(plain))
+		manager := connectors.NewManager(registry, service.DB())
+		service.SetConnectorManager(manager)
+		require.NoError(t, manager.SetSummaryConnector(ctx, "mock-plain"))
+
+		_, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "cannot answer arbitrary prompts")
+	})
+
+	t.Run("GeneratePlanMemory requires a connector manager", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+
+		name := syncedPlan(t, service, sourceDir)
+
+		_, err := service.GeneratePlanMemory(context.Background(), name, sourceDir, MemoryModeIncremental)
+		require.ErrorIs(t, err, dto.ErrConnectorDisabled)
+	})
+
+	t.Run("MemoryMaxEventsPerRun falls back to the default", func(t *testing.T) {
+		service, _, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		require.Equal(t, DefaultMemoryMaxEventsPerRun, service.MemoryMaxEventsPerRun(ctx))
+
+		invalid := float64(0)
+		require.Error(t, service.SetSetting(ctx, SettingMemoryMaxEventsPerRun, SettingValues{NumberValue: &invalid}))
+		require.Equal(t, DefaultMemoryMaxEventsPerRun, service.MemoryMaxEventsPerRun(ctx))
+	})
 }

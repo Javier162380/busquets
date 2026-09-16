@@ -26,6 +26,7 @@ PLANS LIST (left panel):
   c              Copy plan content to clipboard
   m              Manage tags for the selected plan
   n              View / add comments
+  i              Open the plan's memory (timeline of how it evolved)
   X              Generate (or regenerate) a TLDR summary
   v              Open fullscreen view
   e              Edit the plan
@@ -47,6 +48,7 @@ PLAN CONTENT (right panel / fullscreen):
   Ctrl+U         Clear the search highlight (fullscreen only)
   e              Edit the plan
   v              View version history
+  i              Open the plan's memory
   t              Transmit to a connector (e.g. Telegram)
   Tab            Switch panel
   Esc            Back to the plans list / split view
@@ -154,6 +156,37 @@ VERSION DIFF (fullscreen, d):
   g / G          Jump to top / bottom
   c              Copy the diff to clipboard
   Esc            Back to the versions list
+
+MEMORY TIMELINE (i, left panel):
+  j/k, ↑/↓       Navigate the timeline (oldest first)
+  Enter          Show the diff behind the selected version
+  Tab            Switch to the memory document
+  v              View the memory document fullscreen
+  r              Write / update the memory (narrates only what is new)
+  R              Rewrite the whole memory from scratch (with confirmation)
+  c              Copy the memory to clipboard
+  d              Delete the memory (the plan and its versions are untouched)
+  Esc            Back to the plan
+
+  The timeline is computed from the plan's versions and comments, so it is
+  shown even before a memory has been written. Writing one needs a summary
+  connector (C) — dates and change counts always come from busquets, never
+  from the model.
+
+MEMORY DOCUMENT (right panel / fullscreen):
+  j/k, ↑/↓       Scroll up/down
+  g / G          Jump to top / bottom
+  Tab            Switch to the timeline
+  r              Toggle markdown rendering (raw vs rendered)
+  l              Toggle line numbers
+  c              Copy the memory to clipboard
+  Esc            Back to the timeline
+
+MEMORY EVENT DIFF (fullscreen, Enter):
+  j/k, ↑/↓       Scroll the diff
+  g / G          Jump to top / bottom
+  c              Copy the diff to clipboard
+  Esc            Back to the timeline
 
 CONNECTORS (left panel):
   j/k, ↑/↓       Navigate connectors

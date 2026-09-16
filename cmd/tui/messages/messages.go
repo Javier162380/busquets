@@ -478,3 +478,66 @@ type DeleteCommentResultMsg struct {
 type ContentSearchErrorMsg struct {
 	Error error
 }
+
+// RequestMemoryScreenMsg requests opening the memory screen for a plan.
+type RequestMemoryScreenMsg struct {
+	PlanName   string
+	SyncSource string
+}
+
+// MemoryLoadedMsg carries a plan's memory and its computed timeline.
+type MemoryLoadedMsg struct {
+	Memory    *busquets.PlanMemory
+	Staleness busquets.MemoryStaleness
+	Err       error
+}
+
+// GenerateMemoryMsg requests writing a plan's memory via the summary connector.
+type GenerateMemoryMsg struct {
+	PlanName   string
+	SyncSource string
+	Mode       busquets.MemoryMode
+}
+
+// MemoryGeneratedMsg carries the result of a generation run.
+type MemoryGeneratedMsg struct {
+	Memory    *busquets.PlanMemory
+	Staleness busquets.MemoryStaleness
+	Err       error
+}
+
+// MemoryProgressMsg reports generation progress, one per narrated event.
+type MemoryProgressMsg struct {
+	FileName string
+	Current  int
+	Total    int
+	Done     bool
+	Err      error
+}
+
+// DeleteMemoryMsg requests deleting a plan's memory.
+type DeleteMemoryMsg struct {
+	PlanName   string
+	SyncSource string
+}
+
+// DeleteMemoryResultMsg carries the result of a memory delete.
+type DeleteMemoryResultMsg struct {
+	Err error
+}
+
+// RequestMemoryDiffMsg asks for the diff behind a timeline event.
+type RequestMemoryDiffMsg struct {
+	PlanName    string
+	SyncSource  string
+	FromVersion int64
+	ToVersion   int64
+}
+
+// MemoryDiffLoadedMsg carries a timeline event's unified diff.
+type MemoryDiffLoadedMsg struct {
+	Diff        string
+	FromVersion int64
+	ToVersion   int64
+	Err         error
+}

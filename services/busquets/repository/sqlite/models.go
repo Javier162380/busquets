@@ -48,6 +48,19 @@ type PlanComment struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+type PlanMemory struct {
+	ID                  int64     `json:"id"`
+	PlanID              int64     `json:"plan_id"`
+	FilePath            string    `json:"file_path"`
+	Content             string    `json:"content"`
+	Summary             string    `json:"summary"`
+	CoversUpToVersion   int64     `json:"covers_up_to_version"`
+	CoversUpToCommentID int64     `json:"covers_up_to_comment_id"`
+	GeneratedBy         string    `json:"generated_by"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
+}
+
 type PlanTag struct {
 	PlanID     int64     `json:"plan_id"`
 	TagID      int64     `json:"tag_id"`

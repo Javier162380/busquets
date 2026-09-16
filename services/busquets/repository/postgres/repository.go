@@ -546,6 +546,10 @@ func (r *Repository) DeletePlan(ctx context.Context, fileName, syncSource string
 			return fmt.Errorf("failed to delete plan_comments: %w", err)
 		}
 
+		if err := q.DeletePlanMemories(ctx, int64(plan.ID)); err != nil {
+			return fmt.Errorf("failed to delete plan_memories: %w", err)
+		}
+
 		if err := q.DeletePlan(ctx, DeletePlanParams{FileName: fileName, SyncSource: syncSource}); err != nil {
 			return fmt.Errorf("failed to delete plan: %w", err)
 		}
@@ -1389,4 +1393,80 @@ func (r *Repository) GetPlanCommentCounts(ctx context.Context) (map[int64]int, e
 		counts[row.PlanID] = int(row.CommentCount)
 	}
 	return counts, nil
+}
+
+// Memory operations
+
+func planMemoryToDomain(m PlanMemory) dto.PlanMemory {
+	return dto.PlanMemory{
+		ID:                  int64(m.ID),
+		PlanID:              m.PlanID,
+		FilePath:            m.FilePath,
+		Content:             m.Content,
+		Summary:             m.Summary,
+		CoversUpToVersion:   m.CoversUpToVersion,
+		CoversUpToCommentID: m.CoversUpToCommentID,
+		GeneratedBy:         m.GeneratedBy,
+		CreatedAt:           timestamptzToTime(m.CreatedAt),
+		UpdatedAt:           timestamptzToTime(m.UpdatedAt),
+	}
+}
+
+func (r *Repository) UpsertPlanMemory(
+	ctx context.Context,
+	params dto.UpsertPlanMemoryParams,
+	writeFile func() error,
+) (dto.PlanMemory, error) {
+	var memory dto.PlanMemory
+	err := r.withTx(ctx, func(q *Queries) error {
+		m, err := q.UpsertPlanMemory(ctx, UpsertPlanMemoryParams{
+			PlanID:              params.PlanID,
+			FilePath:            params.FilePath,
+			Content:             params.Content,
+			Summary:             params.Summary,
+			CoversUpToVersion:   params.CoversUpToVersion,
+			CoversUpToCommentID: params.CoversUpToCommentID,
+			GeneratedBy:         params.GeneratedBy,
+			CreatedAt:           timeToTimestamptz(params.CreatedAt),
+			UpdatedAt:           timeToTimestamptz(params.UpdatedAt),
+		})
+		if err != nil {
+			return err
+		}
+		memory = planMemoryToDomain(m)
+
+		// Written while the transaction is open, so a failed write rolls the row
+		// back with it.
+		if writeFile == nil {
+			return nil
+		}
+		return writeFile()
+	})
+	if err != nil {
+		return dto.PlanMemory{}, err
+	}
+	return memory, nil
+}
+
+func (r *Repository) GetPlanMemoryByPlanID(ctx context.Context, planID int64) (dto.PlanMemory, error) {
+	m, err := r.q.GetPlanMemoryByPlanID(ctx, planID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return dto.PlanMemory{}, dto.ErrNotFound
+	}
+	if err != nil {
+		return dto.PlanMemory{}, err
+	}
+	return planMemoryToDomain(m), nil
+}
+
+func (r *Repository) DeletePlanMemories(ctx context.Context, planID int64, deleteFile func() error) error {
+	return r.withTx(ctx, func(q *Queries) error {
+		if err := q.DeletePlanMemories(ctx, planID); err != nil {
+			return err
+		}
+		if deleteFile == nil {
+			return nil
+		}
+		return deleteFile()
+	})
 }

@@ -125,6 +125,70 @@ func (v *VersionContent) GetIdentifier() string {
 	return fmt.Sprintf("%s@v%d", v.FilePath, v.VersionNumber)
 }
 
+// MemoryContent wraps a PlanMemory to implement Displayable.
+//
+// A memory with nothing written yet still displays: the timeline beside it is
+// computed, so the viewer shows a prompt to generate rather than an empty pane.
+type MemoryContent struct {
+	*busquets.PlanMemory
+	width int
+}
+
+// NewMemoryContent creates a MemoryContent from a PlanMemory.
+func NewMemoryContent(memory *busquets.PlanMemory, width int) *MemoryContent {
+	return &MemoryContent{PlanMemory: memory, width: width}
+}
+
+func (m *MemoryContent) GetTitle() string {
+	return fmt.Sprintf("Memory: %s", m.PlanTitle)
+}
+
+func (m *MemoryContent) GetContent() string {
+	if !m.Exists() {
+		return fmt.Sprintf(
+			"# Memory: %s\n\nNo memory has been written yet.\n\n"+
+				"The timeline beside this pane is computed from the plan's versions and "+
+				"comments, so it is already accurate. Press `r` to write the narrative "+
+				"for it using the configured summary connector.\n",
+			m.PlanTitle)
+	}
+	return m.Content
+}
+
+func (m *MemoryContent) GetRenderedHTML(markdownTheme string) string {
+	return renderMarkdown(m.GetContent(), markdownTheme, m.width)
+}
+
+func (m *MemoryContent) GetReadingTime() int {
+	return busquets.CalculateReadingTime(busquets.CountWords(m.GetContent()))
+}
+
+func (m *MemoryContent) GetMetadata() Metadata {
+	label, when := "Updated", m.UpdatedAt
+	secondary := fmt.Sprintf("Covers up to v%d | by %s", m.CoversUpToVersion, m.GeneratedBy)
+
+	if !m.Exists() {
+		// There is no UpdatedAt yet, and the viewer always formats the time, so
+		// a zero value would render as 0001-01-01. Show the newest event instead.
+		label, secondary = "Last event", "not generated yet"
+		if count := len(m.Events); count > 0 {
+			when = m.Events[count-1].OccurredAt
+		}
+	}
+
+	return Metadata{
+		PrimaryLabel:    label,
+		PrimaryTime:     when,
+		SecondaryInfo:   secondary,
+		SourcePath:      filepath.Join(m.SyncSource, m.FileName),
+		DestinationPath: m.FilePath,
+	}
+}
+
+func (m *MemoryContent) GetIdentifier() string {
+	return fmt.Sprintf("%s@memory", m.FileName)
+}
+
 // RenderMarkdown renders markdown text using glamour with the given theme.
 func RenderMarkdown(content, markdownTheme string, width int) string {
 	return renderMarkdown(content, markdownTheme, width)

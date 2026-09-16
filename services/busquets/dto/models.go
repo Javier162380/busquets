@@ -105,3 +105,18 @@ type PlanSummaryWithTags struct {
 	Summary PlanSummary
 	Tags    []Tag
 }
+
+// PlanMemory is a generated narrative record of how a plan evolved. One row per
+// plan; the timeline it describes is recomputed on read, never stored here.
+type PlanMemory struct {
+	ID                  int64
+	PlanID              int64
+	FilePath            string
+	Content             string
+	Summary             string
+	CoversUpToVersion   int64
+	CoversUpToCommentID int64
+	GeneratedBy         string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}

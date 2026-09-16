@@ -18,12 +18,44 @@ const SummarySystemPrompt = "You are a concise technical plan summarizer. " +
 	"**Approach**: Here the plan approach.\n" +
 	"**Outcome**: Here the plan outcome."
 
+// MemoryEventSystemPrompt instructs a model to describe one timeline event in a
+// single sentence. Dates, version numbers and change stats are computed by the
+// application and must not be restated. Shared by the summary connector and the
+// generate_memory_prompt MCP tool so both produce the same shape.
+const MemoryEventSystemPrompt = "You are describing one change in the history of a technical plan. " +
+	"Write exactly one sentence saying what changed and why it matters. " +
+	"Never state dates, times, version numbers, line counts or word counts — " +
+	"the application supplies those alongside your sentence. " +
+	"Be specific about the substance of the change; do not pad with filler."
+
 // SendResult contains the result of a send/generate operation.
 type SendResult struct {
 	Success   bool
 	MessageID *string // non-nil for messaging connectors (e.g. Telegram)
 	Error     error
 	Response  *string // non-nil for generative connectors (e.g. Ollama, LM Studio)
+	// Truncated reports that the prompt was cut to fit the model's context.
+	// Silent truncation would let a summary be written from part of the input
+	// with no sign of it, so callers are told and can say so in their output.
+	Truncated bool
+}
+
+// GeneratorOpts is one generation request. A struct rather than positional
+// arguments so knobs (temperature, token limits) can be added later without
+// changing every implementation.
+type GeneratorOpts struct {
+	SystemPrompt string
+	UserPrompt   string
+}
+
+// GenerativeConnector is implemented by connectors that can answer an arbitrary
+// prompt rather than only the fixed TLDR template. Messaging connectors such as
+// Telegram deliberately do not implement it.
+//
+//go:generate mockgen -package connectors_test -destination ./test/generative_stub.go . GenerativeConnector
+type GenerativeConnector interface {
+	Connector
+	Generate(ctx context.Context, opts GeneratorOpts) (*SendResult, error)
 }
 
 // Connector defines the interface for external channel connectors.
