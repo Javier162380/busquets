@@ -263,3 +263,28 @@ DELETE FROM plan_comments WHERE id = ?;
 
 -- name: GetPlanCommentCounts :many
 SELECT plan_id, COUNT(*) AS comment_count FROM plan_comments GROUP BY plan_id;
+
+-- Memory queries
+
+-- name: UpsertPlanMemory :one
+INSERT INTO plan_memories (
+    plan_id, file_path, content, summary,
+    covers_up_to_version, covers_up_to_comment_id,
+    generated_by, created_at, updated_at
+)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(plan_id) DO UPDATE SET
+    file_path               = excluded.file_path,
+    content                 = excluded.content,
+    summary                 = excluded.summary,
+    covers_up_to_version    = excluded.covers_up_to_version,
+    covers_up_to_comment_id = excluded.covers_up_to_comment_id,
+    generated_by            = excluded.generated_by,
+    updated_at              = excluded.updated_at
+RETURNING *;
+
+-- name: GetPlanMemoryByPlanID :one
+SELECT * FROM plan_memories WHERE plan_id = ?;
+
+-- name: DeletePlanMemories :exec
+DELETE FROM plan_memories WHERE plan_id = ?;

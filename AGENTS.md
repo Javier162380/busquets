@@ -6,7 +6,7 @@ Quick reference for understanding the codebase architecture and development work
 
 Go application that syncs AI plans from different origins into a searchable database, providing TUI, CLI, and MCP interfaces.
 
-**Core Features**: Plan sync/search, version tracking, tag or comment assigment, multi-database support (SQLite/PostgreSQL), connector system, markdown rendering and editor, MCP integration
+**Core Features**: Plan sync/search, version tracking, tag or comment assigment, plan memories (narrative timelines), multi-database support (SQLite/PostgreSQL), connector system, markdown rendering and editor, MCP integration
 
 **Main Commands**: `sync`, `dump`, `tui`, `mcp`, `migrate`
 
@@ -59,7 +59,9 @@ Service → ConnectorManager → Registry + SettingGetter
     ConfigurableConnector (LoadConfig for dynamic settings)
 ```
 
-**Implementations**: Telegram (transmit role — sends plans out) and Ollama (summary role — generates TL;DRs via a local LLM). Both store their settings in the database, loaded via `SettingGetter`.
+**Implementations**: Telegram (transmit role — sends plans out) and Ollama (summary role — generates TL;DRs and memory narratives via a local LLM). Both store their settings in the database, loaded via `SettingGetter`.
+
+A connector that can answer an arbitrary prompt also implements `GenerativeConnector` (`Generate(ctx, GeneratorOpts)`); Telegram deliberately does not, so putting it in the summary slot reports a clear error instead of silently doing nothing. `Connector.Send` is a thin wrapper over `Generate` in Ollama, so both paths share one HTTP call.
 
 ### Dynamic SQL (go-sqlbuilder)
 
@@ -68,6 +70,8 @@ Use `github.com/huandu/go-sqlbuilder` only when the query shape is determined at
 ### Summary Cache Invalidation
 
 `summaryCache` is keyed by filename. Both `UpdatePlan` and `SavePlanLocal` call `summaryCache.Delete(req.FileName)` after a successful write. Any new path that modifies plan content must do the same.
+
+> **Known issue — this does not currently work.** `GenerateSummary`/`RegenerateSummary` write the cache under `planFileName + ":" + syncSource` (`connector.go:177,189,206`), while every invalidation deletes the bare `fileName` (`sync.go:244`, `sync.go:345-346`, `update.go:114`). `MuxCache.Delete` is an exact-key map delete, so the keys never match and an edited plan serves a stale TLDR for the full hour TTL. The fix is a single shared `summaryCacheKey(fileName, syncSource)` helper used by all five call sites, plus a regression test. Plan memories deliberately do not use this cache — their staleness comes from persisted watermarks.
 
 ### MCP Integration (Model Context Protocol)
 
@@ -80,7 +84,8 @@ MCP Handler (cmd/mcp) → TOON Formatter → MCP Tools
     ↓
 Tools: search_plans, get_plan, add_comment, get_plan_comments, delete_comment, get_all_tags,
 get_plan_tags, set_plan_tags, delete_tag, get_plan_version_history, get_plan_version,
-restore_plan_version, diff_plan_versions, sync_plans, rsync_plans, generate_tldr_prompt
+restore_plan_version, diff_plan_versions, sync_plans, rsync_plans, generate_tldr_prompt,
+get_plan_memory, generate_memory_prompt, save_plan_memory, delete_plan_memory
 ```
 
 **Key Features**: Uses TOON format for 60% token reduction, no business logic in handlers, interface-based service dependency for testability.
@@ -105,6 +110,8 @@ cmd/                        # Entry points
   └── tui/                  # Terminal UI (Bubble Tea)
 
 services/busquets/          # Business logic
+  ├── memory.go             # Plan memories: computed timeline + narrative writes
+  ├── memory_render.go      # Memory markdown rendering and per-event prompts
   ├── dto/                  # Clean domain types + Repository interface
   ├── repository/           # Database implementations
   │   ├── sqlite/           # SQLite + SQLC-generated
@@ -193,7 +200,7 @@ version = "1.0.0"
 
 ## Database Schema
 
-**Core Tables**: `plans`, `plan_versions`, `tags`, `plan_tags`, `settings`, `connectors`, `connector_settings`
+**Core Tables**: `plans`, `plan_versions`, `tags`, `plan_tags`, `plan_comments`, `plan_memories`, `settings`, `connectors`, `connector_settings`
 
 **Schema Files**: `services/busquets/sqlc/{sqlite,postgres}/schema.sql`
 
@@ -216,3 +223,5 @@ version = "1.0.0"
 12. **Atomicity is a must** - Whenever you need to deal with operations over md files together with db changes, everything should be atomic either everything succeeds or fails, please use transactions whenever is needed.
 13. **Keep Schemas in sync**- Migration db schemas for directories internal/storage/migrations/* and services/busquets/sqlc/* needs to be always in sync. 
 14. **Prefer deterministic test assertions** - When the expected value is fully known, use `require.Equal`, not `Contains`/`HasPrefix`/`HasSuffix`. Those matchers can pass on a wrong, truncated, or partially-matching value, giving a false impression of coverage. Reserve them for genuinely variable or large content where an exact match isn't practical (e.g. a substring inside a full rendered TUI view).
+
+15. **Memory facts are computed, never stored or accepted from a caller** - A plan memory is two things with different trust levels: the timeline (when, which version, `+x/-y` lines, restore-vs-edit) is derived from `plan_versions`/`plan_comments` on every read, and only the prose is LLM-written. Never persist a derived event — a stored copy of rows that already exist goes stale the moment a comment is deleted, which is why `plan_memories` is one row per plan and carries no event table. `SavePlanMemory` recomputes the timeline and accepts only `{eventKind, refID, narrative}` from callers, rejecting any id that is not a real version or comment; never widen it to take timestamps or change counts. Incrementality comes from the `covers_up_to_*` watermarks alone, and they advance only over a contiguous prefix — a gap must stop the walk, or a skipped event is silently marked as narrated.

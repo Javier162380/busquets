@@ -23,6 +23,10 @@ import (
 const (
 	summaryCacheTTL      = time.Hour
 	summaryCacheGCPeriod = 10 * time.Minute
+
+	// memoryProgressBuffer keeps generation from blocking when nothing is
+	// listening — the CLI and MCP paths never read this channel.
+	memoryProgressBuffer = 32
 )
 
 // Service represents the Busquets service.
@@ -35,6 +39,7 @@ type Service struct {
 	connectorManager *connectors.Manager
 	watchManager     *WatchManager
 	summaryCache     *cache.MuxCache[string]
+	memoryProgress   chan MemoryProgress
 	logger           *slog.Logger
 	clipboard        clipboard.Clipboard
 }
@@ -66,6 +71,7 @@ func New(ctx context.Context, db dto.Repository, viewerDir string, syncDirs []co
 		indexFullContent: indexFullContent,
 		nowProvider:      nowprovider.SystemTimeProvider{},
 		summaryCache:     cache.New[string](summaryCacheTTL, summaryCacheGCPeriod),
+		memoryProgress:   make(chan MemoryProgress, memoryProgressBuffer),
 		logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
 		clipboard:        clipboard.SystemClipboard{},
 	}
@@ -150,6 +156,19 @@ func (s *Service) mirrorPathFor(planID int64, fileName string) string {
 // versionsDirFor returns a plan's versions directory, keyed by plan.id.
 func (s *Service) versionsDirFor(planID int64) string {
 	return filepath.Join(s.planDirFor(planID), "versions")
+}
+
+// memoryDirFor returns a plan's memory directory, keyed by plan.id. It is a
+// subdirectory rather than a file beside the mirror because the mirror is named
+// after the plan's own file, which could itself be memory.md.
+func (s *Service) memoryDirFor(planID int64) string {
+	return filepath.Join(s.planDirFor(planID), "memory")
+}
+
+// memoryPathFor returns a plan's memory document: exactly one, overwritten in
+// place.
+func (s *Service) memoryPathFor(planID int64) string {
+	return filepath.Join(s.memoryDirFor(planID), "memory.md")
 }
 
 // Close stops background goroutines started by New (cache GC and watch manager).

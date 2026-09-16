@@ -669,3 +669,75 @@ func DeleteTagsCmd(ctx context.Context, svc busquets.UnifiedService, tagID int64
 		}
 	}
 }
+
+// LoadMemoryCmd loads a plan's memory and its staleness in one step.
+func LoadMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string) tea.Cmd {
+	return func() tea.Msg {
+		memory, err := svc.GetPlanMemory(ctx, planName, syncSource)
+		if err != nil {
+			return messages.MemoryLoadedMsg{Err: err}
+		}
+		staleness, err := svc.MemoryStaleness(ctx, planName, syncSource)
+		if err != nil {
+			return messages.MemoryLoadedMsg{Err: err}
+		}
+		return messages.MemoryLoadedMsg{Memory: memory, Staleness: staleness}
+	}
+}
+
+// GenerateMemoryCmd writes a plan's memory through the summary connector.
+// No timeout is applied: a first run is one LLM call per event, and a local
+// model can take minutes — progress is reported through MemoryChannelListenerCmd.
+func GenerateMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string, mode busquets.MemoryMode) tea.Cmd {
+	return func() tea.Msg {
+		memory, err := svc.GeneratePlanMemory(ctx, planName, syncSource, mode)
+		if err != nil {
+			return messages.MemoryGeneratedMsg{Err: err}
+		}
+		staleness, err := svc.MemoryStaleness(ctx, planName, syncSource)
+		if err != nil {
+			return messages.MemoryGeneratedMsg{Err: err}
+		}
+		return messages.MemoryGeneratedMsg{Memory: memory, Staleness: staleness}
+	}
+}
+
+// DeleteMemoryCmd deletes a plan's memory.
+func DeleteMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string) tea.Cmd {
+	return func() tea.Msg {
+		return messages.DeleteMemoryResultMsg{Err: svc.DeletePlanMemory(ctx, planName, syncSource)}
+	}
+}
+
+// MemoryDiffCmd loads the unified diff between two versions of a plan.
+func MemoryDiffCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string, from, to int64) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		diff, err := svc.DiffPlanVersions(ctx, planName, syncSource, from, to)
+		if err != nil {
+			return messages.MemoryDiffLoadedMsg{Err: err}
+		}
+		return messages.MemoryDiffLoadedMsg{Diff: diff.Diff, FromVersion: from, ToVersion: to}
+	}
+}
+
+// MemoryChannelListenerCmd waits for the next generation progress update,
+// mirroring WatchChannelListenerCmd.
+func MemoryChannelListenerCmd(ctx context.Context, svc busquets.UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case <-ctx.Done():
+			return nil
+		case progress := <-svc.GetMemoryProgressChannel():
+			return messages.MemoryProgressMsg{
+				FileName: progress.FileName,
+				Current:  progress.Current,
+				Total:    progress.Total,
+				Done:     progress.Done,
+				Err:      progress.Err,
+			}
+		}
+	}
+}

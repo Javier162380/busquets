@@ -7,30 +7,37 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/Javier162380/busquets/internal/connectors"
 )
 
 const (
-	settingHost  = "host"
-	settingModel = "model"
+	settingHost            = "host"
+	settingModel           = "model"
+	settingMaxContentRunes = "max_content_runes"
 
-	maxContentRunes = 12000
-	httpTimeout     = 60 * time.Second
+	defaultMaxContentRunes = 12000
+	httpTimeout            = 60 * time.Second
 )
+
+// Verify interface compliance at compile time.
+var _ connectors.GenerativeConnector = (*Connector)(nil)
 
 // Connector implements the Ollama local LLM connector.
 type Connector struct {
-	host   string
-	model  string
-	client *http.Client
+	host            string
+	model           string
+	maxContentRunes int
+	client          *http.Client
 }
 
 // New creates a new Ollama connector.
 func New() *Connector {
 	return &Connector{
-		client: &http.Client{Timeout: httpTimeout},
+		maxContentRunes: defaultMaxContentRunes,
+		client:          &http.Client{Timeout: httpTimeout},
 	}
 }
 
@@ -57,6 +64,15 @@ func (c *Connector) RequiredSettings() []connectors.SettingDefinition {
 			Required:    true,
 			Sensitive:   false,
 		},
+		{
+			Key:         settingMaxContentRunes,
+			DisplayName: "Max content size",
+			Description: fmt.Sprintf(
+				"Characters of content sent per request (default %d; raise for large-context models)",
+				defaultMaxContentRunes),
+			Required:  false,
+			Sensitive: false,
+		},
 	}
 }
 
@@ -74,6 +90,16 @@ func (c *Connector) LoadConfig(ctx context.Context, getter connectors.SettingGet
 
 	c.host = host
 	c.model = model
+	c.maxContentRunes = defaultMaxContentRunes
+
+	// Unset or unparseable falls back to the default: a bad value should not stop
+	// the connector working, and it is not a required setting.
+	if raw, _, err := getter.GetConnectorSetting(ctx, c.Name(), settingMaxContentRunes); err == nil && raw != "" {
+		if parsed, parseErr := strconv.Atoi(raw); parseErr == nil && parsed > 0 {
+			c.maxContentRunes = parsed
+		}
+	}
+
 	return nil
 }
 
@@ -132,16 +158,28 @@ func truncateAtSentence(content string, maxRunes int) string {
 
 // Send generates a summary of the plan content using the Ollama API.
 func (c *Connector) Send(ctx context.Context, title, content string) (*connectors.SendResult, error) {
-	content = truncateAtSentence(content, maxContentRunes)
+	return c.Generate(ctx, connectors.GeneratorOpts{
+		SystemPrompt: connectors.SummarySystemPrompt,
+		UserPrompt:   fmt.Sprintf("Summarize this plan:\n\nTitle: %s\n\n%s", title, content),
+	})
+}
 
-	reqBody := OllamaGenerateRequest{
-		Model:  c.model,
-		Prompt: fmt.Sprintf("Summarize this plan:\n\nTitle: %s\n\n%s", title, content),
-		System: connectors.SummarySystemPrompt,
-		Stream: false,
+// Generate answers an arbitrary prompt. The user prompt is capped to the
+// configured context size, and the result reports whether that happened.
+func (c *Connector) Generate(ctx context.Context, opts connectors.GeneratorOpts) (*connectors.SendResult, error) {
+	limit := c.maxContentRunes
+	if limit <= 0 {
+		limit = defaultMaxContentRunes
 	}
+	prompt := truncateAtSentence(opts.UserPrompt, limit)
+	truncated := len(prompt) != len(opts.UserPrompt)
 
-	body, err := json.Marshal(reqBody)
+	body, err := json.Marshal(OllamaGenerateRequest{
+		Model:  c.model,
+		Prompt: prompt,
+		System: opts.SystemPrompt,
+		Stream: false,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
@@ -173,7 +211,8 @@ func (c *Connector) Send(ctx context.Context, title, content string) (*connector
 	}
 
 	return &connectors.SendResult{
-		Success:  true,
-		Response: &result.Response,
+		Success:   true,
+		Response:  &result.Response,
+		Truncated: truncated,
 	}, nil
 }

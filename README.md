@@ -14,6 +14,7 @@ A powerful Go application for indexing, searching, and viewing LLM/AI-assistant 
   - [Dump Plans](#dump-plans)
   - [Terminal UI (TUI)](#terminal-ui-tui)
   - [MCP Server](#mcp-server)
+  - [Plan Memories](#plan-memories)
   - [Database Migrations](#database-migrations)
 - [Architecture](#architecture)
 - [Development](#development)
@@ -37,6 +38,7 @@ Busquets provides a centralized solution for managing LLM/AI-assistant plan file
 - **Database Dump**: `dump` command to restore plans from the database back to their source directory
 - **Full-Text Search**: Fast content search with SQLite FTS5 or PostgreSQL text search
 - **Version Control**: Track multiple versions of plans with diff viewing
+- **Plan Memories**: A narrative record of how a plan evolved, browsable as a timeline. Dates and change counts are computed from the plan's versions and comments; only the prose is written by an LLM
 - **File Watching**: Automatic background synchronization at configurable intervals
 - **Tag Management**: Organize plans with custom tags — created and assigned via the UI or API, stored entirely in the database (not embedded in plan files)
 
@@ -51,7 +53,7 @@ Busquets provides a centralized solution for managing LLM/AI-assistant plan file
 - **Automatic Migrations**: Database schema managed automatically
 
 ### Additional Features
-- **Connector System**: Extensible plugin system with two roles — a *transmit* connector for sending plans out (Telegram) and a *summary* connector for generating plan TL;DRs (Ollama, against a local LLM)
+- **Connector System**: Extensible plugin system with two roles — a *transmit* connector for sending plans out (Telegram) and a *summary* connector for generating plan TL;DRs and memories (Ollama, against a local LLM)
 - **Markdown Rendering**: Beautiful plan display with code syntax highlighting and a selectable colour theme
 - **Pagination**: Efficient browsing of large plan collections
 
@@ -232,6 +234,7 @@ DEBUG=1 ./bin/busquets tui
 - Version viewing
 - Settings configuration
 - Connector management (Telegram notifications, Ollama summaries)
+- Plan memories with a timeline view (`i`)
 - Watch mode with automatic sync
 
 **Keyboard Shortcuts:** Press `?` in the TUI for help.
@@ -278,12 +281,57 @@ Enable Claude Code — or any other MCP-capable AI assistant — to directly sea
 - `diff_plan_versions` - Unified (git-diff-style) diff between any two versions of a plan
 - `sync_plans` / `rsync_plans` - Force a sync from/to the configured source directories
 - `generate_tldr_prompt` - Fetch a plan's TLDR system/user prompt for the calling assistant to summarize itself (no LLM call, no connector, no API key); pair with `add_comment` to save the result
+- `get_plan_memory` / `generate_memory_prompt` / `save_plan_memory` / `delete_plan_memory` - Read and write a plan's memory. `generate_memory_prompt` returns one prompt per un-narrated timeline event and calls no LLM; write the sentences yourself and persist them with `save_plan_memory`
 - TOON format responses (60% fewer tokens than JSON)
 
 **Use Cases:**
 - "Search my plans for authentication patterns"
 - "Show me the backend-api plan from last week"
 - "Find all plans tagged with refactoring"
+- "Write the memory for the backend-api plan so I can see how it changed"
+
+### Plan Memories
+
+A memory is a narrative record of how a plan evolved: what changed, when, and
+what people said about it along the way.
+
+It is deliberately two things with different trust levels:
+
+| | Where it comes from | Can it be wrong? |
+|---|---|---|
+| The timeline — when, which version, `+x/-y` lines, restore-vs-edit | Computed from the plan's versions and comments | No |
+| The narrative — what changed and why it mattered | An LLM (the summary connector, or an MCP caller) | Yes, and that is fine |
+
+The model is never asked for a date or a number. It is handed one change and
+asked for one sentence, so the facts in a memory are always the application's
+own. The timeline is recomputed on every read and never stored, which is why it
+cannot drift from the plan.
+
+**In the TUI**, press `i` on a plan:
+
+- The timeline is on the left, oldest first; the memory document is on the right.
+- `r` writes or updates the memory, narrating only what is new.
+- `R` rewrites it from scratch (with a confirmation).
+- `enter` shows the diff behind the selected version.
+- `c` copies the memory, `d` deletes it (the plan and its versions are untouched).
+
+The screen opens even before a memory exists — the timeline is already accurate,
+so there is something worth looking at from the start. Writing one needs a
+summary connector configured (press `C`).
+
+**Over MCP**, no LLM key is needed: `generate_memory_prompt` hands back one
+prompt per un-narrated event, the calling assistant writes the sentences, and
+`save_plan_memory` persists them. Narratives are matched to the computed
+timeline by event id, and anything that does not correspond to a real version or
+comment is rejected.
+
+Memories are stored at `~/.busquets/plans/<plan-id>/memory/memory.md` and indexed
+in the `plan_memories` table. Generation is always manual — it is never triggered
+by a sync.
+
+`memory_max_events_per_run` (settings screen, default 20) bounds how many events
+a single run narrates, so a plan with a long history does not fire a hundred
+LLM calls at once; the rest is picked up by the next run.
 
 ### Tags
 
@@ -333,7 +381,7 @@ busquets/
     ├── config/                 # Configuration management
     ├── storage/                # Database setup & migrations
     └── connectors/             # Notification connectors
-        ├── ollama/             # Local LLM summaries
+        ├── ollama/             # Local LLM summaries and memory narratives
         └── telegram/           # Telegram integration
 ```
 

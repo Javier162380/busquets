@@ -113,6 +113,15 @@ func (q *Queries) DeletePlanComments(ctx context.Context, planID int64) error {
 	return err
 }
 
+const deletePlanMemories = `-- name: DeletePlanMemories :exec
+DELETE FROM plan_memories WHERE plan_id = $1
+`
+
+func (q *Queries) DeletePlanMemories(ctx context.Context, planID int64) error {
+	_, err := q.db.Exec(ctx, deletePlanMemories, planID)
+	return err
+}
+
 const deletePlanVersions = `-- name: DeletePlanVersions :exec
 DELETE FROM plan_versions WHERE plan_id = $1
 `
@@ -336,6 +345,28 @@ func (q *Queries) GetPlanComments(ctx context.Context, planID int64) ([]PlanComm
 		return nil, err
 	}
 	return items, nil
+}
+
+const getPlanMemoryByPlanID = `-- name: GetPlanMemoryByPlanID :one
+SELECT id, plan_id, file_path, content, summary, covers_up_to_version, covers_up_to_comment_id, generated_by, created_at, updated_at FROM plan_memories WHERE plan_id = $1
+`
+
+func (q *Queries) GetPlanMemoryByPlanID(ctx context.Context, planID int64) (PlanMemory, error) {
+	row := q.db.QueryRow(ctx, getPlanMemoryByPlanID, planID)
+	var i PlanMemory
+	err := row.Scan(
+		&i.ID,
+		&i.PlanID,
+		&i.FilePath,
+		&i.Content,
+		&i.Summary,
+		&i.CoversUpToVersion,
+		&i.CoversUpToCommentID,
+		&i.GeneratedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const getPlanTags = `-- name: GetPlanTags :many
@@ -1385,6 +1416,66 @@ func (q *Queries) UpsertConnectorSetting(ctx context.Context, arg UpsertConnecto
 		arg.IsSecret,
 	)
 	return err
+}
+
+const upsertPlanMemory = `-- name: UpsertPlanMemory :one
+
+INSERT INTO plan_memories (
+    plan_id, file_path, content, summary,
+    covers_up_to_version, covers_up_to_comment_id,
+    generated_by, created_at, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (plan_id) DO UPDATE SET
+    file_path               = EXCLUDED.file_path,
+    content                 = EXCLUDED.content,
+    summary                 = EXCLUDED.summary,
+    covers_up_to_version    = EXCLUDED.covers_up_to_version,
+    covers_up_to_comment_id = EXCLUDED.covers_up_to_comment_id,
+    generated_by            = EXCLUDED.generated_by,
+    updated_at              = EXCLUDED.updated_at
+RETURNING id, plan_id, file_path, content, summary, covers_up_to_version, covers_up_to_comment_id, generated_by, created_at, updated_at
+`
+
+type UpsertPlanMemoryParams struct {
+	PlanID              int64              `json:"plan_id"`
+	FilePath            string             `json:"file_path"`
+	Content             string             `json:"content"`
+	Summary             string             `json:"summary"`
+	CoversUpToVersion   int64              `json:"covers_up_to_version"`
+	CoversUpToCommentID int64              `json:"covers_up_to_comment_id"`
+	GeneratedBy         string             `json:"generated_by"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Memory queries
+func (q *Queries) UpsertPlanMemory(ctx context.Context, arg UpsertPlanMemoryParams) (PlanMemory, error) {
+	row := q.db.QueryRow(ctx, upsertPlanMemory,
+		arg.PlanID,
+		arg.FilePath,
+		arg.Content,
+		arg.Summary,
+		arg.CoversUpToVersion,
+		arg.CoversUpToCommentID,
+		arg.GeneratedBy,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var i PlanMemory
+	err := row.Scan(
+		&i.ID,
+		&i.PlanID,
+		&i.FilePath,
+		&i.Content,
+		&i.Summary,
+		&i.CoversUpToVersion,
+		&i.CoversUpToCommentID,
+		&i.GeneratedBy,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }
 
 const upsertSetting = `-- name: UpsertSetting :exec

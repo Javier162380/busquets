@@ -204,6 +204,50 @@ func (m *Manager) GenerateSummary(ctx context.Context, title, content string) (s
 	return *result.Response, nil
 }
 
+// GenerateWithPrompt answers an arbitrary prompt through the summary connector.
+//
+// Unlike GenerateSummary it is not limited to the fixed TLDR template, so it
+// requires a connector that implements GenerativeConnector; a messaging-only
+// connector in the summary slot is reported rather than silently doing nothing.
+func (m *Manager) GenerateWithPrompt(ctx context.Context, opts GeneratorOpts) (*SendResult, error) {
+	name, found, err := m.db.GetConnectorForRole(ctx, planviewer.ConnectorRoleSummary)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read summarizer setting: %w", err)
+	}
+	if !found || name == "" {
+		return nil, planviewer.ErrNoSummarizerConfigured
+	}
+
+	connector, ok := m.registry.Get(name)
+	if !ok {
+		return nil, fmt.Errorf("summarizer connector %q not registered", name)
+	}
+
+	generative, ok := connector.(GenerativeConnector)
+	if !ok {
+		return nil, fmt.Errorf("summary connector %q cannot answer arbitrary prompts", name)
+	}
+
+	if cfg, ok := connector.(ConfigurableConnector); ok {
+		if err := cfg.LoadConfig(ctx, m); err != nil {
+			return nil, fmt.Errorf("failed to load summarizer config: %w", err)
+		}
+	}
+
+	if err := generative.Validate(); err != nil {
+		return nil, fmt.Errorf("summarizer not configured: %w", err)
+	}
+
+	result, err := generative.Generate(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	if result.Response == nil {
+		return nil, planviewer.ErrConnectorResponseEmpty
+	}
+	return result, nil
+}
+
 // GetConnectorRequiredSettings returns the required settings for a connector.
 func (m *Manager) GetConnectorRequiredSettings(connectorName string) ([]SettingDefinition, error) {
 	connector, ok := m.registry.Get(connectorName)

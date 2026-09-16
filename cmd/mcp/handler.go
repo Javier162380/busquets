@@ -43,6 +43,9 @@ func (h *Handler) Register() error {
 	if err := h.registerTLDRTools(); err != nil {
 		return fmt.Errorf("failed to register tldr tools: %w", err)
 	}
+	if err := h.registerMemoryTools(); err != nil {
+		return fmt.Errorf("failed to register memory tools: %w", err)
+	}
 
 	return nil
 }

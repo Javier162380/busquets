@@ -545,6 +545,16 @@ func (s *PlansScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd
 		}
 		return s, nil
 
+	case "i":
+		// Open the plan's memory. The screen opens even with no memory written:
+		// its timeline is computed, so it is useful straight away.
+		if s.current != nil {
+			return s, func() tea.Msg {
+				return messages.RequestMemoryScreenMsg{PlanName: s.current.FileName, SyncSource: s.current.SyncSource}
+			}
+		}
+		return s, nil
+
 	case "v":
 		if s.current != nil {
 			s.layout = types.LayoutFullscreen
@@ -761,6 +771,16 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		if s.current != nil {
 			return s, func() tea.Msg {
 				return messages.CopyToClipboardMsg{Text: s.current.Content, Label: s.current.FileName}
+			}
+		}
+		return s, nil
+
+	case "i":
+		// Open the plan's memory. The screen opens even with no memory written:
+		// its timeline is computed, so it is useful straight away.
+		if s.current != nil {
+			return s, func() tea.Msg {
+				return messages.RequestMemoryScreenMsg{PlanName: s.current.FileName, SyncSource: s.current.SyncSource}
 			}
 		}
 		return s, nil
@@ -1804,7 +1824,7 @@ func (s *PlansScreen) ShortHelp() string {
 		case s.labelPanel != nil:
 			tagNav = "shift+tab: labels | "
 		}
-		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | n: comments | r: rsync | d: dump | D: delete | R: rename | M: metadata | c: copy | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
+		return fmt.Sprintf("down/up: navigate | m: manage tags | tab: content | %sv: fullscreen | e: edit | s: sync | S: settings | n: comments | i: memory | r: rsync | d: dump | D: delete | R: rename | M: metadata | c: copy | C: connectors | X: summarize | %s | Plans: %d", tagNav, searchHelp, len(s.plans))
 	case types.FocusContent:
 		mode := "RAW"
 		if s.viewer.RenderMode() == components.RenderModeGlamour {

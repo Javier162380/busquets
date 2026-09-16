@@ -94,6 +94,12 @@ var KnownSettings = []SettingDefinition{
 		AllowedValues: []string{busquets.MarkdownThemeDark, busquets.MarkdownThemeLight, busquets.MarkdownThemeTokyoNight, busquets.MarkdownThemeASCII, busquets.MarkdownThemeDracula, busquets.MarkdownThemePinkStyle},
 	},
 	{
+		Name:        busquets.SettingMemoryMaxEventsPerRun,
+		Description: "Timeline events narrated per memory run (r on the memory screen)",
+		Type:        busquets.SettingTypeNumber,
+		Default:     busquets.SettingValues{NumberValue: new(float64(busquets.DefaultMemoryMaxEventsPerRun))},
+	},
+	{
 		Name:          busquets.SettingsScreenOrientation,
 		Description:   "Screen orientation, default: Horizontal",
 		Type:          busquets.SettingTypeString,
