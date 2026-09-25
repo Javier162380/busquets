@@ -123,6 +123,10 @@ func (s *Service) SourcePathForLabel(label string) string {
 }
 
 func (s *Service) labelForSource(syncSource string) string {
+	return s.labelForSourcePath(s.configuredSourcePath(syncSource))
+}
+
+func (s *Service) labelForSourcePath(syncSource string) string {
 	for _, d := range s.sourcePlansDirs {
 		if d.Path == syncSource {
 			if d.Label != "" {
@@ -132,6 +136,77 @@ func (s *Service) labelForSource(syncSource string) string {
 		}
 	}
 	return filepath.Base(syncSource)
+}
+
+// configuredSourcePath maps a stored sync_source onto the current
+// [[paths.plans_dirs]] config. Exact path wins; otherwise the configured
+// directory that shares the longest trailing path (at least two components)
+// is used so a DB copied from another machine still rsyncs/dumps locally.
+func (s *Service) configuredSourcePath(stored string) string {
+	return remapSyncSource(stored, s.sourcePlansDirs)
+}
+
+// isConfiguredSource reports whether path is one of the configured
+// [[paths.plans_dirs]] entries.
+func (s *Service) isConfiguredSource(path string) bool {
+	for _, d := range s.sourcePlansDirs {
+		if d.Path == path {
+			return true
+		}
+	}
+	return false
+}
+
+func remapSyncSource(stored string, dirs []config.SyncDir) string {
+	if stored == "" || len(dirs) == 0 {
+		return stored
+	}
+	best := stored
+	bestN := 0
+	for _, d := range dirs {
+		if d.Path == stored {
+			return d.Path
+		}
+		n := trailingPathComponents(stored, d.Path)
+		if n > bestN {
+			bestN = n
+			best = d.Path
+		}
+	}
+	if bestN >= 2 {
+		return best
+	}
+	return stored
+}
+
+func trailingPathComponents(a, b string) int {
+	as := splitPath(a)
+	bs := splitPath(b)
+	n := 0
+	for n < len(as) && n < len(bs) {
+		if as[len(as)-1-n] != bs[len(bs)-1-n] {
+			break
+		}
+		n++
+	}
+	return n
+}
+
+func splitPath(p string) []string {
+	p = filepath.Clean(p)
+	var parts []string
+	for {
+		dir, base := filepath.Split(p)
+		if base != "" && base != "." && base != string(filepath.Separator) {
+			parts = append([]string{base}, parts...)
+		}
+		next := filepath.Clean(dir)
+		if next == p || next == "." || next == string(filepath.Separator) {
+			break
+		}
+		p = next
+	}
+	return parts
 }
 
 // planDirFor returns a plan's id-scoped storage directory, which holds both its

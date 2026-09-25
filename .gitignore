@@ -52,6 +52,9 @@ tmp/
 temp/
 *.tmp
 
+# Local config (copy from busquets.toml.example)
+busquets.toml
+
 # Environment variables
 .env
 .env.local

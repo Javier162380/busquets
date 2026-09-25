@@ -2,6 +2,7 @@ package busquets
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,9 @@ import (
 // DumpPlans writes all plans stored in the database back to their source directories.
 // Useful when plans exist in the database but not on disk (e.g. after a database migration
 // or when the source directory has been lost).
+//
+// Returns the number of files actually written. Plans already present on disk are left
+// untouched and not counted.
 func (s *Service) DumpPlans(ctx context.Context) (int, error) {
 	summaries, err := s.db.ListAllPlans(ctx, sortKeyToColumn(DefaultPlansSortKey), DefaultSortDir, DefaultReadingSpeedWPM)
 	if err != nil {
@@ -34,12 +38,31 @@ func (s *Service) DumpPlans(ctx context.Context) (int, error) {
 			if plan.Content == "" {
 				return nil
 			}
-			destPath := filepath.Join(syncSource, fileName)
-			if _, err := os.Stat(destPath); os.IsNotExist(err) {
-				//nolint:gosec // G306: Plans are user-owned markdown files
-				if err := os.WriteFile(destPath, []byte(plan.Content), 0o644); err != nil {
-					return fmt.Errorf("failed to write %s: %w", fileName, err)
-				}
+			// Restoring a lost source directory is the whole point of dump, so the
+			// directory is created rather than required — but only for a directory
+			// the config actually names. A sync_source left behind by another
+			// machine that matches nothing in [[paths.plans_dirs]] is skipped
+			// instead, so dump never materialises a phantom tree from a stale row.
+			destDir := s.configuredSourcePath(syncSource)
+			if !s.isConfiguredSource(destDir) {
+				s.logger.Warn("skipping dump: sync source is not a configured plans dir",
+					"file", fileName, "dir", destDir)
+				return nil
+			}
+			if err := os.MkdirAll(destDir, 0o750); err != nil {
+				return fmt.Errorf("failed to create source directory %s: %w", destDir, err)
+			}
+
+			destPath := filepath.Join(destDir, fileName)
+			if _, err := os.Stat(destPath); err == nil {
+				return nil // already on disk; dump never overwrites
+			} else if !errors.Is(err, os.ErrNotExist) {
+				return fmt.Errorf("failed to stat %s: %w", destPath, err)
+			}
+
+			//nolint:gosec // G306: Plans are user-owned markdown files
+			if err := os.WriteFile(destPath, []byte(plan.Content), 0o644); err != nil {
+				return fmt.Errorf("failed to write %s: %w", fileName, err)
 			}
 			dumped.Add(1)
 			return nil
