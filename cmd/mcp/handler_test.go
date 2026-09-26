@@ -870,7 +870,7 @@ func TestFormatTLDRPrompt(t *testing.T) {
 	expected := `tldr:
   file_name: test.md
   sync_source: /some/source
-  system_prompt: "You are a concise technical plan summarizer. Output exactly three bullet points covering goals, approach, and key outcomes. You must always match the following template:\n\n**Goal**: Here the plan goal.\n**Approach**: Here the plan approach.\n**Outcome**: Here the plan outcome."
+  system_prompt: "You are a concise technical plan summarizer. Output exactly three bullet points covering goals, approach, and key outcomes. You MUST always match the following template:\n\n**Goal**: Here the plan goal.\n**Approach**: Here the plan approach.\n**Outcome**: Here the plan outcome.\nThe comment MUST be readable so please keep , the three sections on different lines."
 
 user_prompt:
 Summarize this plan:

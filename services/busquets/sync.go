@@ -105,6 +105,10 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 		if _, seen := sourceFiles[syncSource]; seen {
 			continue
 		}
+		if !s.isConfiguredSource(syncSource) {
+			s.logger.Warn("skipping rsync: sync source is not a configured plans dir", "dir", syncSource)
+			continue
+		}
 		entries, readErr := os.ReadDir(syncSource)
 		if readErr != nil {
 			s.logger.Warn("failed to read source dir for rsync", "dir", syncSource, "error", readErr)
@@ -129,6 +133,9 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 		syncSource := s.configuredSourcePath(summary.SyncSource)
 		planID := summary.ID
 
+		if !s.isConfiguredSource(syncSource) {
+			continue
+		}
 		if _, ok := sourceFiles[syncSource][fileName]; ok {
 			continue
 		}

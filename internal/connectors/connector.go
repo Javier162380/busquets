@@ -13,10 +13,11 @@ import (
 // calling a connector, so the output format is identical regardless of who writes it.
 const SummarySystemPrompt = "You are a concise technical plan summarizer. " +
 	"Output exactly three bullet points covering goals, approach, and key outcomes. " +
-	"You must always match the following template:\n\n" +
+	"You MUST always match the following template:\n\n" +
 	"**Goal**: Here the plan goal.\n" +
 	"**Approach**: Here the plan approach.\n" +
-	"**Outcome**: Here the plan outcome."
+	"**Outcome**: Here the plan outcome.\n" +
+	"The comment MUST be readable so please keep , the three sections on different lines."
 
 // SendResult contains the result of a send/generate operation.
 type SendResult struct {
