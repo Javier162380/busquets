@@ -38,11 +38,7 @@ func (s *Service) DumpPlans(ctx context.Context) (int, error) {
 			if plan.Content == "" {
 				return nil
 			}
-			// Restoring a lost source directory is the whole point of dump, so the
-			// directory is created rather than required — but only for a directory
-			// the config actually names. A sync_source left behind by another
-			// machine that matches nothing in [[paths.plans_dirs]] is skipped
-			// instead, so dump never materialises a phantom tree from a stale row.
+
 			destDir := s.configuredSourcePath(syncSource)
 			if !s.isConfiguredSource(destDir) {
 				s.logger.Warn("skipping dump: sync source is not a configured plans dir",
