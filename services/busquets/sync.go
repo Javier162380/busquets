@@ -101,13 +101,18 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 	// source directory rather than one per plan.
 	sourceFiles := make(map[string]map[string]struct{})
 	for _, summary := range summaries {
-		if _, seen := sourceFiles[summary.SyncSource]; seen {
+		syncSource := s.configuredSourcePath(summary.SyncSource)
+		if _, seen := sourceFiles[syncSource]; seen {
 			continue
 		}
-		entries, readErr := os.ReadDir(summary.SyncSource)
+		if !s.isConfiguredSource(syncSource) {
+			s.logger.Warn("skipping rsync: sync source is not a configured plans dir", "dir", syncSource)
+			continue
+		}
+		entries, readErr := os.ReadDir(syncSource)
 		if readErr != nil {
-			s.logger.Warn("failed to read source dir for rsync", "dir", summary.SyncSource, "error", readErr)
-			sourceFiles[summary.SyncSource] = map[string]struct{}{} // empty — nothing to skip
+			s.logger.Warn("failed to read source dir for rsync", "dir", syncSource, "error", readErr)
+			sourceFiles[syncSource] = map[string]struct{}{} // empty — nothing to skip
 			continue
 		}
 		set := make(map[string]struct{}, len(entries))
@@ -116,7 +121,7 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 				set[entry.Name()] = struct{}{}
 			}
 		}
-		sourceFiles[summary.SyncSource] = set
+		sourceFiles[syncSource] = set
 	}
 
 	rsyncPlans := atomic.Int64{}
@@ -125,9 +130,12 @@ func (s *Service) RSyncPlans(ctx context.Context) (int, error) {
 
 	for _, summary := range summaries {
 		fileName := summary.FileName
-		syncSource := summary.SyncSource
+		syncSource := s.configuredSourcePath(summary.SyncSource)
 		planID := summary.ID
 
+		if !s.isConfiguredSource(syncSource) {
+			continue
+		}
 		if _, ok := sourceFiles[syncSource][fileName]; ok {
 			continue
 		}
