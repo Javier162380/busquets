@@ -489,7 +489,6 @@ type RequestMemoryScreenMsg struct {
 type MemoryLoadedMsg struct {
 	Memory    *busquets.PlanMemory
 	Staleness busquets.MemoryStaleness
-	Err       error
 }
 
 // GenerateMemoryMsg requests writing a plan's memory via the summary connector.
@@ -498,6 +497,9 @@ type GenerateMemoryMsg struct {
 	SyncSource string
 	Mode       busquets.MemoryMode
 }
+
+// CancelMemoryGenerationMsg asks the App to cancel the in-flight generation run.
+type CancelMemoryGenerationMsg struct{}
 
 // MemoryGeneratedMsg carries the result of a generation run.
 type MemoryGeneratedMsg struct {
@@ -521,10 +523,9 @@ type DeleteMemoryMsg struct {
 	SyncSource string
 }
 
-// DeleteMemoryResultMsg carries the result of a memory delete.
-type DeleteMemoryResultMsg struct {
-	Err error
-}
+// DeleteMemoryResultMsg reports a successful memory delete; failures arrive as
+// ErrorMsg.
+type DeleteMemoryResultMsg struct{}
 
 // RequestMemoryDiffMsg asks for the diff behind a timeline event.
 type RequestMemoryDiffMsg struct {

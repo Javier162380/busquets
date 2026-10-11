@@ -425,7 +425,7 @@ func FormatPlanMemory(memory *busquets.PlanMemory, staleness busquets.MemoryStal
 			Exists:              memory.Exists(),
 			CoversUpToVersion:   memory.CoversUpToVersion,
 			CoversUpToCommentID: memory.CoversUpToCommentID,
-			GeneratedBy:         memory.GeneratedBy,
+			GeneratedBy:         string(memory.GeneratedBy),
 			NewVersions:         staleness.NewVersions,
 			NewComments:         staleness.NewComments,
 		},

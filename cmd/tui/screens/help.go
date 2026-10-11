@@ -166,7 +166,7 @@ MEMORY TIMELINE (i, left panel):
   R              Rewrite the whole memory from scratch (with confirmation)
   c              Copy the memory to clipboard
   d              Delete the memory (the plan and its versions are untouched)
-  Esc            Back to the plan
+  Esc            Back to the plan, or cancel a run in flight (nothing is saved)
 
   The timeline is computed from the plan's versions and comments, so it is
   shown even before a memory has been written. Writing one needs a summary

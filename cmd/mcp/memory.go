@@ -142,7 +142,7 @@ func (h *Handler) SavePlanMemory(ctx context.Context, req *mcp.CallToolRequest, 
 		SyncSource:  args.SyncSource,
 		Mode:        mode,
 		Summary:     args.Summary,
-		GeneratedBy: "mcp",
+		GeneratedBy: busquets.GeneratedByMCP,
 		Events:      events,
 	})
 	if err != nil {
@@ -202,7 +202,7 @@ func planMemoryResult(memory *busquets.PlanMemory, staleness busquets.MemoryStal
 		Content:             memory.Content,
 		CoversUpToVersion:   memory.CoversUpToVersion,
 		CoversUpToCommentID: memory.CoversUpToCommentID,
-		GeneratedBy:         memory.GeneratedBy,
+		GeneratedBy:         string(memory.GeneratedBy),
 		NewVersions:         staleness.NewVersions,
 		NewComments:         staleness.NewComments,
 		Events:              events,

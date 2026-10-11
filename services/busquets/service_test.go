@@ -4505,7 +4505,7 @@ func testMemoryOperations(t *testing.T, setup serviceSetupFn) {
 			Summary:             "It began.",
 			CoversUpToVersion:   0,
 			CoversUpToCommentID: 0,
-			GeneratedBy:         "mcp",
+			GeneratedBy:         string(GeneratedByMCP),
 			CreatedAt:           now,
 			UpdatedAt:           now,
 		}, func() error {
@@ -4520,7 +4520,7 @@ func testMemoryOperations(t *testing.T, setup serviceSetupFn) {
 		require.Equal(t, "# Memory\n\nIt began.\n", memory.Content)
 		require.Equal(t, "It began.", memory.Summary)
 		require.Equal(t, int64(0), memory.CoversUpToVersion)
-		require.Equal(t, "mcp", memory.GeneratedBy)
+		require.Equal(t, GeneratedByMCP, memory.GeneratedBy)
 		require.FileExists(t, path)
 	})
 
@@ -4538,7 +4538,7 @@ func testMemoryOperations(t *testing.T, setup serviceSetupFn) {
 			FilePath:    service.memoryPathFor(plan.ID),
 			Content:     "never written",
 			Summary:     "never written",
-			GeneratedBy: "mcp",
+			GeneratedBy: string(GeneratedByMCP),
 			CreatedAt:   time.Now(),
 			UpdatedAt:   time.Now(),
 		}, func() error {
@@ -4565,7 +4565,7 @@ func testMemoryOperations(t *testing.T, setup serviceSetupFn) {
 			FilePath:    service.memoryPathFor(plan.ID),
 			Content:     "first",
 			Summary:     "first",
-			GeneratedBy: "mcp",
+			GeneratedBy: string(GeneratedByMCP),
 			CreatedAt:   first,
 			UpdatedAt:   first,
 		}
@@ -4617,7 +4617,7 @@ func testMemoryOperations(t *testing.T, setup serviceSetupFn) {
 			Content:           "covered",
 			Summary:           "covered",
 			CoversUpToVersion: 0,
-			GeneratedBy:       "mcp",
+			GeneratedBy:       string(GeneratedByMCP),
 			CreatedAt:         now,
 			UpdatedAt:         now,
 		}, nil)
@@ -4647,7 +4647,7 @@ func testMemoryOperations(t *testing.T, setup serviceSetupFn) {
 			Content:           "covered",
 			Summary:           "covered",
 			CoversUpToVersion: 0,
-			GeneratedBy:       "mcp",
+			GeneratedBy:       string(GeneratedByMCP),
 			CreatedAt:         now,
 			UpdatedAt:         now,
 		}, nil)
@@ -4684,7 +4684,7 @@ func testMemoryOperations(t *testing.T, setup serviceSetupFn) {
 			FilePath:    path,
 			Content:     "remembered",
 			Summary:     "remembered",
-			GeneratedBy: "mcp",
+			GeneratedBy: string(GeneratedByMCP),
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}, func() error {
@@ -4825,7 +4825,7 @@ func testMemoryWrites(t *testing.T, setup serviceSetupFn) {
 		require.True(t, memory.Exists())
 		require.Equal(t, "The plan begins.", memory.Summary)
 		require.Equal(t, int64(0), memory.CoversUpToVersion)
-		require.Equal(t, "mcp", memory.GeneratedBy)
+		require.Equal(t, GeneratedByMCP, memory.GeneratedBy)
 		require.Contains(t, memory.Content, "# Memory: Test Plan")
 		require.Contains(t, memory.Content, "## Timeline")
 
@@ -5138,7 +5138,7 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
 		require.NoError(t, err)
 		require.True(t, memory.Exists())
-		require.Equal(t, "ollama", memory.GeneratedBy)
+		require.Equal(t, GeneratedByOllama, memory.GeneratedBy)
 		require.Equal(t, "**Goal**: ship it.", memory.Summary)
 		require.Contains(t, memory.Content, "It set out the initial shape.")
 		require.Equal(t, int64(0), memory.CoversUpToVersion)
@@ -5306,6 +5306,78 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 
 		_, err := service.GeneratePlanMemory(context.Background(), name, sourceDir, MemoryModeIncremental)
 		require.ErrorIs(t, err, dto.ErrConnectorDisabled)
+	})
+
+	// lastProgress drains the progress channel and returns its final update.
+	lastProgress := func(t *testing.T, service *Service) MemoryProgress {
+		t.Helper()
+		var last MemoryProgress
+		for {
+			select {
+			case progress := <-service.GetMemoryProgressChannel():
+				last = progress
+			default:
+				return last
+			}
+		}
+	}
+
+	t.Run("GeneratePlanMemory ends with a Done update on an early return", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+
+		name := syncedPlan(t, service, sourceDir)
+
+		_, err := service.GeneratePlanMemory(context.Background(), name, sourceDir, MemoryModeIncremental)
+		require.ErrorIs(t, err, dto.ErrConnectorDisabled)
+
+		last := lastProgress(t, service)
+		require.True(t, last.Done, "the TUI listener only stops on Done")
+		require.ErrorIs(t, last.Err, dto.ErrConnectorDisabled)
+	})
+
+	t.Run("GeneratePlanMemory saves nothing when cancelled mid-run", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(context.Background(), name, sourceDir)
+		require.NoError(t, err)
+		_, err = service.UpdatePlan(context.Background(), UpdatePlanRequest{
+			FileName: name, SyncSource: sourceDir,
+			NewContent: sampleMarkdown + "\nSecond.\n", LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		// The first event is narrated, then the run is cancelled during the
+		// second. Unlike an ordinary failure, the first narrative is not kept.
+		mock := setupMockGenerativeConnector(t, ctrl, service)
+		gomock.InOrder(
+			mock.EXPECT().Generate(gomock.Any(), gomock.Any()).Return(response("first event"), nil),
+			mock.EXPECT().Generate(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(ctx context.Context, _ connectors.GeneratorOpts) (*connectors.SendResult, error) {
+					cancel()
+					return nil, ctx.Err()
+				}),
+		)
+
+		_, err = service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		require.ErrorIs(t, err, context.Canceled)
+
+		memory, err := service.GetPlanMemory(context.Background(), name, sourceDir)
+		require.NoError(t, err)
+		require.False(t, memory.Exists(), "a cancelled run writes nothing")
+		require.Equal(t, NoMemoryCoverage, memory.CoversUpToVersion)
+
+		last := lastProgress(t, service)
+		require.True(t, last.Done)
+		require.ErrorIs(t, last.Err, context.Canceled)
 	})
 
 	t.Run("MemoryMaxEventsPerRun falls back to the default", func(t *testing.T) {

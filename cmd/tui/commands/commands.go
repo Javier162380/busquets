@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Javier162380/busquets/cmd/tui/components"
@@ -675,21 +676,29 @@ func LoadMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planName, s
 	return func() tea.Msg {
 		memory, err := svc.GetPlanMemory(ctx, planName, syncSource)
 		if err != nil {
-			return messages.MemoryLoadedMsg{Err: err}
+			return messages.ErrorMsg{Error: fmt.Errorf("failed to load memory: %w", err)}
 		}
 		staleness, err := svc.MemoryStaleness(ctx, planName, syncSource)
 		if err != nil {
-			return messages.MemoryLoadedMsg{Err: err}
+			return messages.ErrorMsg{Error: fmt.Errorf("failed to load memory: %w", err)}
 		}
 		return messages.MemoryLoadedMsg{Memory: memory, Staleness: staleness}
 	}
 }
 
+// memoryGenerationTimeout bounds a whole generation run. It is longer than the
+// other commands' timeouts on purpose: a run is one LLM call per event plus the
+// summary, so it needs room for several model round-trips.
+const memoryGenerationTimeout = 3 * time.Minute
+
 // GenerateMemoryCmd writes a plan's memory through the summary connector.
-// No timeout is applied: a first run is one LLM call per event, and a local
-// model can take minutes — progress is reported through MemoryChannelListenerCmd.
+// The caller owns ctx and cancels it to abort the run; progress is reported
+// through MemoryChannelListenerCmd.
 func GenerateMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string, mode busquets.MemoryMode) tea.Cmd {
 	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, memoryGenerationTimeout)
+		defer cancel()
+
 		memory, err := svc.GeneratePlanMemory(ctx, planName, syncSource, mode)
 		if err != nil {
 			return messages.MemoryGeneratedMsg{Err: err}
@@ -705,7 +714,10 @@ func GenerateMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planNam
 // DeleteMemoryCmd deletes a plan's memory.
 func DeleteMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string) tea.Cmd {
 	return func() tea.Msg {
-		return messages.DeleteMemoryResultMsg{Err: svc.DeletePlanMemory(ctx, planName, syncSource)}
+		if err := svc.DeletePlanMemory(ctx, planName, syncSource); err != nil {
+			return messages.ErrorMsg{Error: fmt.Errorf("failed to delete memory: %w", err)}
+		}
+		return messages.DeleteMemoryResultMsg{}
 	}
 }
 

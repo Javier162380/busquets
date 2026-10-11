@@ -134,6 +134,13 @@ type MemoryContent struct {
 	width int
 }
 
+// noMemoryTemplate is shown in place of a memory that has not been written yet.
+// Its one verb is the plan title.
+const noMemoryTemplate = "# Memory: %s\n\nNo memory has been written yet.\n\n" +
+	"The timeline beside this pane is computed from the plan's versions and " +
+	"comments, so it is already accurate. Press `r` to write the narrative " +
+	"for it using the configured summary connector.\n"
+
 // NewMemoryContent creates a MemoryContent from a PlanMemory.
 func NewMemoryContent(memory *busquets.PlanMemory, width int) *MemoryContent {
 	return &MemoryContent{PlanMemory: memory, width: width}
@@ -145,12 +152,7 @@ func (m *MemoryContent) GetTitle() string {
 
 func (m *MemoryContent) GetContent() string {
 	if !m.Exists() {
-		return fmt.Sprintf(
-			"# Memory: %s\n\nNo memory has been written yet.\n\n"+
-				"The timeline beside this pane is computed from the plan's versions and "+
-				"comments, so it is already accurate. Press `r` to write the narrative "+
-				"for it using the configured summary connector.\n",
-			m.PlanTitle)
+		return fmt.Sprintf(noMemoryTemplate, m.PlanTitle)
 	}
 	return m.Content
 }

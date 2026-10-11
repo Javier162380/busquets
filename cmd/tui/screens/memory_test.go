@@ -33,7 +33,7 @@ func memoryWithEvents(exists bool, events []busquets.MemoryEvent) *busquets.Plan
 		memory.Content = "# Memory: Test Plan\n\nA summary.\n\n## Timeline\n\n### v0\n\nIt began.\n"
 		memory.Summary = "A summary."
 		memory.CoversUpToVersion = 0
-		memory.GeneratedBy = "ollama"
+		memory.GeneratedBy = busquets.GeneratedByOllama
 	}
 	return memory
 }
@@ -127,6 +127,22 @@ func TestMemoryScreenKeys(t *testing.T) {
 		cmd := press(s, "esc")
 		require.NotNil(t, cmd)
 		require.IsType(t, messages.PopScreenMsg{}, cmd())
+	})
+
+	t.Run("esc cancels a run in flight instead of leaving", func(t *testing.T) {
+		s := newTestMemoryScreen(t, memoryWithEvents(true, nil), busquets.MemoryStaleness{HasMemory: true})
+		s.generating = true
+		cmd := press(s, "esc")
+		require.NotNil(t, cmd)
+		require.Equal(t, messages.CancelMemoryGenerationMsg{}, cmd())
+	})
+
+	t.Run("esc still closes the diff view during a run", func(t *testing.T) {
+		s := newTestMemoryScreen(t, memoryWithEvents(true, nil), busquets.MemoryStaleness{HasMemory: true})
+		s.generating = true
+		s.showDiff("@@ -1 +1 @@\n-a\n+b\n")
+		press(s, "esc")
+		require.Equal(t, types.FocusTimeline, s.focus)
 	})
 
 	t.Run("tab moves focus to the document and back", func(t *testing.T) {

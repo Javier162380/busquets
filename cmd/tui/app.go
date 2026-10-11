@@ -40,6 +40,10 @@ type App struct {
 	displayMode             string
 	markdownRenderedTheme   string
 	screenOrientation       string
+
+	// cancelMemoryGeneration aborts the in-flight memory generation run; nil
+	// when none is running.
+	cancelMemoryGeneration context.CancelFunc
 }
 
 // New creates a new TUI application.
@@ -307,6 +311,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleMemoryProgress(msg)
 	case messages.MemoryGeneratedMsg:
 		return a.handleMemoryGenerated(msg)
+	case messages.CancelMemoryGenerationMsg:
+		return a.handleCancelMemoryGeneration()
 	case messages.DeleteMemoryMsg:
 		return a.handleDeleteMemory(msg)
 	case messages.DeleteMemoryResultMsg:

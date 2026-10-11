@@ -143,9 +143,7 @@ func (s *MemoryScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s.handleKey(msg)
 
 	case messages.MemoryLoadedMsg:
-		if msg.Err == nil {
-			s.setMemory(msg.Memory, msg.Staleness)
-		}
+		s.setMemory(msg.Memory, msg.Staleness)
 		return s, nil
 
 	case messages.MemoryGeneratedMsg:
@@ -190,6 +188,12 @@ func (s *MemoryScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 // handleKey routes key input by focus.
 func (s *MemoryScreen) handleKey(msg tea.KeyMsg) (Screen, tea.Cmd) {
 	key := msg.String()
+
+	// While a run is in flight, esc cancels it rather than leaving the screen.
+	// The diff view keeps its own esc, which only closes the diff.
+	if key == "esc" && s.generating && s.focus != types.FocusDiff {
+		return s, func() tea.Msg { return messages.CancelMemoryGenerationMsg{} }
+	}
 
 	switch s.focus {
 	case types.FocusTimeline:
@@ -581,7 +585,7 @@ func (s *MemoryScreen) ShortHelp() string {
 	status := "no memory yet — r: write it"
 	switch {
 	case s.generating:
-		status = "writing..."
+		status = "writing... esc: cancel"
 	case s.memory != nil && s.memory.Exists() && s.staleness.IsStale():
 		status = fmt.Sprintf("%d new events — r: update", s.staleness.NewVersions+s.staleness.NewComments)
 	case s.memory != nil && s.memory.Exists():

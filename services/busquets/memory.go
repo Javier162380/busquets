@@ -36,6 +36,14 @@ const (
 	MemoryModeRebuild     MemoryMode = "rebuild"
 )
 
+// MemoryGenerator records which path wrote a memory's narratives.
+type MemoryGenerator string
+
+const (
+	GeneratedByMCP    MemoryGenerator = "mcp"
+	GeneratedByOllama MemoryGenerator = "ollama"
+)
+
 // MemoryEvent is one entry on a plan's timeline. Every field except Narrative is
 // computed from plan_versions/plan_comments.
 type MemoryEvent struct {
@@ -68,7 +76,7 @@ type PlanMemory struct {
 	Summary             string
 	CoversUpToVersion   int64
 	CoversUpToCommentID int64
-	GeneratedBy         string
+	GeneratedBy         MemoryGenerator
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
 	Events              []MemoryEvent
@@ -245,7 +253,7 @@ func (s *Service) GetPlanMemory(ctx context.Context, fileName, syncSource string
 		memory.Summary = stored.Summary
 		memory.CoversUpToVersion = stored.CoversUpToVersion
 		memory.CoversUpToCommentID = stored.CoversUpToCommentID
-		memory.GeneratedBy = stored.GeneratedBy
+		memory.GeneratedBy = MemoryGenerator(stored.GeneratedBy)
 		memory.CreatedAt = stored.CreatedAt
 		memory.UpdatedAt = stored.UpdatedAt
 	case dto.IsNotFound(err):
@@ -311,7 +319,7 @@ type SavePlanMemoryRequest struct {
 	SyncSource  string
 	Mode        MemoryMode
 	Summary     string
-	GeneratedBy string
+	GeneratedBy MemoryGenerator
 	Events      []SavePlanMemoryEvent
 }
 
@@ -529,7 +537,7 @@ func (s *Service) SavePlanMemory(ctx context.Context, req SavePlanMemoryRequest)
 
 	generatedBy := req.GeneratedBy
 	if generatedBy == "" {
-		generatedBy = "mcp"
+		generatedBy = GeneratedByMCP
 	}
 
 	now := s.nowProvider.Now()
@@ -548,7 +556,7 @@ func (s *Service) SavePlanMemory(ctx context.Context, req SavePlanMemoryRequest)
 		Summary:             summary,
 		CoversUpToVersion:   coversVersion,
 		CoversUpToCommentID: coversComment,
-		GeneratedBy:         generatedBy,
+		GeneratedBy:         string(generatedBy),
 		CreatedAt:           createdAt,
 		UpdatedAt:           now,
 	}, func() error {
@@ -573,7 +581,7 @@ func (s *Service) SavePlanMemory(ctx context.Context, req SavePlanMemoryRequest)
 		Summary:             saved.Summary,
 		CoversUpToVersion:   saved.CoversUpToVersion,
 		CoversUpToCommentID: saved.CoversUpToCommentID,
-		GeneratedBy:         saved.GeneratedBy,
+		GeneratedBy:         MemoryGenerator(saved.GeneratedBy),
 		CreatedAt:           saved.CreatedAt,
 		UpdatedAt:           saved.UpdatedAt,
 		Events:              history.events,
@@ -678,7 +686,27 @@ func (s *Service) emitMemoryProgress(progress MemoryProgress) {
 // Per-event calls are not an optimisation. A local model's context cannot hold
 // the concatenated diffs of a long history, and truncation there is silent, so
 // each event is asked about on its own.
-func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource string, mode MemoryMode) (*PlanMemory, error) {
+//
+// A Done update is emitted on every return path: the TUI re-arms its progress
+// listener until it sees one, so a missing Done leaks a blocked listener.
+//
+// Cancelling ctx abandons the run without saving: nothing is written, so the
+// watermarks stay put and the next run picks up the same events.
+func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource string, mode MemoryMode) (memory *PlanMemory, err error) {
+	progress := MemoryProgress{FileName: fileName, SyncSource: syncSource}
+	defer func() {
+		// A cancel can surface from any step (prompt build, a narration, the
+		// summary or the save); report it the same way whichever step it hit.
+		if err != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				memory, err = nil, fmt.Errorf("memory generation stopped: %w", ctxErr)
+			}
+		}
+		progress.Done = true
+		progress.Err = err
+		s.emitMemoryProgress(progress)
+	}()
+
 	if s.connectorManager == nil {
 		return nil, dto.ErrConnectorDisabled
 	}
@@ -698,26 +726,24 @@ func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource s
 
 	narrated := make([]SavePlanMemoryEvent, 0, len(pending))
 	truncatedEvents := 0
+	progress.Total = len(pending)
 
 	for index, prompt := range pending {
-		s.emitMemoryProgress(MemoryProgress{
-			FileName: fileName, SyncSource: syncSource,
-			Current: index + 1, Total: len(pending),
-		})
+		progress.Current = index + 1
+		s.emitMemoryProgress(progress)
 
 		result, genErr := s.connectorManager.GenerateWithPrompt(ctx, connectors.GeneratorOpts{
 			SystemPrompt: prompts.EventSystemPrompt,
 			UserPrompt:   prompt.UserPrompt,
 		})
 		if genErr != nil {
+			if ctx.Err() != nil {
+				return nil, genErr // rewritten by the deferred cancel check
+			}
 			// Keep whatever has already been written rather than losing a long
 			// run to one failure, and surface the error either way.
 			if len(narrated) == 0 {
-				err := fmt.Errorf("failed to narrate event %d: %w", prompt.Event.RefID, genErr)
-				s.emitMemoryProgress(MemoryProgress{
-					FileName: fileName, SyncSource: syncSource, Done: true, Err: err,
-				})
-				return nil, err
+				return nil, fmt.Errorf("failed to narrate event %d: %w", prompt.Event.RefID, genErr)
 			}
 			s.logger.Warn("memory generation stopped early",
 				"file_name", fileName, "ref_id", prompt.Event.RefID, "error", genErr)
@@ -751,21 +777,15 @@ func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource s
 			"file_name", fileName, "events", truncatedEvents)
 	}
 
-	memory, err := s.SavePlanMemory(ctx, SavePlanMemoryRequest{
+	progress.Current = len(narrated)
+	return s.SavePlanMemory(ctx, SavePlanMemoryRequest{
 		FileName:    fileName,
 		SyncSource:  syncSource,
 		Mode:        mode,
 		Summary:     summary,
-		GeneratedBy: "ollama",
+		GeneratedBy: GeneratedByOllama,
 		Events:      narrated,
 	})
-
-	s.emitMemoryProgress(MemoryProgress{
-		FileName: fileName, SyncSource: syncSource,
-		Current: len(narrated), Total: len(pending), Done: true, Err: err,
-	})
-
-	return memory, err
 }
 
 // generateMemorySummary writes the document header using the existing TLDR
