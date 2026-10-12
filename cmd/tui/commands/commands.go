@@ -735,6 +735,20 @@ func MemoryDiffCmd(ctx context.Context, svc busquets.UnifiedService, planName, s
 	}
 }
 
+// LoadMemoryVersionCmd loads the version behind a memory timeline event.
+func LoadMemoryVersionCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string, versionNumber int64) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		version, err := svc.GetPlanVersion(ctx, planName, syncSource, versionNumber)
+		if err != nil {
+			return messages.ErrorMsg{Error: fmt.Errorf("failed to load version %d: %w", versionNumber, err)}
+		}
+		return messages.MemoryVersionLoadedMsg{Version: version}
+	}
+}
+
 // MemoryChannelListenerCmd waits for the next generation progress update,
 // mirroring WatchChannelListenerCmd.
 func MemoryChannelListenerCmd(ctx context.Context, svc busquets.UnifiedService) tea.Cmd {

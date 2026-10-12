@@ -4317,9 +4317,9 @@ func TestMemoryTimeline(t *testing.T) {
 	t.Run("buildTimeline orders a mixed history oldest first", func(t *testing.T) {
 		base := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
 		versions := []dto.PlanVersion{
-			{ID: 30, VersionNumber: 2, Content: "one\ntwo\nthree\n", WordCount: 3, CreatedAt: base.Add(2 * time.Hour)},
 			{ID: 10, VersionNumber: 0, Content: "one\n", WordCount: 1, CreatedAt: base},
 			{ID: 20, VersionNumber: 1, Content: "one\ntwo\n", WordCount: 2, CreatedAt: base.Add(time.Hour)},
+			{ID: 30, VersionNumber: 2, Content: "one\ntwo\nthree\n", WordCount: 3, CreatedAt: base.Add(2 * time.Hour)},
 		}
 		comments := []dto.Comment{
 			{ID: 5, Content: "looks good", CreatedAt: base.Add(90 * time.Minute)},
@@ -4346,21 +4346,6 @@ func TestMemoryTimeline(t *testing.T) {
 
 		require.Equal(t, MemoryEventVersion, events[3].Kind)
 		require.Equal(t, int64(2), *events[3].VersionNumber)
-	})
-
-	t.Run("buildTimeline diffs by version number, not by input order", func(t *testing.T) {
-		base := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
-		// ListPlanVersionsAll has no ORDER BY, so a backend may return any order.
-		versions := []dto.PlanVersion{
-			{ID: 20, VersionNumber: 1, Content: "a\nb\nc\n", CreatedAt: base.Add(time.Hour)},
-			{ID: 10, VersionNumber: 0, Content: "a\n", CreatedAt: base},
-		}
-
-		events := buildTimeline(versions, nil)
-		require.Len(t, events, 2)
-		require.Equal(t, int64(0), *events[0].VersionNumber)
-		require.Equal(t, 2, events[1].LinesAdded)
-		require.Equal(t, 0, events[1].LinesRemoved)
 	})
 
 	t.Run("buildTimeline reports a repeated content as a restore", func(t *testing.T) {
@@ -4429,6 +4414,40 @@ func testMemoryOperations(t *testing.T, setup serviceSetupFn) {
 		require.Equal(t, int64(0), *events[0].VersionNumber)
 		require.Equal(t, 0, events[0].LinesAdded)
 		require.Equal(t, 0, events[0].LinesRemoved)
+	})
+
+	t.Run("ListPlanVersionsAll returns versions in version-number order", func(t *testing.T) {
+		service, sourceDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+
+		// Insert v2 before v1, so insertion (id) order disagrees with version
+		// order. buildTimeline relies on the query's ORDER BY. On SQLite the
+		// UNIQUE(plan_id, version_number) index happens to yield this order even
+		// without it, so the case that would catch a dropped ORDER BY is Postgres.
+		noFile := func() error { return nil }
+		for _, number := range []int64{2, 1} {
+			require.NoError(t, service.db.InsertPlanVersion(ctx, dto.InsertPlanVersionParams{
+				PlanID:        plan.ID,
+				VersionNumber: number,
+				FilePath:      filepath.Join(sourceDir, fmt.Sprintf("v%d.md", number)),
+				Content:       fmt.Sprintf("version %d\n", number),
+				CreatedAt:     time.Now(),
+			}, noFile))
+		}
+
+		versions, err := service.db.ListPlanVersionsAll(ctx, plan.ID)
+		require.NoError(t, err)
+
+		numbers := make([]int64, len(versions))
+		for i, version := range versions {
+			numbers[i] = version.VersionNumber
+		}
+		require.Equal(t, []int64{0, 1, 2}, numbers)
 	})
 
 	t.Run("BuildMemoryTimeline picks up edits and comments", func(t *testing.T) {

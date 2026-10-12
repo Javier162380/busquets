@@ -321,6 +321,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleRequestMemoryDiff(msg)
 	case messages.MemoryDiffLoadedMsg:
 		return a.handleMemoryDiffLoaded(msg)
+	case messages.RequestMemoryVersionMsg:
+		return a.handleRequestMemoryVersion(msg)
+	case messages.MemoryVersionLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
 	case messages.OpenCommentModalMsg:
 		return a.handleOpenCommentModal(msg)
 	case messages.CommentsLoadedMsg:

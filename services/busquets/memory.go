@@ -137,21 +137,10 @@ func (s *Service) loadPlanHistory(ctx context.Context, fileName, syncSource stri
 
 	return planHistory{
 		plan:     plan,
-		versions: sortedVersions(versions),
+		versions: versions,
 		comments: comments,
 		events:   buildTimeline(versions, comments),
 	}, nil
-}
-
-// sortedVersions returns versions ordered by version number, leaving the input
-// untouched.
-func sortedVersions(versions []dto.PlanVersion) []dto.PlanVersion {
-	ordered := make([]dto.PlanVersion, len(versions))
-	copy(ordered, versions)
-	sort.Slice(ordered, func(i, j int) bool {
-		return ordered[i].VersionNumber < ordered[j].VersionNumber
-	})
-	return ordered
 }
 
 // buildTimeline merges versions and comments into one chronological timeline.
@@ -159,15 +148,13 @@ func sortedVersions(versions []dto.PlanVersion) []dto.PlanVersion {
 func buildTimeline(versions []dto.PlanVersion, comments []dto.Comment) []MemoryEvent {
 	events := make([]MemoryEvent, 0, len(versions)+len(comments))
 
-	// ListPlanVersionsAll has no ORDER BY, and every diff below compares against
-	// the preceding element.
-	ordered := sortedVersions(versions)
-
 	// Earliest version carrying each content, so a later repeat reads as a
 	// restore rather than a baffling large diff.
-	contentOrigin := make(map[string]int64, len(ordered))
+	contentOrigin := make(map[string]int64, len(versions))
 
-	for i, version := range ordered {
+	var previous *dto.PlanVersion
+	for i := range versions {
+		version := &versions[i]
 		versionNumber := version.VersionNumber
 		event := MemoryEvent{
 			Kind:          MemoryEventVersion,
@@ -178,9 +165,10 @@ func buildTimeline(versions []dto.PlanVersion, comments []dto.Comment) []MemoryE
 		}
 
 		// The first version is a baseline, not a change, so it carries no diff.
-		if i > 0 {
-			event.LinesAdded, event.LinesRemoved = gitdiff.Stats(ordered[i-1].Content, version.Content)
+		if previous != nil {
+			event.LinesAdded, event.LinesRemoved = gitdiff.Stats(previous.Content, version.Content)
 		}
+		previous = version
 
 		if origin, seen := contentOrigin[version.Content]; seen {
 			restoredFrom := origin
@@ -638,7 +626,7 @@ func (s *Service) DeletePlanMemory(ctx context.Context, fileName, syncSource str
 const SettingMemoryMaxEventsPerRun = "memory_max_events_per_run"
 
 // DefaultMemoryMaxEventsPerRun is the cap applied when the setting is unset.
-const DefaultMemoryMaxEventsPerRun = 20
+const DefaultMemoryMaxEventsPerRun = 10
 
 // MemoryMaxEventsPerRun returns the configured cap, falling back to the default.
 func (s *Service) MemoryMaxEventsPerRun(ctx context.Context) int {

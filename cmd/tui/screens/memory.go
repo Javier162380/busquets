@@ -38,6 +38,14 @@ type MemoryScreen struct {
 	current    *busquets.MemoryEvent
 	generating bool
 
+	// fullscreenPane is what v opened: the selected version from the timeline,
+	// the memory from the memory pane. The split always shows the memory.
+	fullscreenPane memoryPane
+
+	// versions caches loaded versions by number; a version never changes once
+	// written, so the cache lives as long as the screen.
+	versions map[int64]*busquets.PlanVersionDetail
+
 	// Diff state, for the event selected with enter.
 	diffViewport viewport.Model
 	diffPlain    string
@@ -52,6 +60,14 @@ type MemoryScreen struct {
 	screenOrientation     string
 }
 
+// memoryPane selects what the memory screen's content pane shows.
+type memoryPane int
+
+const (
+	paneMemory  memoryPane = iota // The memory document.
+	paneVersion                   // The selected event's version, or comment text.
+)
+
 // NewMemoryScreen creates a memory screen for a plan.
 func NewMemoryScreen(planName, syncSource, markdownRenderedTheme string, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool, screenOrientation string) *MemoryScreen {
 	panelWidth := (width - 3) / 2
@@ -63,6 +79,7 @@ func NewMemoryScreen(planName, syncSource, markdownRenderedTheme string, width, 
 		confirmDialog: components.NewConfirmModal(),
 		layout:        types.LayoutSplit,
 		focus:         types.FocusTimeline,
+		versions:      make(map[int64]*busquets.PlanVersionDetail),
 		planName:      planName,
 		syncSource:    syncSource,
 		width:         width,
@@ -89,14 +106,10 @@ func NewMemoryScreenWithData(planName, syncSource, markdownRenderedTheme string,
 	return s
 }
 
-// Init initialises the screen; data arrives via MemoryLoadedMsg when absent.
+// Init initialises the screen. It loads nothing: the App only pushes the
+// screen once MemoryLoadedMsg has arrived, so the memory is always present.
 func (s *MemoryScreen) Init() tea.Cmd {
-	if s.memory != nil {
-		return nil
-	}
-	return func() tea.Msg {
-		return messages.RequestMemoryScreenMsg{PlanName: s.planName, SyncSource: s.syncSource}
-	}
+	return nil
 }
 
 // setMemory stores a loaded memory and refreshes the list and viewer.
@@ -111,24 +124,77 @@ func (s *MemoryScreen) setMemory(memory *busquets.PlanMemory, staleness busquets
 	s.updateListItems()
 
 	if len(s.events) > 0 {
-		// The timeline reads oldest-first, but the newest event is what someone
-		// opening the screen wants; a reload keeps wherever they had scrolled to.
+		// The timeline lists the newest event first, which is where someone
+		// opening the screen wants to start; a reload keeps their place.
 		selected := s.list.SelectedIndex()
 		if firstLoad || selected < 0 || selected >= len(s.events) {
-			selected = len(s.events) - 1
+			selected = 0
 		}
 		s.list.Select(selected)
-		s.current = &s.events[selected]
+		s.syncCurrent()
 	}
 	s.refreshViewer()
 }
 
-// refreshViewer redraws the memory document pane.
-func (s *MemoryScreen) refreshViewer() {
-	if s.memory == nil {
-		return
+// syncCurrent points current at the selected row's event. The rows are in a
+// different order from s.events, so the event is read from the row itself
+// rather than by index.
+func (s *MemoryScreen) syncCurrent() {
+	if item := s.list.SelectedItem(); item != nil {
+		if event, ok := item.Data().(busquets.MemoryEvent); ok {
+			s.current = &event
+		}
 	}
-	s.viewer.SetContent(content.NewMemoryContent(s.memory, s.getViewerWidth()))
+}
+
+// shownPane is what the content pane currently displays.
+func (s *MemoryScreen) shownPane() memoryPane {
+	if s.layout == types.LayoutFullscreen {
+		return s.fullscreenPane
+	}
+	return paneMemory
+}
+
+// refreshViewer redraws the content pane with whatever it is showing.
+func (s *MemoryScreen) refreshViewer() {
+	if shown := s.shownContent(); shown != nil {
+		s.viewer.SetContent(shown)
+	}
+}
+
+// shownContent builds what the content pane displays, or nil when there is
+// nothing to show yet. A version that has not loaded yet shows a placeholder.
+func (s *MemoryScreen) shownContent() content.Displayable {
+	if s.shownPane() == paneVersion {
+		if s.current == nil {
+			return nil
+		}
+		var version *busquets.PlanVersionDetail
+		if s.current.VersionNumber != nil {
+			version = s.versions[*s.current.VersionNumber]
+		}
+		return content.NewMemoryEventContent(*s.current, version, s.planName, s.syncSource, s.getViewerWidth())
+	}
+	if s.memory == nil {
+		return nil
+	}
+	return content.NewMemoryContent(s.memory, s.getViewerWidth())
+}
+
+// loadShownVersion requests the selected event's version when it is showing
+// fullscreen and it is not cached yet. Comments have no version to load.
+func (s *MemoryScreen) loadShownVersion() tea.Cmd {
+	if s.shownPane() != paneVersion || s.current == nil ||
+		s.current.Kind == busquets.MemoryEventComment || s.current.VersionNumber == nil {
+		return nil
+	}
+	number := *s.current.VersionNumber
+	if _, ok := s.versions[number]; ok {
+		return nil
+	}
+	return func() tea.Msg {
+		return messages.RequestMemoryVersionMsg{PlanName: s.planName, SyncSource: s.syncSource, VersionNumber: number}
+	}
 }
 
 // Update handles messages.
@@ -150,6 +216,13 @@ func (s *MemoryScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		s.generating = false
 		if msg.Err == nil {
 			s.setMemory(msg.Memory, msg.Staleness)
+		}
+		return s, nil
+
+	case messages.MemoryVersionLoadedMsg:
+		if msg.Version != nil {
+			s.versions[msg.Version.VersionNumber] = msg.Version
+			s.refreshViewer()
 		}
 		return s, nil
 
@@ -252,18 +325,12 @@ func (s *MemoryScreen) handleTimelineKey(key string, msg tea.KeyMsg) (Screen, te
 		return s, nil
 
 	case "v":
-		s.layout = types.LayoutFullscreen
-		s.focus = types.FocusContent
-		s.refreshViewer()
-		return s, nil
+		// From the timeline, v opens the selected event.
+		return s, s.openFullscreen(paneVersion)
 
 	case "j", "down", "k", "up":
 		cmd := s.list.Update(msg)
-		if item := s.list.SelectedItem(); item != nil {
-			if event, ok := item.Data().(busquets.MemoryEvent); ok {
-				s.current = &event
-			}
-		}
+		s.syncCurrent()
 		return s, cmd
 	}
 
@@ -289,6 +356,13 @@ func (s *MemoryScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea
 		}
 		return s, nil
 
+	case "v":
+		// From the memory pane, v opens the memory.
+		if s.layout == types.LayoutSplit {
+			return s, s.openFullscreen(paneMemory)
+		}
+		return s, nil
+
 	case "r":
 		s.viewer.ToggleRenderMode()
 		return s, nil
@@ -298,7 +372,7 @@ func (s *MemoryScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea
 		return s, nil
 
 	case "c":
-		return s, s.copyMemory()
+		return s, s.copyShown()
 
 	case "g":
 		s.viewer.GotoTop()
@@ -391,6 +465,39 @@ func (s *MemoryScreen) generate(mode busquets.MemoryMode) tea.Cmd {
 	}
 }
 
+// openFullscreen shows pane fullscreen with the content side focused.
+func (s *MemoryScreen) openFullscreen(pane memoryPane) tea.Cmd {
+	s.layout = types.LayoutFullscreen
+	s.fullscreenPane = pane
+	s.focus = types.FocusContent
+	s.refreshViewer()
+	return s.loadShownVersion()
+}
+
+// copyShown copies whatever the content pane is showing.
+func (s *MemoryScreen) copyShown() tea.Cmd {
+	if s.shownPane() == paneMemory {
+		return s.copyMemory()
+	}
+	if s.current == nil {
+		return nil
+	}
+
+	event := content.NewMemoryEventContent(*s.current, nil, s.planName, s.syncSource, 0)
+	if s.current.VersionNumber != nil {
+		version, ok := s.versions[*s.current.VersionNumber]
+		if !ok {
+			return func() tea.Msg {
+				return messages.ErrorMsg{Error: fmt.Errorf("the version is still loading")}
+			}
+		}
+		event.Version = version
+	}
+	return func() tea.Msg {
+		return messages.CopyToClipboardMsg{Text: event.GetContent(), Label: event.GetTitle()}
+	}
+}
+
 // copyMemory copies the memory markdown to the clipboard.
 func (s *MemoryScreen) copyMemory() tea.Cmd {
 	if s.memory == nil || !s.memory.Exists() {
@@ -412,7 +519,7 @@ func (s *MemoryScreen) SetGenerating(generating bool) {
 func (s *MemoryScreen) updateListItems() {
 	items := make([]components.ListItem, len(s.events))
 	for i, event := range s.events {
-		items[i] = components.NewListItem(
+		items[len(s.events)-i-1] = components.NewListItem(
 			memoryEventTitle(event),
 			fmt.Sprintf("%s | %s", event.OccurredAt.Format("2006-01-02 15:04"), memoryEventDetail(event)),
 			event,
@@ -429,7 +536,7 @@ func memoryEventTitle(event busquets.MemoryEvent) string {
 	if event.VersionNumber == nil {
 		return "Version"
 	}
-	return fmt.Sprintf("v%d", *event.VersionNumber)
+	return fmt.Sprintf("Version %d", *event.VersionNumber)
 }
 
 // memoryEventDetail summarises what an event did.
@@ -594,11 +701,19 @@ func (s *MemoryScreen) ShortHelp() string {
 
 	switch s.focus {
 	case types.FocusTimeline:
-		return fmt.Sprintf("down/up: navigate | enter: diff | tab: memory | v: fullscreen | r: update | R: rewrite | c: copy | d: delete | esc: back | %s | Events: %d",
+		return fmt.Sprintf("tab: go to memory | down/up: navigate | enter: diff | v: fullscreen version | r: update | R: rewrite | c: copy memory | d: delete | esc: back | %s | Events: %d",
 			status, len(s.events))
 	case types.FocusContent:
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: timeline | r: render (%s) | l: lines | c: copy | esc: back | %s",
-			mode, status)
+		fullscreen := ""
+		if s.layout == types.LayoutSplit {
+			fullscreen = "v: fullscreen | "
+		}
+		tab := "tab: go to timeline | "
+		if s.layout == types.LayoutFullscreen {
+			tab = "" // fullscreen has no timeline to move to; esc goes back
+		}
+		return fmt.Sprintf("%sdown/up: scroll | g/G: top/bottom | %sr: render (%s) | l: lines | c: copy | esc: back | %s",
+			tab, fullscreen, mode, status)
 	default:
 		return ""
 	}

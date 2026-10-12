@@ -535,6 +535,20 @@ type RequestMemoryDiffMsg struct {
 	ToVersion   int64
 }
 
+// RequestMemoryVersionMsg asks for the content of the version behind a
+// timeline event, for the memory screen's version pane.
+type RequestMemoryVersionMsg struct {
+	PlanName      string
+	SyncSource    string
+	VersionNumber int64
+}
+
+// MemoryVersionLoadedMsg carries a timeline event's version; failures arrive
+// as ErrorMsg.
+type MemoryVersionLoadedMsg struct {
+	Version *busquets.PlanVersionDetail
+}
+
 // MemoryDiffLoadedMsg carries a timeline event's unified diff.
 type MemoryDiffLoadedMsg struct {
 	Diff        string

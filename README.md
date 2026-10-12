@@ -329,7 +329,7 @@ Memories are stored at `~/.busquets/plans/<plan-id>/memory/memory.md` and indexe
 in the `plan_memories` table. Generation is always manual — it is never triggered
 by a sync.
 
-`memory_max_events_per_run` (settings screen, default 20) bounds how many events
+`memory_max_events_per_run` (settings screen, default 10) bounds how many events
 a single run narrates, so a plan with a long history does not fire a hundred
 LLM calls at once; the rest is picked up by the next run.
 

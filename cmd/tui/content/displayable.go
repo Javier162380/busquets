@@ -4,6 +4,7 @@ package content
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Javier162380/busquets/services/busquets"
@@ -227,4 +228,64 @@ func newTermRenderer(markdownTheme string, wordWidth int) (*glamour.TermRenderer
 		glamour.WithStandardStyle(markdownTheme),
 		glamour.WithWordWrap(wordWidth),
 	)
+}
+
+// MemoryEventContent wraps one timeline event to implement Displayable: the
+// version it produced, or the comment's text for a comment event.
+//
+// A version event whose content has not loaded yet displays a placeholder;
+// the screen swaps in the loaded version when it arrives.
+type MemoryEventContent struct {
+	Event      busquets.MemoryEvent
+	Version    *busquets.PlanVersionDetail // nil for comments and while loading
+	FileName   string
+	SyncSource string
+	width      int
+}
+
+// NewMemoryEventContent creates a MemoryEventContent for a timeline event.
+func NewMemoryEventContent(event busquets.MemoryEvent, version *busquets.PlanVersionDetail, fileName, syncSource string, width int) *MemoryEventContent {
+	return &MemoryEventContent{Event: event, Version: version, FileName: fileName, SyncSource: syncSource, width: width}
+}
+
+func (e *MemoryEventContent) GetTitle() string {
+	if e.Event.Kind == busquets.MemoryEventComment {
+		return "Comment"
+	}
+	if e.Event.VersionNumber == nil {
+		return "Version"
+	}
+	return fmt.Sprintf("Version %d", *e.Event.VersionNumber)
+}
+
+func (e *MemoryEventContent) GetContent() string {
+	switch {
+	case e.Event.Kind == busquets.MemoryEventComment:
+		return e.Event.Body
+	case e.Version == nil:
+		return fmt.Sprintf("Loading %s...", strings.ToLower(e.GetTitle()))
+	default:
+		return e.Version.Content
+	}
+}
+
+func (e *MemoryEventContent) GetRenderedHTML(markdownTheme string) string {
+	return renderMarkdown(e.GetContent(), markdownTheme, e.width)
+}
+
+func (e *MemoryEventContent) GetReadingTime() int {
+	return busquets.CalculateReadingTime(busquets.CountWords(e.GetContent()))
+}
+
+func (e *MemoryEventContent) GetMetadata() Metadata {
+	return Metadata{
+		PrimaryLabel:  "Created",
+		PrimaryTime:   e.Event.OccurredAt,
+		SecondaryInfo: e.GetTitle(),
+		SourcePath:    filepath.Join(e.SyncSource, e.FileName),
+	}
+}
+
+func (e *MemoryEventContent) GetIdentifier() string {
+	return fmt.Sprintf("%s#%s-%d", e.FileName, e.Event.Kind, e.Event.RefID)
 }

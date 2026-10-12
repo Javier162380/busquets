@@ -158,10 +158,10 @@ VERSION DIFF (fullscreen, d):
   Esc            Back to the versions list
 
 MEMORY TIMELINE (i, left panel):
-  j/k, ↑/↓       Navigate the timeline (oldest first)
+  j/k, ↑/↓       Navigate the timeline (newest first)
   Enter          Show the diff behind the selected version
   Tab            Switch to the memory document
-  v              View the memory document fullscreen
+  v              View the selected version fullscreen
   r              Write / update the memory (narrates only what is new)
   R              Rewrite the whole memory from scratch (with confirmation)
   c              Copy the memory to clipboard
@@ -173,13 +173,14 @@ MEMORY TIMELINE (i, left panel):
   connector (C) — dates and change counts always come from busquets, never
   from the model.
 
-MEMORY DOCUMENT (right panel / fullscreen):
+MEMORY DOCUMENT / VERSION (right panel / fullscreen):
   j/k, ↑/↓       Scroll up/down
   g / G          Jump to top / bottom
   Tab            Switch to the timeline
+  v              View the memory document fullscreen
   r              Toggle markdown rendering (raw vs rendered)
   l              Toggle line numbers
-  c              Copy the memory to clipboard
+  c              Copy what is shown to clipboard
   Esc            Back to the timeline
 
 MEMORY EVENT DIFF (fullscreen, Enter):

@@ -124,3 +124,7 @@ func (a *App) handleMemoryDiffLoaded(msg messages.MemoryDiffLoadedMsg) (tea.Mode
 	}
 	return a.delegateToCurrentScreen(msg)
 }
+
+func (a *App) handleRequestMemoryVersion(msg messages.RequestMemoryVersionMsg) (tea.Model, tea.Cmd) {
+	return a, commands.LoadMemoryVersionCmd(a.ctx, a.service, msg.PlanName, msg.SyncSource, msg.VersionNumber)
+}

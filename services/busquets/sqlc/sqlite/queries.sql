@@ -19,7 +19,8 @@ UPDATE plan_versions SET file_path = ? WHERE id = ?;
 SELECT id, file_name, sync_source, file_path, content FROM plans;
 
 -- name: ListPlanVersionsAll :many
-SELECT * FROM plan_versions WHERE plan_id = ?;
+SELECT * FROM plan_versions WHERE plan_id = ?
+ORDER BY version_number;
 
 -- name: RenamePlanRow :exec
 UPDATE plans

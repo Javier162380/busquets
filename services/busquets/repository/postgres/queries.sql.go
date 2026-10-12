@@ -1060,6 +1060,7 @@ func (q *Queries) ListConnectors(ctx context.Context) ([]Connector, error) {
 
 const listPlanVersionsAll = `-- name: ListPlanVersionsAll :many
 SELECT id, plan_id, version_number, file_path, content, word_count, created_at FROM plan_versions WHERE plan_id = $1
+ORDER BY version_number
 `
 
 func (q *Queries) ListPlanVersionsAll(ctx context.Context, planID int64) ([]PlanVersion, error) {

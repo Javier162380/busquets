@@ -72,7 +72,7 @@ func TestMemoryScreenTimelineRows(t *testing.T) {
 		initial := versionEvent(0, 0, 0)
 		changed := versionEvent(1, 38, 12)
 
-		require.Equal(t, "v0", memoryEventTitle(initial))
+		require.Equal(t, "Version 0", memoryEventTitle(initial))
 		require.Equal(t, "initial | 120 words", memoryEventDetail(initial))
 		require.Equal(t, "+38 −12", memoryEventDetail(changed))
 		require.Equal(t, "restored from v0", memoryEventDetail(restore))
@@ -215,6 +215,119 @@ func TestMemoryScreenKeys(t *testing.T) {
 		cmd := press(s, "c")
 		_, ok := cmd().(messages.ErrorMsg)
 		require.True(t, ok)
+	})
+}
+
+func TestMemoryScreenPanes(t *testing.T) {
+	press := func(s *MemoryScreen, key string) tea.Cmd {
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
+		switch key {
+		case "tab":
+			msg = tea.KeyMsg{Type: tea.KeyTab}
+		case "shift+tab":
+			msg = tea.KeyMsg{Type: tea.KeyShiftTab}
+		case "esc":
+			msg = tea.KeyMsg{Type: tea.KeyEsc}
+		}
+		_, cmd := s.Update(msg)
+		return cmd
+	}
+	twoVersions := func(t *testing.T) *MemoryScreen {
+		t.Helper()
+		return newTestMemoryScreen(t, memoryWithEvents(true, []busquets.MemoryEvent{
+			versionEvent(0, 0, 0), versionEvent(1, 5, 1),
+		}), busquets.MemoryStaleness{HasMemory: true})
+	}
+	loaded := func(number int64, text string) messages.MemoryVersionLoadedMsg {
+		return messages.MemoryVersionLoadedMsg{Version: &busquets.PlanVersionDetail{
+			PlanVersion: busquets.PlanVersion{VersionNumber: number, Content: text},
+		}}
+	}
+
+	t.Run("the newest event is the first row and is selected", func(t *testing.T) {
+		s := twoVersions(t)
+		require.Equal(t, 0, s.list.SelectedIndex())
+		require.Equal(t, int64(1), *s.current.VersionNumber)
+	})
+
+	t.Run("moving down selects the older event", func(t *testing.T) {
+		s := twoVersions(t)
+		press(s, "j")
+		require.Equal(t, int64(0), *s.current.VersionNumber)
+	})
+
+	t.Run("the split always shows the memory", func(t *testing.T) {
+		s := twoVersions(t)
+		require.Equal(t, paneMemory, s.shownPane())
+		press(s, "tab")
+		require.Equal(t, types.FocusContent, s.focus)
+		require.Equal(t, paneMemory, s.shownPane())
+	})
+
+	t.Run("shift+tab does nothing", func(t *testing.T) {
+		s := twoVersions(t)
+		require.Nil(t, press(s, "shift+tab"))
+		require.Equal(t, types.FocusTimeline, s.focus)
+		require.Equal(t, paneMemory, s.shownPane())
+	})
+
+	t.Run("v on the timeline opens the selected version and requests it", func(t *testing.T) {
+		s := twoVersions(t)
+		cmd := press(s, "v")
+		require.Equal(t, types.LayoutFullscreen, s.layout)
+		require.Equal(t, paneVersion, s.shownPane())
+		require.NotNil(t, cmd)
+		require.Equal(t, messages.RequestMemoryVersionMsg{
+			PlanName: "plan.md", SyncSource: "/src", VersionNumber: 1,
+		}, cmd())
+	})
+
+	t.Run("an unloaded version shows a placeholder until it arrives", func(t *testing.T) {
+		s := twoVersions(t)
+		press(s, "v")
+		require.Equal(t, "Loading version 1...", s.shownContent().GetContent())
+
+		s.Update(loaded(1, "# Version one"))
+		require.Equal(t, "# Version one", s.shownContent().GetContent())
+	})
+
+	t.Run("a cached version is not requested again", func(t *testing.T) {
+		s := twoVersions(t)
+		s.Update(loaded(1, "# Version one"))
+		require.Nil(t, press(s, "v"))
+		require.Equal(t, "# Version one", s.shownContent().GetContent())
+	})
+
+	t.Run("v on the memory opens the memory", func(t *testing.T) {
+		s := twoVersions(t)
+		press(s, "tab")
+		press(s, "v")
+		require.Equal(t, types.LayoutFullscreen, s.layout)
+		require.Equal(t, paneMemory, s.shownPane())
+	})
+
+	t.Run("esc from fullscreen returns to the memory split", func(t *testing.T) {
+		s := twoVersions(t)
+		press(s, "v")
+		press(s, "esc")
+		require.Equal(t, types.LayoutSplit, s.layout)
+		require.Equal(t, paneMemory, s.shownPane())
+	})
+
+	t.Run("a comment opens with its text and needs no load", func(t *testing.T) {
+		s := newTestMemoryScreen(t, memoryWithEvents(true, []busquets.MemoryEvent{
+			{Kind: busquets.MemoryEventComment, RefID: 5, OccurredAt: memoryTestTime, Body: "needs a rethink"},
+		}), busquets.MemoryStaleness{HasMemory: true})
+		require.Nil(t, press(s, "v"))
+		require.Equal(t, "needs a rethink", s.shownContent().GetContent())
+	})
+
+	t.Run("the legend leads with tab", func(t *testing.T) {
+		s := twoVersions(t)
+		require.True(t, strings.HasPrefix(s.ShortHelp(), "tab: go to memory | "))
+		press(s, "tab")
+		require.True(t, strings.HasPrefix(s.ShortHelp(), "tab: go to timeline | "))
+		require.NotContains(t, s.ShortHelp(), "shift+tab")
 	})
 }
 
