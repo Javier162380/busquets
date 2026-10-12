@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	planviewer "github.com/Javier162380/busquets"
+	domain "github.com/Javier162380/busquets"
 	"github.com/Javier162380/busquets/internal/clipboard"
 	"github.com/Javier162380/busquets/services/busquets/dto"
 
@@ -47,14 +47,14 @@ const (
 )
 
 // SearchField re-exports the root type so callers only need one import.
-type SearchField = planviewer.SearchField
+type SearchField = domain.SearchField
 
 // Search field values for SettingSearchOver.
 const (
-	SearchOverAll      = planviewer.SearchOverAll
-	SearchOverPlanName = planviewer.SearchOverPlanName
-	SearchOverContent  = planviewer.SearchOverContent
-	DefaultSearchOver  = planviewer.DefaultSearchOver
+	SearchOverAll      = domain.SearchOverAll
+	SearchOverPlanName = domain.SearchOverPlanName
+	SearchOverContent  = domain.SearchOverContent
+	DefaultSearchOver  = domain.DefaultSearchOver
 )
 
 // Display mode values for SettingDefaultDisplayMode.
@@ -243,11 +243,11 @@ func (s *Service) SetSetting(ctx context.Context, varName string, values Setting
 }
 
 // resolveSearchScope returns the active SearchField setting, defaulting to SearchOverAll.
-func (s *Service) resolveSearchScope(ctx context.Context) planviewer.SearchField {
+func (s *Service) resolveSearchScope(ctx context.Context) domain.SearchField {
 	if setting, exists, _ := s.GetSetting(ctx, SettingSearchOver); exists && setting.IsString() {
-		return planviewer.SearchField(setting.GetStringValue())
+		return domain.SearchField(setting.GetStringValue())
 	}
-	return planviewer.DefaultSearchOver
+	return domain.DefaultSearchOver
 }
 
 // getClipboardMode returns the stored clipboard mode setting, or the default.

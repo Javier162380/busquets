@@ -1,12 +1,12 @@
 package dto
 
-import planviewer "github.com/Javier162380/busquets"
+import domain "github.com/Javier162380/busquets"
 
 // ConnectorRole is re-exported from the root package as a type alias so
 // existing call sites continue to compile without modification.
-type ConnectorRole = planviewer.ConnectorRole
+type ConnectorRole = domain.ConnectorRole
 
 const (
-	ConnectorRoleTransmit = planviewer.ConnectorRoleTransmit
-	ConnectorRoleSummary  = planviewer.ConnectorRoleSummary
+	ConnectorRoleTransmit = domain.ConnectorRoleTransmit
+	ConnectorRoleSummary  = domain.ConnectorRoleSummary
 )

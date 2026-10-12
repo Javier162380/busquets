@@ -1,4 +1,4 @@
-package planviewer
+package domain
 
 // SearchField identifies which plan fields to search over.
 type SearchField string

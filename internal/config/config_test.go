@@ -330,6 +330,36 @@ connection_string = "postgres://example"
 		require.Equal(t, BackendPostgres, cfg.Database.Backend)
 	})
 
+	t.Run("reads paths.plans_dirs from busquets.toml", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		require.NoError(t, os.WriteFile(ConfigFileName, []byte(`
+[database]
+backend = "sqlite"
+
+[paths]
+[[paths.plans_dirs]]
+  path  = "/Users/llorenj1/.claude/plans"
+  label = "claudeRoot"
+
+[[paths.plans_dirs]]
+  path  = "/Users/llorenj1/fuga/trends-data-platform/docs/superpowers/plans"
+  label = "trendsDataPlatformPlans"
+
+[[paths.plans_dirs]]
+  path  = "/Users/llorenj1/fuga/trends-data-platform/docs/superpowers/specs"
+  label = "trendsDataPlatformSpecs"
+`), 0o600))
+
+		cfg, err := LoadConfig()
+		require.NoError(t, err)
+		require.Equal(t, BackendSQLite, cfg.Database.Backend)
+		require.Equal(t, []SyncDir{
+			{Path: "/Users/llorenj1/.claude/plans", Label: "claudeRoot"},
+			{Path: "/Users/llorenj1/fuga/trends-data-platform/docs/superpowers/plans", Label: "trendsDataPlatformPlans"},
+			{Path: "/Users/llorenj1/fuga/trends-data-platform/docs/superpowers/specs", Label: "trendsDataPlatformSpecs"},
+		}, cfg.Paths.PlansDirs)
+	})
+
 	t.Run("falls back to the legacy plan-viewer.toml name when busquets.toml is absent", func(t *testing.T) {
 		t.Chdir(t.TempDir())
 		require.NoError(t, os.WriteFile(LegacyConfigFileName, []byte(`

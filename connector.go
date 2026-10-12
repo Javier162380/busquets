@@ -1,7 +1,7 @@
-// Package planviewer defines the shared connector domain types used by both
+// Package domain defines the shared connector domain types used by both
 // the internal connector plugin system and the service layer, breaking the
 // otherwise-inverted dependency from internal/ into services/.
-package planviewer
+package domain
 
 import (
 	"context"
