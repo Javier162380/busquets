@@ -712,7 +712,7 @@ func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource s
 		pending = pending[:limit]
 	}
 
-	narrated := make([]SavePlanMemoryEvent, 0, len(pending))
+	narratedEvents := make([]SavePlanMemoryEvent, 0, len(pending))
 	truncatedEvents := 0
 	progress.Total = len(pending)
 
@@ -728,9 +728,7 @@ func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource s
 			if ctx.Err() != nil {
 				return nil, genErr // rewritten by the deferred cancel check
 			}
-			// Keep whatever has already been written rather than losing a long
-			// run to one failure, and surface the error either way.
-			if len(narrated) == 0 {
+			if len(narratedEvents) == 0 {
 				return nil, fmt.Errorf("failed to narrate event %d: %w", prompt.Event.RefID, genErr)
 			}
 			s.logger.Warn("memory generation stopped early",
@@ -744,14 +742,14 @@ func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource s
 			narrative += "\n\n_(written from truncated content)_"
 		}
 
-		narrated = append(narrated, SavePlanMemoryEvent{
+		narratedEvents = append(narratedEvents, SavePlanMemoryEvent{
 			Kind:      prompt.Event.Kind,
 			RefID:     prompt.Event.RefID,
 			Narrative: narrative,
 		})
 	}
 
-	if len(narrated) == 0 {
+	if len(narratedEvents) == 0 {
 		return nil, fmt.Errorf("no events could be narrated for %s", fileName)
 	}
 
@@ -765,14 +763,14 @@ func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource s
 			"file_name", fileName, "events", truncatedEvents)
 	}
 
-	progress.Current = len(narrated)
+	progress.Current = len(narratedEvents)
 	return s.SavePlanMemory(ctx, SavePlanMemoryRequest{
 		FileName:    fileName,
 		SyncSource:  syncSource,
 		Mode:        mode,
 		Summary:     summary,
 		GeneratedBy: GeneratedByOllama,
-		Events:      narrated,
+		Events:      narratedEvents,
 	})
 }
 

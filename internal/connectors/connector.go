@@ -26,7 +26,7 @@ const MemoryEventSystemPrompt = "You are describing one change in the history of
 	"Write exactly one sentence saying what changed and why it matters. " +
 	"Never state dates, times, version numbers, line counts or word counts — " +
 	"the application supplies those alongside your sentence. " +
-	"Be specific about the substance of the change; do not pad with filler."
+	"Be specific about the substance of the change; do not pad with filler. Remember the first stamp of the plan is Version 0 if present include it in the memory add more description about this implementation"
 
 // SendResult contains the result of a send/generate operation.
 type SendResult struct {
