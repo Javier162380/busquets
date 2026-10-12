@@ -309,11 +309,16 @@ cannot drift from the plan.
 
 **In the TUI**, press `i` on a plan:
 
-- The timeline is on the left, oldest first; the memory document is on the right.
-- `r` writes or updates the memory, narrating only what is new.
+- The timeline is on the left, newest first; the memory document is on the right.
+  `tab` moves between them.
+- `r` writes or updates the memory, narrating only what is new. `esc` cancels a
+  run in progress, and a cancelled run saves nothing.
 - `R` rewrites it from scratch (with a confirmation).
 - `enter` shows the diff behind the selected version.
-- `c` copies the memory, `d` deletes it (the plan and its versions are untouched).
+- `v` on the timeline opens the selected version (or comment) fullscreen; `v` on
+  the memory opens the memory fullscreen. `esc` goes back.
+- `c` copies what is shown, `d` deletes the memory (the plan and its versions are
+  untouched).
 
 The screen opens even before a memory exists — the timeline is already accurate,
 so there is something worth looking at from the start. Writing one needs a
@@ -331,7 +336,10 @@ by a sync.
 
 `memory_max_events_per_run` (settings screen, default 10) bounds how many events
 a single run narrates, so a plan with a long history does not fire a hundred
-LLM calls at once; the rest is picked up by the next run.
+LLM calls at once; the rest is picked up by the next run. A run from the TUI is
+also limited to 3 minutes. Like a cancel, a run that hits the limit saves
+nothing, so if a slow local model keeps reporting `context deadline exceeded`,
+lower `memory_max_events_per_run` and let the memory fill in over a few runs.
 
 ### Tags
 
