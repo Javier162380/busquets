@@ -210,12 +210,12 @@ func (m *Manager) GenerateSummary(ctx context.Context, title, content string) (s
 // requires a connector that implements GenerativeConnector; a messaging-only
 // connector in the summary slot is reported rather than silently doing nothing.
 func (m *Manager) GenerateWithPrompt(ctx context.Context, opts GeneratorOpts) (*SendResult, error) {
-	name, found, err := m.db.GetConnectorForRole(ctx, planviewer.ConnectorRoleSummary)
+	name, found, err := m.db.GetConnectorForRole(ctx, domain.ConnectorRoleSummary)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read summarizer setting: %w", err)
 	}
 	if !found || name == "" {
-		return nil, planviewer.ErrNoSummarizerConfigured
+		return nil, domain.ErrNoSummarizerConfigured
 	}
 
 	connector, ok := m.registry.Get(name)
@@ -243,7 +243,7 @@ func (m *Manager) GenerateWithPrompt(ctx context.Context, opts GeneratorOpts) (*
 		return nil, err
 	}
 	if result.Response == nil {
-		return nil, planviewer.ErrConnectorResponseEmpty
+		return nil, domain.ErrConnectorResponseEmpty
 	}
 	return result, nil
 }
