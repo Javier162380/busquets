@@ -700,12 +700,6 @@ func NewMemoryProgress() chan busquets.MemoryProgress {
 	return make(chan busquets.MemoryProgress, memoryProgressBuffer)
 }
 
-// GenerateMemoryCmd writes a plan's memory through the summary connector.
-// The caller owns ctx and cancels it to abort the run.
-//
-// progress comes from NewMemoryProgress and is closed when the run returns,
-// on every path: GeneratePlanMemory is synchronous, so nothing can send on it
-// afterwards. The close is what ends MemoryChannelListenerCmd.
 func GenerateMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string, mode busquets.MemoryMode, progress chan busquets.MemoryProgress) tea.Cmd {
 	return func() tea.Msg {
 		defer close(progress)
@@ -763,9 +757,7 @@ func LoadMemoryVersionCmd(ctx context.Context, svc busquets.UnifiedService, plan
 	}
 }
 
-// MemoryChannelListenerCmd waits for a run's next progress update. It needs no
-// ctx: GenerateMemoryCmd closes the channel when the run returns, so this
-// receive always completes, and a closed channel ends the chain with nil.
+// MemoryChannelListenerCmd waits for a run's next progress update.
 func MemoryChannelListenerCmd(progress <-chan busquets.MemoryProgress) tea.Cmd {
 	return func() tea.Msg {
 		update, ok := <-progress
