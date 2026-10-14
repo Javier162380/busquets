@@ -3,6 +3,7 @@ package commands
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/Javier162380/busquets/cmd/tui/components"
@@ -666,6 +667,103 @@ func DeleteTagsCmd(ctx context.Context, svc busquets.UnifiedService, tagID int64
 
 		return components.DeleteTagCmdMsg{
 			FileName: fileName,
+		}
+	}
+}
+
+// LoadMemoryCmd loads a plan's memory and its staleness in one step.
+func LoadMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string) tea.Cmd {
+	return func() tea.Msg {
+		memory, err := svc.GetPlanMemory(ctx, planName, syncSource)
+		if err != nil {
+			return messages.ErrorMsg{Error: fmt.Errorf("failed to load memory: %w", err)}
+		}
+		staleness, err := svc.MemoryStaleness(ctx, planName, syncSource)
+		if err != nil {
+			return messages.ErrorMsg{Error: fmt.Errorf("failed to load memory: %w", err)}
+		}
+		return messages.MemoryLoadedMsg{Memory: memory, Staleness: staleness}
+	}
+}
+
+// memoryGenerationTimeout bounds a whole generation run. It is longer than the
+// other commands' timeouts on purpose: a run is one LLM call per event plus the
+// summary, so it needs room for several model round-trips.
+const memoryGenerationTimeout = 3 * time.Minute
+
+// GenerateMemoryCmd writes a plan's memory through the summary connector.
+// The caller owns ctx and cancels it to abort the run; progress is reported
+// through MemoryChannelListenerCmd.
+func GenerateMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string, mode busquets.MemoryMode) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, memoryGenerationTimeout)
+		defer cancel()
+
+		memory, err := svc.GeneratePlanMemory(ctx, planName, syncSource, mode)
+		if err != nil {
+			return messages.MemoryGeneratedMsg{Err: err}
+		}
+		staleness, err := svc.MemoryStaleness(ctx, planName, syncSource)
+		if err != nil {
+			return messages.MemoryGeneratedMsg{Err: err}
+		}
+		return messages.MemoryGeneratedMsg{Memory: memory, Staleness: staleness}
+	}
+}
+
+// DeleteMemoryCmd deletes a plan's memory.
+func DeleteMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string) tea.Cmd {
+	return func() tea.Msg {
+		if err := svc.DeletePlanMemory(ctx, planName, syncSource); err != nil {
+			return messages.ErrorMsg{Error: fmt.Errorf("failed to delete memory: %w", err)}
+		}
+		return messages.DeleteMemoryResultMsg{}
+	}
+}
+
+// MemoryDiffCmd loads the unified diff between two versions of a plan.
+func MemoryDiffCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string, from, to int64) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		diff, err := svc.DiffPlanVersions(ctx, planName, syncSource, from, to)
+		if err != nil {
+			return messages.MemoryDiffLoadedMsg{Err: err}
+		}
+		return messages.MemoryDiffLoadedMsg{Diff: diff.Diff, FromVersion: from, ToVersion: to}
+	}
+}
+
+// LoadMemoryVersionCmd loads the version behind a memory timeline event.
+func LoadMemoryVersionCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string, versionNumber int64) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		defer cancel()
+
+		version, err := svc.GetPlanVersion(ctx, planName, syncSource, versionNumber)
+		if err != nil {
+			return messages.ErrorMsg{Error: fmt.Errorf("failed to load version %d: %w", versionNumber, err)}
+		}
+		return messages.MemoryVersionLoadedMsg{Version: version}
+	}
+}
+
+// MemoryChannelListenerCmd waits for the next generation progress update,
+// mirroring WatchChannelListenerCmd.
+func MemoryChannelListenerCmd(ctx context.Context, svc busquets.UnifiedService) tea.Cmd {
+	return func() tea.Msg {
+		select {
+		case <-ctx.Done():
+			return nil
+		case progress := <-svc.GetMemoryProgressChannel():
+			return messages.MemoryProgressMsg{
+				FileName: progress.FileName,
+				Current:  progress.Current,
+				Total:    progress.Total,
+				Done:     progress.Done,
+				Err:      progress.Err,
+			}
 		}
 	}
 }

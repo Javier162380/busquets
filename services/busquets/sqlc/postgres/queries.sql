@@ -19,7 +19,8 @@ UPDATE plan_versions SET file_path = $1 WHERE id = $2;
 SELECT id, file_name, sync_source, file_path, content FROM plans;
 
 -- name: ListPlanVersionsAll :many
-SELECT * FROM plan_versions WHERE plan_id = $1;
+SELECT * FROM plan_versions WHERE plan_id = $1
+ORDER BY version_number;
 
 -- name: RenamePlanRow :exec
 UPDATE plans
@@ -262,3 +263,28 @@ DELETE FROM plan_comments WHERE id = $1;
 
 -- name: GetPlanCommentCounts :many
 SELECT plan_id, COUNT(*) AS comment_count FROM plan_comments GROUP BY plan_id;
+
+-- Memory queries
+
+-- name: UpsertPlanMemory :one
+INSERT INTO plan_memories (
+    plan_id, file_path, content, summary,
+    covers_up_to_version, covers_up_to_comment_id,
+    generated_by, created_at, updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+ON CONFLICT (plan_id) DO UPDATE SET
+    file_path               = EXCLUDED.file_path,
+    content                 = EXCLUDED.content,
+    summary                 = EXCLUDED.summary,
+    covers_up_to_version    = EXCLUDED.covers_up_to_version,
+    covers_up_to_comment_id = EXCLUDED.covers_up_to_comment_id,
+    generated_by            = EXCLUDED.generated_by,
+    updated_at              = EXCLUDED.updated_at
+RETURNING *;
+
+-- name: GetPlanMemoryByPlanID :one
+SELECT * FROM plan_memories WHERE plan_id = $1;
+
+-- name: DeletePlanMemories :exec
+DELETE FROM plan_memories WHERE plan_id = $1;

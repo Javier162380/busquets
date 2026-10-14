@@ -478,3 +478,81 @@ type DeleteCommentResultMsg struct {
 type ContentSearchErrorMsg struct {
 	Error error
 }
+
+// RequestMemoryScreenMsg requests opening the memory screen for a plan.
+type RequestMemoryScreenMsg struct {
+	PlanName   string
+	SyncSource string
+}
+
+// MemoryLoadedMsg carries a plan's memory and its computed timeline.
+type MemoryLoadedMsg struct {
+	Memory    *busquets.PlanMemory
+	Staleness busquets.MemoryStaleness
+}
+
+// GenerateMemoryMsg requests writing a plan's memory via the summary connector.
+type GenerateMemoryMsg struct {
+	PlanName   string
+	SyncSource string
+	Mode       busquets.MemoryMode
+}
+
+// CancelMemoryGenerationMsg asks the App to cancel the in-flight generation run.
+type CancelMemoryGenerationMsg struct{}
+
+// MemoryGeneratedMsg carries the result of a generation run.
+type MemoryGeneratedMsg struct {
+	Memory    *busquets.PlanMemory
+	Staleness busquets.MemoryStaleness
+	Err       error
+}
+
+// MemoryProgressMsg reports generation progress, one per narrated event.
+type MemoryProgressMsg struct {
+	FileName string
+	Current  int
+	Total    int
+	Done     bool
+	Err      error
+}
+
+// DeleteMemoryMsg requests deleting a plan's memory.
+type DeleteMemoryMsg struct {
+	PlanName   string
+	SyncSource string
+}
+
+// DeleteMemoryResultMsg reports a successful memory delete; failures arrive as
+// ErrorMsg.
+type DeleteMemoryResultMsg struct{}
+
+// RequestMemoryDiffMsg asks for the diff behind a timeline event.
+type RequestMemoryDiffMsg struct {
+	PlanName    string
+	SyncSource  string
+	FromVersion int64
+	ToVersion   int64
+}
+
+// RequestMemoryVersionMsg asks for the content of the version behind a
+// timeline event, for the memory screen's version pane.
+type RequestMemoryVersionMsg struct {
+	PlanName      string
+	SyncSource    string
+	VersionNumber int64
+}
+
+// MemoryVersionLoadedMsg carries a timeline event's version; failures arrive
+// as ErrorMsg.
+type MemoryVersionLoadedMsg struct {
+	Version *busquets.PlanVersionDetail
+}
+
+// MemoryDiffLoadedMsg carries a timeline event's unified diff.
+type MemoryDiffLoadedMsg struct {
+	Diff        string
+	FromVersion int64
+	ToVersion   int64
+	Err         error
+}

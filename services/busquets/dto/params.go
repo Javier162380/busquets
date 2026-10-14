@@ -155,3 +155,17 @@ type InsertCommentParams struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 }
+
+// UpsertPlanMemoryParams creates or replaces a plan's memory. CreatedAt is
+// ignored when the row already exists.
+type UpsertPlanMemoryParams struct {
+	PlanID              int64
+	FilePath            string
+	Content             string
+	Summary             string
+	CoversUpToVersion   int64
+	CoversUpToCommentID int64
+	GeneratedBy         string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}

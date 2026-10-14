@@ -137,3 +137,94 @@ type TLDRPrompt struct {
 	SystemPrompt string `json:"systemPrompt"`
 	UserPrompt   string `json:"userPrompt"`
 }
+
+// GetPlanMemoryArgs contains arguments for the get_plan_memory tool.
+type GetPlanMemoryArgs struct {
+	FileName   string `json:"fileName"`
+	SyncSource string `json:"syncSource"`
+}
+
+// GenerateMemoryPromptArgs contains arguments for the generate_memory_prompt tool.
+type GenerateMemoryPromptArgs struct {
+	FileName   string `json:"fileName"`
+	SyncSource string `json:"syncSource"`
+	// Rebuild asks for every event rather than only those not yet narrated.
+	Rebuild bool `json:"rebuild,omitempty"`
+}
+
+// SaveMemoryEventArg is one narrative supplied by the caller. Only the event's
+// identity and its prose are accepted — timestamps and change stats are
+// computed by busquets and ignored if sent.
+type SaveMemoryEventArg struct {
+	EventKind string `json:"eventKind"` // "version", "restore" or "comment"
+	RefID     int64  `json:"refId"`
+	Narrative string `json:"narrative"`
+}
+
+// SavePlanMemoryArgs contains arguments for the save_plan_memory tool.
+type SavePlanMemoryArgs struct {
+	FileName   string               `json:"fileName"`
+	SyncSource string               `json:"syncSource"`
+	Mode       string               `json:"mode,omitempty"` // "incremental" (default) or "rebuild"
+	Summary    string               `json:"summary,omitempty"`
+	Events     []SaveMemoryEventArg `json:"events"`
+}
+
+// DeletePlanMemoryArgs contains arguments for the delete_plan_memory tool.
+type DeletePlanMemoryArgs struct {
+	FileName   string `json:"fileName"`
+	SyncSource string `json:"syncSource"`
+}
+
+// MemoryPromptResult is what generate_memory_prompt returns: the prompts plus
+// the events still to narrate. No LLM is called and no key is needed — the
+// calling assistant writes the narratives and persists them via save_plan_memory.
+type MemoryPromptResult struct {
+	FileName            string              `json:"fileName"`
+	SyncSource          string              `json:"syncSource"`
+	PlanTitle           string              `json:"planTitle"`
+	Mode                string              `json:"mode"`
+	SummarySystemPrompt string              `json:"summarySystemPrompt"`
+	SummaryUserPrompt   string              `json:"summaryUserPrompt"`
+	EventSystemPrompt   string              `json:"eventSystemPrompt"`
+	Events              []MemoryEventPrompt `json:"events"`
+}
+
+// MemoryEventPrompt is one event to narrate, with its request.
+type MemoryEventPrompt struct {
+	EventKind     string `json:"eventKind"`
+	RefID         int64  `json:"refId"`
+	VersionNumber *int64 `json:"versionNumber,omitempty"`
+	OccurredAt    string `json:"occurredAt"`
+	LinesAdded    int    `json:"linesAdded"`
+	LinesRemoved  int    `json:"linesRemoved"`
+	UserPrompt    string `json:"userPrompt"`
+}
+
+// PlanMemoryResult wraps a memory and its computed timeline.
+type PlanMemoryResult struct {
+	FileName            string             `json:"fileName"`
+	SyncSource          string             `json:"syncSource"`
+	PlanTitle           string             `json:"planTitle"`
+	Exists              bool               `json:"exists"`
+	Summary             string             `json:"summary,omitempty"`
+	Content             string             `json:"content,omitempty"`
+	CoversUpToVersion   int64              `json:"coversUpToVersion"`
+	CoversUpToCommentID int64              `json:"coversUpToCommentId"`
+	GeneratedBy         string             `json:"generatedBy,omitempty"`
+	NewVersions         int                `json:"newVersions"`
+	NewComments         int                `json:"newComments"`
+	Events              []MemoryEventEntry `json:"events"`
+}
+
+// MemoryEventEntry is one timeline entry as returned to an MCP caller.
+type MemoryEventEntry struct {
+	EventKind     string `json:"eventKind"`
+	RefID         int64  `json:"refId"`
+	VersionNumber *int64 `json:"versionNumber,omitempty"`
+	RestoredFrom  *int64 `json:"restoredFrom,omitempty"`
+	OccurredAt    string `json:"occurredAt"`
+	LinesAdded    int    `json:"linesAdded"`
+	LinesRemoved  int    `json:"linesRemoved"`
+	WordCount     int    `json:"wordCount"`
+}

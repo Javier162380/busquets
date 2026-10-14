@@ -21,6 +21,11 @@ import (
 // ~/.claude-viewer directory post-rebrand and confuse
 // config.MigrateLegacyViewerDir on the next run.
 func StartWithOptions(ctx context.Context, service busquets.UnifiedService, debug bool, logger *slog.Logger, viewerDir string) error {
+	// Cancelled when the TUI exits, so an in-flight memory generation and the
+	// channel listeners stop with it instead of running until the process ends.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	app := New(ctx, service)
 
 	if debug {

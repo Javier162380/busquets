@@ -40,6 +40,10 @@ type App struct {
 	displayMode             string
 	markdownRenderedTheme   string
 	screenOrientation       string
+
+	// cancelMemoryGeneration aborts the in-flight memory generation run; nil
+	// when none is running.
+	cancelMemoryGeneration context.CancelFunc
 }
 
 // New creates a new TUI application.
@@ -297,6 +301,30 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleRestoreVersion(msg)
 	case messages.RestoreResultMsg:
 		return a.handleRestoreResult(msg)
+	case messages.RequestMemoryScreenMsg:
+		return a.handleRequestMemoryScreen(msg)
+	case messages.MemoryLoadedMsg:
+		return a.handleMemoryLoaded(msg)
+	case messages.GenerateMemoryMsg:
+		return a.handleGenerateMemory(msg)
+	case messages.MemoryProgressMsg:
+		return a.handleMemoryProgress(msg)
+	case messages.MemoryGeneratedMsg:
+		return a.handleMemoryGenerated(msg)
+	case messages.CancelMemoryGenerationMsg:
+		return a.handleCancelMemoryGeneration()
+	case messages.DeleteMemoryMsg:
+		return a.handleDeleteMemory(msg)
+	case messages.DeleteMemoryResultMsg:
+		return a.handleDeleteMemoryResult(msg)
+	case messages.RequestMemoryDiffMsg:
+		return a.handleRequestMemoryDiff(msg)
+	case messages.MemoryDiffLoadedMsg:
+		return a.handleMemoryDiffLoaded(msg)
+	case messages.RequestMemoryVersionMsg:
+		return a.handleRequestMemoryVersion(msg)
+	case messages.MemoryVersionLoadedMsg:
+		return a.delegateToCurrentScreen(msg)
 	case messages.OpenCommentModalMsg:
 		return a.handleOpenCommentModal(msg)
 	case messages.CommentsLoadedMsg:
@@ -384,6 +412,16 @@ func (a *App) pushVersionsScreenWithData(planID int64, planName string, versions
 	versionsScreen := screens.NewVersionsScreenWithData(planID, planName, a.markdownRenderedTheme, versions, a.width, a.height, a.isDarkModeEnabled, a.renderMarkDownByDefault, a.screenOrientation)
 	a.stack = append(a.stack, versionsScreen)
 	return versionsScreen.Init()
+}
+
+func (a *App) pushMemoryScreen(msg messages.MemoryLoadedMsg) tea.Cmd {
+	memoryScreen := screens.NewMemoryScreenWithData(
+		msg.Memory.FileName, msg.Memory.SyncSource, a.markdownRenderedTheme,
+		msg.Memory, msg.Staleness,
+		a.width, a.height, a.isDarkModeEnabled, a.renderMarkDownByDefault, a.screenOrientation,
+	)
+	a.stack = append(a.stack, memoryScreen)
+	return memoryScreen.Init()
 }
 
 func (a *App) pushSettingsScreen() tea.Cmd {

@@ -70,6 +70,20 @@ type ConnectorService interface {
 	ClearSummaryConnector(ctx context.Context) error
 }
 
+// MemoryService defines plan-memory operations. Only GeneratePlanMemory calls
+// an LLM; everything else is computed or caller-supplied.
+type MemoryService interface {
+	GetPlanMemory(ctx context.Context, fileName, syncSource string) (*PlanMemory, error)
+	BuildMemoryTimeline(ctx context.Context, fileName, syncSource string) ([]MemoryEvent, error)
+	MemoryStaleness(ctx context.Context, fileName, syncSource string) (MemoryStaleness, error)
+	BuildMemoryPrompts(ctx context.Context, fileName, syncSource string, mode MemoryMode) (*MemoryPromptSet, error)
+	SavePlanMemory(ctx context.Context, req SavePlanMemoryRequest) (*PlanMemory, error)
+	DeletePlanMemory(ctx context.Context, fileName, syncSource string) error
+	// GeneratePlanMemory is the only memory call that reaches an LLM.
+	GeneratePlanMemory(ctx context.Context, fileName, syncSource string, mode MemoryMode) (*PlanMemory, error)
+	GetMemoryProgressChannel() <-chan MemoryProgress
+}
+
 // CommentService defines comment operations.
 type CommentService interface {
 	AddComment(ctx context.Context, planFileName, syncSource, content string) (Comment, error)
@@ -95,6 +109,7 @@ type UnifiedService interface {
 	ConnectorService
 	WatchService
 	CommentService
+	MemoryService
 }
 
 // Verify that *Service implements UnifiedService at compile time.

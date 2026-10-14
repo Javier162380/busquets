@@ -96,6 +96,15 @@ type Repository interface {
 	DeleteComment(ctx context.Context, id int64) error
 	GetPlanCommentCounts(ctx context.Context) (map[int64]int, error)
 
+	// Memory operations
+	// UpsertPlanMemory runs writeFile inside the row write's transaction, so a
+	// failed markdown write rolls the row back with it.
+	UpsertPlanMemory(ctx context.Context, params UpsertPlanMemoryParams, writeFile func() error) (PlanMemory, error)
+	GetPlanMemoryByPlanID(ctx context.Context, planID int64) (PlanMemory, error)
+	// DeletePlanMemories runs deleteFile inside the delete's transaction, so a
+	// failed file removal rolls the row delete back with it.
+	DeletePlanMemories(ctx context.Context, planID int64, deleteFile func() error) error
+
 	// Plan-Tag associations
 	AddTagToPlan(ctx context.Context, planID, tagID int64, assignedAt time.Time) error
 	RemoveTagFromPlan(ctx context.Context, planID, tagID int64) error
