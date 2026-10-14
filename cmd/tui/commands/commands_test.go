@@ -241,3 +241,38 @@ func TestClearStatusCmd(t *testing.T) {
 		require.True(t, ok)
 	})
 }
+
+func TestMemoryProgressCmds(t *testing.T) {
+	t.Run("GenerateMemoryCmd closes the progress channel on an early return", func(t *testing.T) {
+		svc, sourceDir, cleanup := setupTestService(t)
+		defer cleanup()
+
+		// No connector manager is configured, so the run returns straight away.
+		progress := NewMemoryProgress()
+		msg := GenerateMemoryCmd(context.Background(), svc, "plan.md", sourceDir, busquets.MemoryModeIncremental, progress)()
+
+		generated, ok := msg.(messages.MemoryGeneratedMsg)
+		require.True(t, ok)
+		require.EqualError(t, generated.Err, "connector not initialized")
+
+		_, open := <-progress
+		require.False(t, open, "the channel must be closed once the run returns")
+	})
+
+	t.Run("MemoryChannelListenerCmd returns the update with its source channel", func(t *testing.T) {
+		progress := NewMemoryProgress()
+		progress <- busquets.MemoryProgress{FileName: "plan.md", SyncSource: "/src", Current: 1, Total: 3}
+
+		msg := MemoryChannelListenerCmd(progress)()
+		require.Equal(t, messages.MemoryProgressMsg{
+			FileName: "plan.md", Current: 1, Total: 3, Source: progress,
+		}, msg)
+	})
+
+	t.Run("MemoryChannelListenerCmd returns nil once the channel is closed", func(t *testing.T) {
+		progress := NewMemoryProgress()
+		close(progress)
+
+		require.Nil(t, MemoryChannelListenerCmd(progress)())
+	})
+}

@@ -37,9 +37,13 @@ func (a *App) handleGenerateMemory(msg messages.GenerateMemoryMsg) (tea.Model, t
 	ctx, cancel := context.WithCancel(a.ctx)
 	a.cancelMemoryGeneration = cancel
 
+	// One channel per run: GenerateMemoryCmd sends on it and closes it when
+	// the run returns, and the listener chain reads from it until then.
+	progress := commands.NewMemoryProgress()
+
 	cmds := []tea.Cmd{
-		commands.GenerateMemoryCmd(ctx, a.service, msg.PlanName, msg.SyncSource, msg.Mode),
-		commands.MemoryChannelListenerCmd(a.ctx, a.service),
+		commands.GenerateMemoryCmd(ctx, a.service, msg.PlanName, msg.SyncSource, msg.Mode, progress),
+		commands.MemoryChannelListenerCmd(progress),
 	}
 	a.statusBar.SetLoading("Writing memory...")
 	cmds = append(cmds, commands.ClearStatusCmd(memoryStatusDuration))
@@ -56,17 +60,13 @@ func (a *App) handleCancelMemoryGeneration() (tea.Model, tea.Cmd) {
 }
 
 func (a *App) handleMemoryProgress(msg messages.MemoryProgressMsg) (tea.Model, tea.Cmd) {
-	if msg.Done {
-		// The terminal update is reported by MemoryGeneratedMsg, which carries
-		// the saved memory; stop listening here.
-		return a, nil
-	}
-	cmds := []tea.Cmd{commands.MemoryChannelListenerCmd(a.ctx, a.service)}
+	// Keep listening on the same run's channel; its close ends the chain, and
+	// the outcome arrives separately as MemoryGeneratedMsg.
+	cmds := []tea.Cmd{commands.MemoryChannelListenerCmd(msg.Source)}
 	if msg.Total > 0 {
 		a.statusBar.SetLoading(fmt.Sprintf("Writing memory... event %d/%d", msg.Current, msg.Total))
 		cmds = append(cmds, commands.ClearStatusCmd(memoryStatusDuration))
 	}
-	// Keep listening for the next update.
 	return a, tea.Batch(cmds...)
 }
 

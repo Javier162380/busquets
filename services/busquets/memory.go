@@ -640,30 +640,25 @@ func (s *Service) MemoryMaxEventsPerRun(ctx context.Context) int {
 	return DefaultMemoryMaxEventsPerRun
 }
 
-// MemoryProgress reports how far a generation run has got. Emitted per event so
-// a long first run does not look frozen.
+// MemoryProgress reports how far a generation run has got. Sent per event so a
+// long first run does not look frozen. The run's outcome is GeneratePlanMemory's
+// return value, not a progress update.
 type MemoryProgress struct {
 	FileName   string
 	SyncSource string
 	Current    int
 	Total      int
-	Done       bool
-	Err        error
 }
 
-// GetMemoryProgressChannel returns the channel carrying generation progress.
-func (s *Service) GetMemoryProgressChannel() <-chan MemoryProgress {
-	return s.memoryProgress
-}
-
-// emitMemoryProgress publishes progress without blocking: generation must not
-// stall because nobody is listening, and a dropped update is only a repaint.
-func (s *Service) emitMemoryProgress(progress MemoryProgress) {
-	if s.memoryProgress == nil {
+// sendMemoryProgress never blocks generation: a nil channel means the caller
+// wants no progress (a send on nil would block forever), and a full buffer
+// drops the update, which only costs a repaint.
+func sendMemoryProgress(progress chan<- MemoryProgress, update MemoryProgress) {
+	if progress == nil {
 		return
 	}
 	select {
-	case s.memoryProgress <- progress:
+	case progress <- update:
 	default:
 	}
 }
@@ -675,13 +670,13 @@ func (s *Service) emitMemoryProgress(progress MemoryProgress) {
 // the concatenated diffs of a long history, and truncation there is silent, so
 // each event is asked about on its own.
 //
-// A Done update is emitted on every return path: the TUI re-arms its progress
-// listener until it sees one, so a missing Done leaks a blocked listener.
+// progress receives one update per event and may be nil. The caller owns it:
+// GeneratePlanMemory only sends, and never after it returns, so the caller
+// closes it once the call is back.
 //
 // Cancelling ctx abandons the run without saving: nothing is written, so the
 // watermarks stay put and the next run picks up the same events.
-func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource string, mode MemoryMode) (memory *PlanMemory, err error) {
-	progress := MemoryProgress{FileName: fileName, SyncSource: syncSource}
+func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource string, mode MemoryMode, progress chan<- MemoryProgress) (memory *PlanMemory, err error) {
 	defer func() {
 		// A cancel can surface from any step (prompt build, a narration, the
 		// summary or the save); report it the same way whichever step it hit.
@@ -690,9 +685,6 @@ func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource s
 				memory, err = nil, fmt.Errorf("memory generation stopped: %w", ctxErr)
 			}
 		}
-		progress.Done = true
-		progress.Err = err
-		s.emitMemoryProgress(progress)
 	}()
 
 	if s.connectorManager == nil {
@@ -714,11 +706,11 @@ func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource s
 
 	narratedEvents := make([]SavePlanMemoryEvent, 0, len(pending))
 	truncatedEvents := 0
-	progress.Total = len(pending)
-
 	for index, prompt := range pending {
-		progress.Current = index + 1
-		s.emitMemoryProgress(progress)
+		sendMemoryProgress(progress, MemoryProgress{
+			FileName: fileName, SyncSource: syncSource,
+			Current: index + 1, Total: len(pending),
+		})
 
 		result, genErr := s.connectorManager.GenerateWithPrompt(ctx, connectors.GeneratorOpts{
 			SystemPrompt: prompts.EventSystemPrompt,
@@ -763,7 +755,6 @@ func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource s
 			"file_name", fileName, "events", truncatedEvents)
 	}
 
-	progress.Current = len(narratedEvents)
 	return s.SavePlanMemory(ctx, SavePlanMemoryRequest{
 		FileName:    fileName,
 		SyncSource:  syncSource,

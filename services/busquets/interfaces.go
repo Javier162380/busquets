@@ -80,8 +80,7 @@ type MemoryService interface {
 	SavePlanMemory(ctx context.Context, req SavePlanMemoryRequest) (*PlanMemory, error)
 	DeletePlanMemory(ctx context.Context, fileName, syncSource string) error
 	// GeneratePlanMemory is the only memory call that reaches an LLM.
-	GeneratePlanMemory(ctx context.Context, fileName, syncSource string, mode MemoryMode) (*PlanMemory, error)
-	GetMemoryProgressChannel() <-chan MemoryProgress
+	GeneratePlanMemory(ctx context.Context, fileName, syncSource string, mode MemoryMode, progress chan<- MemoryProgress) (*PlanMemory, error)
 }
 
 // CommentService defines comment operations.

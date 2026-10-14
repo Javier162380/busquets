@@ -5354,7 +5354,7 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 				return response("**Goal**: ship it."), nil
 			}).Times(2)
 
-		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental, nil)
 		require.NoError(t, err)
 		require.True(t, memory.Exists())
 		require.Equal(t, GeneratedByOllama, memory.GeneratedBy)
@@ -5376,12 +5376,12 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 		mock := setupMockGenerativeConnector(t, ctrl, service)
 		mock.EXPECT().Generate(gomock.Any(), gomock.Any()).Return(response("something"), nil).Times(2)
 
-		_, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		_, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental, nil)
 		require.NoError(t, err)
 
 		// No further Generate calls are expected: the gomock controller fails the
 		// test if this run reaches the connector at all.
-		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental, nil)
 		require.NoError(t, err)
 		require.True(t, memory.Exists())
 	})
@@ -5405,7 +5405,7 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 				return result, nil
 			}).Times(2)
 
-		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental, nil)
 		require.NoError(t, err)
 		require.Contains(t, memory.Content, "_(written from truncated content)_")
 	})
@@ -5434,7 +5434,7 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 		// One event (the cap) plus the summary, not both events.
 		mock.EXPECT().Generate(gomock.Any(), gomock.Any()).Return(response("narrative"), nil).Times(2)
 
-		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental, nil)
 		require.NoError(t, err)
 		require.Equal(t, int64(0), memory.CoversUpToVersion, "only the first event is covered")
 
@@ -5455,7 +5455,7 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 		mock := setupMockGenerativeConnector(t, ctrl, service)
 		mock.EXPECT().Generate(gomock.Any(), gomock.Any()).Return(nil, errors.New("model is down")).Times(1)
 
-		_, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		_, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental, nil)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "model is down")
 
@@ -5488,7 +5488,7 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 			mock.EXPECT().Generate(gomock.Any(), gomock.Any()).Return(response("summary"), nil),
 		)
 
-		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		memory, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental, nil)
 		require.NoError(t, err)
 		require.Contains(t, memory.Content, "first event")
 		require.Equal(t, int64(0), memory.CoversUpToVersion, "the failed event stays pending")
@@ -5512,7 +5512,7 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 		service.SetConnectorManager(manager)
 		require.NoError(t, manager.SetSummaryConnector(ctx, "mock-plain"))
 
-		_, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		_, err := service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental, nil)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "cannot answer arbitrary prompts")
 	})
@@ -5523,36 +5523,46 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 
 		name := syncedPlan(t, service, sourceDir)
 
-		_, err := service.GeneratePlanMemory(context.Background(), name, sourceDir, MemoryModeIncremental)
+		// A nil progress channel is fine: the early return sends nothing.
+		_, err := service.GeneratePlanMemory(context.Background(), name, sourceDir, MemoryModeIncremental, nil)
 		require.ErrorIs(t, err, dto.ErrConnectorDisabled)
 	})
 
-	// lastProgress drains the progress channel and returns its final update.
-	lastProgress := func(t *testing.T, service *Service) MemoryProgress {
-		t.Helper()
-		var last MemoryProgress
-		for {
-			select {
-			case progress := <-service.GetMemoryProgressChannel():
-				last = progress
-			default:
-				return last
-			}
-		}
-	}
+	t.Run("GeneratePlanMemory reports one progress update per event", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
 
-	t.Run("GeneratePlanMemory ends with a Done update on an early return", func(t *testing.T) {
 		service, sourceDir, _, cleanup := setup(t)
 		defer cleanup()
+		ctx := context.Background()
 
 		name := syncedPlan(t, service, sourceDir)
+		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
+		require.NoError(t, err)
+		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+			FileName: name, SyncSource: sourceDir,
+			NewContent: sampleMarkdown + "\nSecond.\n", LastModifiedTime: plan.ModifiedAt,
+		})
+		require.NoError(t, err)
 
-		_, err := service.GeneratePlanMemory(context.Background(), name, sourceDir, MemoryModeIncremental)
-		require.ErrorIs(t, err, dto.ErrConnectorDisabled)
+		// Two events, then the header summary.
+		mock := setupMockGenerativeConnector(t, ctrl, service)
+		mock.EXPECT().Generate(gomock.Any(), gomock.Any()).Return(response("narrated"), nil).Times(3)
 
-		last := lastProgress(t, service)
-		require.True(t, last.Done, "the TUI listener only stops on Done")
-		require.ErrorIs(t, last.Err, dto.ErrConnectorDisabled)
+		progress := make(chan MemoryProgress, 8)
+		_, err = service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental, progress)
+		require.NoError(t, err)
+
+		// The service only sends; the caller closes the channel once it returns.
+		close(progress)
+		var updates []MemoryProgress
+		for update := range progress {
+			updates = append(updates, update)
+		}
+		require.Equal(t, []MemoryProgress{
+			{FileName: name, SyncSource: sourceDir, Current: 1, Total: 2},
+			{FileName: name, SyncSource: sourceDir, Current: 2, Total: 2},
+		}, updates)
 	})
 
 	t.Run("GeneratePlanMemory saves nothing when cancelled mid-run", func(t *testing.T) {
@@ -5586,17 +5596,13 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 				}),
 		)
 
-		_, err = service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental)
+		_, err = service.GeneratePlanMemory(ctx, name, sourceDir, MemoryModeIncremental, nil)
 		require.ErrorIs(t, err, context.Canceled)
 
 		memory, err := service.GetPlanMemory(context.Background(), name, sourceDir)
 		require.NoError(t, err)
 		require.False(t, memory.Exists(), "a cancelled run writes nothing")
 		require.Equal(t, NoMemoryCoverage, memory.CoversUpToVersion)
-
-		last := lastProgress(t, service)
-		require.True(t, last.Done)
-		require.ErrorIs(t, last.Err, context.Canceled)
 	})
 
 	t.Run("MemoryMaxEventsPerRun falls back to the default", func(t *testing.T) {

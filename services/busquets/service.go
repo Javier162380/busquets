@@ -23,10 +23,6 @@ import (
 const (
 	summaryCacheTTL      = time.Hour
 	summaryCacheGCPeriod = 10 * time.Minute
-
-	// memoryProgressBuffer keeps generation from blocking when nothing is
-	// listening — the CLI and MCP paths never read this channel.
-	memoryProgressBuffer = 32
 )
 
 // Service represents the Busquets service.
@@ -39,7 +35,6 @@ type Service struct {
 	connectorManager *connectors.Manager
 	watchManager     *WatchManager
 	summaryCache     *cache.MuxCache[string]
-	memoryProgress   chan MemoryProgress
 	logger           *slog.Logger
 	clipboard        clipboard.Clipboard
 }
@@ -71,7 +66,6 @@ func New(ctx context.Context, db dto.Repository, viewerDir string, syncDirs []co
 		indexFullContent: indexFullContent,
 		nowProvider:      nowprovider.SystemTimeProvider{},
 		summaryCache:     cache.New[string](summaryCacheTTL, summaryCacheGCPeriod),
-		memoryProgress:   make(chan MemoryProgress, memoryProgressBuffer),
 		logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
 		clipboard:        clipboard.SystemClipboard{},
 	}

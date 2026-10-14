@@ -691,15 +691,23 @@ func LoadMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planName, s
 // summary, so it needs room for several model round-trips.
 const memoryGenerationTimeout = 3 * time.Minute
 
-// GenerateMemoryCmd writes a plan's memory through the summary connector.
-// The caller owns ctx and cancels it to abort the run; progress is reported
-// through MemoryChannelListenerCmd.
-func GenerateMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string, mode busquets.MemoryMode) tea.Cmd {
+// memoryProgressBuffer bounds the updates one run can queue; when it is full an
+// update is dropped rather than stalling generation.
+const memoryProgressBuffer = 32
+
+// NewMemoryProgress creates the progress channel for one generation run.
+func NewMemoryProgress() chan busquets.MemoryProgress {
+	return make(chan busquets.MemoryProgress, memoryProgressBuffer)
+}
+
+func GenerateMemoryCmd(ctx context.Context, svc busquets.UnifiedService, planName, syncSource string, mode busquets.MemoryMode, progress chan busquets.MemoryProgress) tea.Cmd {
 	return func() tea.Msg {
+		defer close(progress)
+
 		ctx, cancel := context.WithTimeout(ctx, memoryGenerationTimeout)
 		defer cancel()
 
-		memory, err := svc.GeneratePlanMemory(ctx, planName, syncSource, mode)
+		memory, err := svc.GeneratePlanMemory(ctx, planName, syncSource, mode, progress)
 		if err != nil {
 			return messages.MemoryGeneratedMsg{Err: err}
 		}
@@ -749,21 +757,18 @@ func LoadMemoryVersionCmd(ctx context.Context, svc busquets.UnifiedService, plan
 	}
 }
 
-// MemoryChannelListenerCmd waits for the next generation progress update,
-// mirroring WatchChannelListenerCmd.
-func MemoryChannelListenerCmd(ctx context.Context, svc busquets.UnifiedService) tea.Cmd {
+// MemoryChannelListenerCmd waits for a run's next progress update.
+func MemoryChannelListenerCmd(progress <-chan busquets.MemoryProgress) tea.Cmd {
 	return func() tea.Msg {
-		select {
-		case <-ctx.Done():
+		update, ok := <-progress
+		if !ok {
 			return nil
-		case progress := <-svc.GetMemoryProgressChannel():
-			return messages.MemoryProgressMsg{
-				FileName: progress.FileName,
-				Current:  progress.Current,
-				Total:    progress.Total,
-				Done:     progress.Done,
-				Err:      progress.Err,
-			}
+		}
+		return messages.MemoryProgressMsg{
+			FileName: update.FileName,
+			Current:  update.Current,
+			Total:    update.Total,
+			Source:   progress,
 		}
 	}
 }
