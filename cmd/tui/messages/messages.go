@@ -509,12 +509,13 @@ type MemoryGeneratedMsg struct {
 }
 
 // MemoryProgressMsg reports generation progress, one per narrated event.
+// Source is the run's progress channel, so the next listener reads from the
+// same run and never from a later one.
 type MemoryProgressMsg struct {
 	FileName string
 	Current  int
 	Total    int
-	Done     bool
-	Err      error
+	Source   <-chan busquets.MemoryProgress
 }
 
 // DeleteMemoryMsg requests deleting a plan's memory.

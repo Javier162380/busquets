@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/Javier162380/busquets/cmd/tui/commands"
 	"github.com/Javier162380/busquets/cmd/tui/components"
 	"github.com/Javier162380/busquets/cmd/tui/messages"
 	"github.com/Javier162380/busquets/cmd/tui/screens"
@@ -296,5 +297,29 @@ func TestInit(t *testing.T) {
 		app := New(context.Background(), svc)
 		cmd := app.Init()
 		require.NotNil(t, cmd)
+	})
+}
+
+func TestHandleMemoryProgress(t *testing.T) {
+	// Total 0 keeps the status bar (and its delayed clear) out of the batch, so
+	// only the re-armed listener runs.
+	t.Run("re-arms the listener on the message's own channel", func(t *testing.T) {
+		app := newTestApp(t)
+		progress := commands.NewMemoryProgress()
+		progress <- busquets.MemoryProgress{FileName: "plan.md", Current: 2, Total: 3}
+
+		_, cmd := app.Update(messages.MemoryProgressMsg{FileName: "plan.md", Source: progress})
+		require.Equal(t, []tea.Msg{
+			messages.MemoryProgressMsg{FileName: "plan.md", Current: 2, Total: 3, Source: progress},
+		}, flattenCmd(cmd))
+	})
+
+	t.Run("the chain ends once the run's channel is closed", func(t *testing.T) {
+		app := newTestApp(t)
+		progress := commands.NewMemoryProgress()
+		close(progress)
+
+		_, cmd := app.Update(messages.MemoryProgressMsg{FileName: "plan.md", Source: progress})
+		require.Equal(t, []tea.Msg{nil}, flattenCmd(cmd))
 	})
 }
