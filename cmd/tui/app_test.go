@@ -97,9 +97,16 @@ func TestHandleSyncHandlers(t *testing.T) {
 func TestHandleSaveResult(t *testing.T) {
 	t.Run("success sets success message", func(t *testing.T) {
 		app := newTestApp(t)
-		model, _ := app.Update(messages.SaveResultMsg{Result: &busquets.UpdatePlanResult{Success: true}})
+		model, _ := app.Update(messages.SaveResultMsg{Result: &busquets.UpdatePlanResult{Success: true, NewVersionCreated: true}})
 		app = model.(*App)
-		require.NotEmpty(t, app.statusBar.SuccessMessage())
+		require.Equal(t, "Saved result", app.statusBar.SuccessMessage())
+	})
+
+	t.Run("unchanged save says no version was created", func(t *testing.T) {
+		app := newTestApp(t)
+		model, _ := app.Update(messages.SaveResultMsg{Result: &busquets.UpdatePlanResult{Success: true, NewVersionCreated: false}})
+		app = model.(*App)
+		require.Equal(t, "No content changes, no version has been created", app.statusBar.SuccessMessage())
 	})
 
 	t.Run("success delegates to the screen stack without panicking", func(t *testing.T) {
@@ -120,7 +127,7 @@ func TestHandleSaveResult(t *testing.T) {
 		app := newTestApp(t)
 		model, _ := app.Update(messages.SaveResultMsg{Error: errors.New("write error")})
 		app = model.(*App)
-		require.NotEmpty(t, app.statusBar.ErrorMessage())
+		require.Equal(t, "Unable to save result", app.statusBar.ErrorMessage())
 	})
 }
 

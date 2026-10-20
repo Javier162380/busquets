@@ -14,8 +14,10 @@ func (a *App) handleSaveResult(msg messages.SaveResultMsg) (tea.Model, tea.Cmd) 
 	switch {
 	case msg.Error != nil:
 		a.statusBar.SetError("Unable to save result")
-	case msg.Result.Success:
+	case msg.Result.Success && msg.Result.NewVersionCreated:
 		a.statusBar.SetSuccess("Saved result")
+	case msg.Result.Success:
+		a.statusBar.SetSuccess("No content changes, no version has been created")
 	case msg.Result.HasConflict:
 		a.statusBar.SetError(fmt.Sprintf("Unable to save result, conflict %s", msg.Result.ConflictInfo.Message))
 	}
