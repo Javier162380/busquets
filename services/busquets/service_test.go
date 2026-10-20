@@ -1179,6 +1179,7 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		})
 		require.NoError(t, err)
 		require.True(t, result.Success)
+		require.Equal(t, true, result.NewVersionCreated)
 
 		versions, err := service.GetPlanVersionHistory(ctx, "test-plan.md", sourcePlansDir, 0, 10)
 		require.NoError(t, err)
@@ -1329,6 +1330,38 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, err)
 		require.True(t, updatedPlan.ModifiedAt.After(plan.ModifiedAt) || updatedPlan.ModifiedAt.Equal(plan.ModifiedAt))
 		require.True(t, updatedPlan.IndexedAt.After(plan.IndexedAt) || updatedPlan.IndexedAt.Equal(plan.IndexedAt))
+	})
+
+	t.Run("UpdatePlan with unchanged content does not create a version", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "test-plan.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		result, err := service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource:       sourcePlansDir,
+			FileName:         "test-plan.md",
+			NewContent:       sampleMarkdown,
+			LastModifiedTime: plan.ModifiedAt,
+			Force:            true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, true, result.Success)
+		require.Equal(t, false, result.NewVersionCreated)
+
+		count, err := service.GetVersionCount(ctx, "test-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+
+		sourceContent, err := os.ReadFile(filepath.Join(sourcePlansDir, "test-plan.md"))
+		require.NoError(t, err)
+		require.Equal(t, sampleMarkdown, string(sourceContent))
 	})
 }
 
@@ -1572,7 +1605,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SavePlanVersion(ctx, "test-plan.md", sourcePlansDir, sampleMarkdown)
+		err = service.SavePlanVersion(ctx, "test-plan.md", sourcePlansDir, sampleMarkdownUpdated)
 		require.NoError(t, err)
 
 		plan, err := service.GetPlanByFileName(ctx, "test-plan.md", sourcePlansDir)
@@ -1584,6 +1617,50 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		require.True(t, strings.HasSuffix(entries[0].Name(), ".md"))
 	})
 
+	t.Run("SavePlanVersion rejects an unchanged body", func(t *testing.T) {
+		testFile := filepath.Join(sourcePlansDir, "unchanged-version.md")
+		require.NoError(t, os.WriteFile(testFile, []byte(sampleMarkdown), 0o600))
+
+		time.Sleep(100 * time.Millisecond)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		err = service.SavePlanVersion(ctx, "unchanged-version.md", sourcePlansDir, sampleMarkdown)
+		require.ErrorIs(t, err, domain.ErrNoContentChanges)
+
+		count, err := service.GetVersionCount(ctx, "unchanged-version.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+	})
+
+	t.Run("SavePlanVersion creates a snapshot when the plan has no version row", func(t *testing.T) {
+		testFile := filepath.Join(sourcePlansDir, "no-version.md")
+		require.NoError(t, os.WriteFile(testFile, []byte(sampleMarkdown), 0o600))
+
+		time.Sleep(100 * time.Millisecond)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plan, err := service.GetPlanByFileName(ctx, "no-version.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.NoError(t, service.DB().DeleteVersionsOlderThan(ctx, dto.DeleteVersionsParams{
+			PlanID:        plan.ID,
+			VersionNumber: 0,
+		}))
+		require.NoError(t, os.RemoveAll(service.versionsDirFor(plan.ID)))
+
+		const firstBody = "# First\n\nBody"
+		require.NoError(t, service.SavePlanVersion(ctx, "no-version.md", sourcePlansDir, firstBody))
+
+		count, err := service.GetVersionCount(ctx, "no-version.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+
+		version, err := service.GetPlanVersion(ctx, "no-version.md", sourcePlansDir, 1)
+		require.NoError(t, err)
+		require.Equal(t, firstBody, version.Content)
+	})
+
 	t.Run("GetLatestVersionNumber increments correctly", func(t *testing.T) {
 		testFile := filepath.Join(sourcePlansDir, "version-test.md")
 		require.NoError(t, os.WriteFile(testFile, []byte(sampleMarkdown), 0o600))
@@ -1592,7 +1669,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SavePlanVersion(ctx, "version-test.md", sourcePlansDir, sampleMarkdown)
+		err = service.SavePlanVersion(ctx, "version-test.md", sourcePlansDir, "# Interim\n\nFirst saved body")
 		require.NoError(t, err)
 
 		err = service.SavePlanVersion(ctx, "version-test.md", sourcePlansDir, sampleMarkdownUpdated)
@@ -1674,7 +1751,7 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SavePlanVersion(ctx, "consistency-test.md", sourcePlansDir, sampleMarkdown)
+		err = service.SavePlanVersion(ctx, "consistency-test.md", sourcePlansDir, sampleMarkdownUpdated)
 		require.NoError(t, err)
 
 		plan, err := service.GetPlanByFileName(ctx, "consistency-test.md", sourcePlansDir)
@@ -1728,13 +1805,14 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SavePlanVersion(ctx, "markdown-test.md", sourcePlansDir, sampleMarkdownWithCode)
+		savedMarkdown := sampleMarkdownWithCode + "\n\nTrailing line."
+		err = service.SavePlanVersion(ctx, "markdown-test.md", sourcePlansDir, savedMarkdown)
 		require.NoError(t, err)
 
 		version, err := service.GetPlanVersion(ctx, "markdown-test.md", sourcePlansDir, 1)
 		require.NoError(t, err)
 
-		require.Equal(t, sampleMarkdownWithCode, version.Content)
+		require.Equal(t, savedMarkdown, version.Content)
 		require.Contains(t, version.Content, "```go")
 		require.Contains(t, version.Content, "func main()")
 	})
@@ -1747,14 +1825,14 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		err = service.SavePlanVersion(ctx, "wordcount-test.md", sourcePlansDir, sampleMarkdown)
+		err = service.SavePlanVersion(ctx, "wordcount-test.md", sourcePlansDir, sampleMarkdownUpdated)
 		require.NoError(t, err)
 
 		version, err := service.GetPlanVersion(ctx, "wordcount-test.md", sourcePlansDir, 1)
 		require.NoError(t, err)
 
 		require.Greater(t, version.WordCount, int64(0))
-		expectedCount := CountWords(sampleMarkdown)
+		expectedCount := CountWords(sampleMarkdownUpdated)
 		require.Equal(t, int64(expectedCount), version.WordCount)
 	})
 
@@ -1850,6 +1928,21 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 		require.Len(t, versions, 4, "version 0 from the initial sync plus versions 1, 2, and the restore's own version 3")
 		require.Equal(t, int64(3), versions[0].VersionNumber)
 		require.Equal(t, "# Version One\nFirst content", versions[0].Content)
+	})
+
+	t.Run("RestorePlanVersion of the latest body does not create a version", func(t *testing.T) {
+		createTestPlanFile(t, sourcePlansDir, "restore-same.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plan, err := service.GetPlanByFileName(ctx, "restore-same.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		require.NoError(t, service.RestorePlanVersion(ctx, plan.ID, 0))
+
+		count, err := service.GetVersionCount(ctx, "restore-same.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
 	})
 
 	t.Run("RestorePlanVersion fails for non-existent version", func(t *testing.T) {
@@ -3550,7 +3643,7 @@ func testDeletePlan(t *testing.T, service *Service, sourcePlansDir string) {
 		require.NoError(t, err)
 
 		// Seed a version (DB row + on-disk version file) and a comment.
-		require.NoError(t, service.SavePlanVersion(ctx, "delete-me.md", sourcePlansDir, sampleMarkdown))
+		require.NoError(t, service.SavePlanVersion(ctx, "delete-me.md", sourcePlansDir, sampleMarkdownUpdated))
 		_, err = service.AddComment(ctx, "delete-me.md", sourcePlansDir, "a comment")
 		require.NoError(t, err)
 
@@ -3616,7 +3709,7 @@ func testDeletePlan(t *testing.T, service *Service, sourcePlansDir string) {
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
 
-		require.NoError(t, service.SavePlanVersion(ctx, fileName, sourcePlansDir, sampleMarkdown))
+		require.NoError(t, service.SavePlanVersion(ctx, fileName, sourcePlansDir, sampleMarkdownUpdated))
 		_, err = service.AddComment(ctx, fileName, sourcePlansDir, "keep me")
 		require.NoError(t, err)
 		require.NoError(t, service.SetPlanTags(ctx, fileName, sourcePlansDir, []string{"keep-tag"}))
@@ -3750,7 +3843,7 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, service.SetPlanTags(ctx, "old-plan.md", sourcePlansDir, []string{"refactor"}))
 		_, err = service.AddComment(ctx, "old-plan.md", sourcePlansDir, "a comment")
 		require.NoError(t, err)
-		require.NoError(t, service.SavePlanVersion(ctx, "old-plan.md", sourcePlansDir, sampleMarkdown))
+		require.NoError(t, service.SavePlanVersion(ctx, "old-plan.md", sourcePlansDir, sampleMarkdownUpdated))
 
 		require.NoError(t, service.RenamePlanFile(ctx, "old-plan.md", sourcePlansDir, "new-plan.md"))
 
@@ -3918,7 +4011,7 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		createTestPlanFile(t, sourcePlansDir, "rb.md", sampleMarkdown)
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
-		require.NoError(t, service.SavePlanVersion(ctx, "rb.md", sourcePlansDir, sampleMarkdown))
+		require.NoError(t, service.SavePlanVersion(ctx, "rb.md", sourcePlansDir, sampleMarkdownUpdated))
 		detail, err := service.GetPlanDetailByFileName(ctx, "rb.md", sourcePlansDir)
 		require.NoError(t, err)
 		versionsDir := service.versionsDirFor(detail.ID)
@@ -3959,7 +4052,7 @@ func testRenamePlanFile(t *testing.T, setup serviceSetupFn) {
 		createTestPlanFile(t, sourcePlansDir, "atomic.md", sampleMarkdown)
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
-		require.NoError(t, service.SavePlanVersion(ctx, "atomic.md", sourcePlansDir, sampleMarkdown))
+		require.NoError(t, service.SavePlanVersion(ctx, "atomic.md", sourcePlansDir, sampleMarkdownUpdated))
 
 		before, err := service.GetPlanDetailByFileName(ctx, "atomic.md", sourcePlansDir)
 		require.NoError(t, err)

@@ -22,10 +22,11 @@ type UpdatePlanRequest struct {
 
 // UpdatePlanResult contains the result of an update operation.
 type UpdatePlanResult struct {
-	Success      bool
-	HasConflict  bool
-	ConflictInfo *ConflictInfo
-	Plan         *PlanDetail
+	Success           bool
+	HasConflict       bool
+	ConflictInfo      *ConflictInfo
+	Plan              *PlanDetail
+	NewVersionCreated bool
 }
 
 // ConflictInfo describes a detected conflict.
@@ -73,6 +74,11 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 
 	now := s.nowProvider.Now()
 
+	writeVersion, createVersion, err := s.optionalVersionWriter(ctx, plan.ID, req.NewContent, now, wordCount)
+	if err != nil {
+		return nil, err
+	}
+
 	updatedPlan, err := s.db.UpdatePlanContent(ctx, dto.UpdatePlanContentParams{
 		Plan: dto.UpdatePlanParams{
 			FileName:   req.FileName,
@@ -96,13 +102,14 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 			return time.Time{}, 0, fmt.Errorf("failed to stat updated file: %w", err)
 		}
 		return info.ModTime(), info.Size(), nil
-	},
-		s.writeVersionFile(now, req.NewContent, wordCount))
+	}, writeVersion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update plan: %w", err)
 	}
 
-	return s.invalidateCacheAndBuildUpdateResult(ctx, req.FileName, updatedPlan, req.NewContent, wordCount), nil
+	result := s.invalidateCacheAndBuildUpdateResult(ctx, req.FileName, updatedPlan, req.NewContent, wordCount)
+	result.NewVersionCreated = createVersion
+	return result, nil
 }
 
 // invalidateCacheAndBuildUpdateResult invalidates the summary cache and
@@ -189,6 +196,11 @@ func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*Up
 
 	now := s.nowProvider.Now()
 
+	writeVersion, createVersion, err := s.optionalVersionWriter(ctx, plan.ID, req.NewContent, now, wordCount)
+	if err != nil {
+		return nil, err
+	}
+
 	updatedPlan, err := s.db.UpdatePlanContent(ctx, dto.UpdatePlanContentParams{
 		Plan: dto.UpdatePlanParams{
 			FileName:   req.FileName,
@@ -209,10 +221,12 @@ func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*Up
 			return time.Time{}, 0, fmt.Errorf("failed to stat updated file: %w", err)
 		}
 		return info.ModTime(), info.Size(), nil
-	}, s.writeVersionFile(now, req.NewContent, wordCount))
+	}, writeVersion)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update plan: %w", err)
 	}
 
-	return s.invalidateCacheAndBuildUpdateResult(ctx, req.FileName, updatedPlan, req.NewContent, wordCount), nil
+	result := s.invalidateCacheAndBuildUpdateResult(ctx, req.FileName, updatedPlan, req.NewContent, wordCount)
+	result.NewVersionCreated = createVersion
+	return result, nil
 }
