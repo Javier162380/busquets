@@ -857,6 +857,16 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		s.viewer.ClearSearch()
 		return s, nil
 
+	case "ctrl+s":
+		if s.layout != types.LayoutFullscreen { // Only savePlan (create a new version on a full screen).
+			return s, nil
+		}
+		// Save.
+		if s.current != nil {
+			return s, s.savePlan()
+		}
+		return s, nil
+
 	case "ctrl+l":
 		maxLine := s.viewer.LineCount()
 		s.activeModal = types.ModalTextInput
@@ -1849,7 +1859,7 @@ func (s *PlansScreen) ShortHelp() string {
 			current, total := s.viewer.SearchStatus()
 			contentSearchHelp = fmt.Sprintf("/: search | N/P: next/prev match | ctrl+u: clear [%s] | Hits %d/%d", query, current, total)
 		}
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | n: comments | %s | e: edit | v: versions | t: transmit | esc: back", mode, lines, contentSearchHelp)
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | ctrl+s: save | n: comments | %s | e: edit | v: versions | t: transmit | esc: back", mode, lines, contentSearchHelp)
 	case types.FocusEditor:
 		modified := ""
 		if s.editor.IsModified() {
