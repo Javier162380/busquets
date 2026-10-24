@@ -644,10 +644,8 @@ func (s *Service) MemoryMaxEventsPerRun(ctx context.Context) int {
 // long first run does not look frozen. The run's outcome is GeneratePlanMemory's
 // return value, not a progress update.
 type MemoryProgress struct {
-	FileName   string
-	SyncSource string
-	Current    int
-	Total      int
+	Current int
+	Total   int
 }
 
 // sendMemoryProgress never blocks generation: a nil channel means the caller
@@ -707,10 +705,7 @@ func (s *Service) GeneratePlanMemory(ctx context.Context, fileName, syncSource s
 	narratedEvents := make([]SavePlanMemoryEvent, 0, len(pending))
 	truncatedEvents := 0
 	for index, prompt := range pending {
-		sendMemoryProgress(progress, MemoryProgress{
-			FileName: fileName, SyncSource: syncSource,
-			Current: index + 1, Total: len(pending),
-		})
+		sendMemoryProgress(progress, MemoryProgress{Current: index + 1, Total: len(pending)})
 
 		result, genErr := s.connectorManager.GenerateWithPrompt(ctx, connectors.GeneratorOpts{
 			SystemPrompt: prompts.EventSystemPrompt,

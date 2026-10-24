@@ -512,10 +512,9 @@ type MemoryGeneratedMsg struct {
 // Source is the run's progress channel, so the next listener reads from the
 // same run and never from a later one.
 type MemoryProgressMsg struct {
-	FileName string
-	Current  int
-	Total    int
-	Source   <-chan busquets.MemoryProgress
+	Current int
+	Total   int
+	Source  <-chan busquets.MemoryProgress
 }
 
 // DeleteMemoryMsg requests deleting a plan's memory.
@@ -552,8 +551,5 @@ type MemoryVersionLoadedMsg struct {
 
 // MemoryDiffLoadedMsg carries a timeline event's unified diff.
 type MemoryDiffLoadedMsg struct {
-	Diff        string
-	FromVersion int64
-	ToVersion   int64
-	Err         error
+	Diff string
 }

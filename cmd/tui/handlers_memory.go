@@ -76,22 +76,19 @@ func (a *App) handleMemoryGenerated(msg messages.MemoryGeneratedMsg) (tea.Model,
 		a.cancelMemoryGeneration = nil
 	}
 
-	if msg.Err != nil {
-		if errors.Is(msg.Err, context.Canceled) {
-			a.statusBar.SetSuccess("Memory cancelled, nothing was saved")
-		} else {
-			a.statusBar.SetError("Memory failed: " + msg.Err.Error())
-		}
-		// Clear the screen's in-flight flag so the key works again.
-		if screen, ok := a.stack[len(a.stack)-1].(*screens.MemoryScreen); ok {
-			screen.SetGenerating(false)
-		}
-		return a, commands.ClearStatusCmd(memoryStatusDuration)
+	switch {
+	case msg.Err == nil:
+		a.statusBar.SetSuccess("Memory updated")
+	case errors.Is(msg.Err, context.Canceled):
+		a.statusBar.SetSuccess("Memory cancelled, nothing was saved")
+	default:
+		a.statusBar.SetError("Memory failed: " + msg.Err.Error())
 	}
 
+	// The screen gets both outcomes: it clears its in-flight flag either way
+	// and only takes the memory on success.
 	model, cmd := a.delegateToCurrentScreen(msg)
 	cmds := []tea.Cmd{cmd}
-	a.statusBar.SetSuccess("Memory updated")
 	cmds = append(cmds, commands.ClearStatusCmd(memoryStatusDuration))
 	return model, tea.Batch(cmds...)
 }
@@ -115,14 +112,6 @@ func (a *App) handleDeleteMemoryResult(messages.DeleteMemoryResultMsg) (tea.Mode
 
 func (a *App) handleRequestMemoryDiff(msg messages.RequestMemoryDiffMsg) (tea.Model, tea.Cmd) {
 	return a, commands.MemoryDiffCmd(a.ctx, a.service, msg.PlanName, msg.SyncSource, msg.FromVersion, msg.ToVersion)
-}
-
-func (a *App) handleMemoryDiffLoaded(msg messages.MemoryDiffLoadedMsg) (tea.Model, tea.Cmd) {
-	if msg.Err != nil {
-		a.statusBar.SetError("Diff failed: " + msg.Err.Error())
-		return a, commands.ClearStatusCmd(memoryStatusDuration)
-	}
-	return a.delegateToCurrentScreen(msg)
 }
 
 func (a *App) handleRequestMemoryVersion(msg messages.RequestMemoryVersionMsg) (tea.Model, tea.Cmd) {

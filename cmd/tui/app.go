@@ -320,7 +320,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case messages.RequestMemoryDiffMsg:
 		return a.handleRequestMemoryDiff(msg)
 	case messages.MemoryDiffLoadedMsg:
-		return a.handleMemoryDiffLoaded(msg)
+		return a.delegateToCurrentScreen(msg)
 	case messages.RequestMemoryVersionMsg:
 		return a.handleRequestMemoryVersion(msg)
 	case messages.MemoryVersionLoadedMsg:
@@ -418,7 +418,7 @@ func (a *App) pushMemoryScreen(msg messages.MemoryLoadedMsg) tea.Cmd {
 	memoryScreen := screens.NewMemoryScreenWithData(
 		msg.Memory.FileName, msg.Memory.SyncSource, a.markdownRenderedTheme,
 		msg.Memory, msg.Staleness,
-		a.width, a.height, a.isDarkModeEnabled, a.renderMarkDownByDefault, a.screenOrientation,
+		a.width, a.height, a.renderMarkDownByDefault, a.screenOrientation,
 	)
 	a.stack = append(a.stack, memoryScreen)
 	return memoryScreen.Init()
