@@ -35,7 +35,6 @@ type App struct {
 
 	dump io.Writer
 
-	isDarkModeEnabled       bool
 	renderMarkDownByDefault bool
 	displayMode             string
 	markdownRenderedTheme   string
@@ -77,7 +76,6 @@ func (a *App) Init() tea.Cmd {
 		darkMode = setting.GetBooleanValue()
 	}
 	styles.SetDarkMode(darkMode)
-	a.isDarkModeEnabled = darkMode
 
 	renderMarkDownByDefault := false
 	if setting, ok := settings[busquets.SettingRenderMarkdownByDefault]; ok && setting.IsBoolean() {
@@ -409,7 +407,7 @@ func (a *App) popScreen() tea.Cmd { //nolint:unparam // ok for now.
 }
 
 func (a *App) pushVersionsScreenWithData(planID int64, planName string, versions []busquets.PlanVersionDetail) tea.Cmd {
-	versionsScreen := screens.NewVersionsScreenWithData(planID, planName, a.markdownRenderedTheme, versions, a.width, a.height, a.isDarkModeEnabled, a.renderMarkDownByDefault, a.screenOrientation)
+	versionsScreen := screens.NewVersionsScreenWithData(planID, planName, a.markdownRenderedTheme, versions, a.width, a.height, a.renderMarkDownByDefault, a.screenOrientation)
 	a.stack = append(a.stack, versionsScreen)
 	return versionsScreen.Init()
 }

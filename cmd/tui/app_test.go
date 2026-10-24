@@ -11,6 +11,7 @@ import (
 	"github.com/Javier162380/busquets/cmd/tui/components"
 	"github.com/Javier162380/busquets/cmd/tui/messages"
 	"github.com/Javier162380/busquets/cmd/tui/screens"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
 	"github.com/Javier162380/busquets/internal/config"
 	"github.com/Javier162380/busquets/internal/storage"
 	"github.com/Javier162380/busquets/services/busquets"
@@ -167,12 +168,13 @@ func TestHandleTagHandlers(t *testing.T) {
 }
 
 func TestHandleSettingsHandlers(t *testing.T) {
-	t.Run("ThemeChangedMsg updates isDarkModeEnabled", func(t *testing.T) {
+	t.Run("ThemeChangedMsg switches the global theme", func(t *testing.T) {
 		app := newTestApp(t)
-		require.True(t, app.isDarkModeEnabled)
-		model, _ := app.Update(messages.ThemeChangedMsg{DarkMode: false})
-		app = model.(*App)
-		require.False(t, app.isDarkModeEnabled)
+		t.Cleanup(func() { styles.SetDarkMode(true) }) // the theme is global; restore it
+		require.Equal(t, styles.DarkTheme, styles.CurrentTheme)
+
+		app.Update(messages.ThemeChangedMsg{DarkMode: false})
+		require.Equal(t, styles.LightTheme, styles.CurrentTheme)
 	})
 
 	t.Run("DisplayModeChangedMsg updates displayMode", func(t *testing.T) {

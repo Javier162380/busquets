@@ -51,12 +51,11 @@ type VersionsScreen struct {
 	// Styles.
 	borderStyle lipgloss.Style
 
-	isDarkModeEnabled bool
 	screenOrientation string // busquets.ScreenOrientationHorizontal (side-by-side) or ...Vertical (stacked)
 }
 
 // NewVersionsScreen creates a new versions screen.
-func NewVersionsScreen(planID int64, planName, markdownRenderedTheme string, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool, screenOrientation string) *VersionsScreen {
+func NewVersionsScreen(planID int64, planName, markdownRenderedTheme string, width, height int, renderMarkdownByDefault bool, screenOrientation string) *VersionsScreen {
 	panelWidth := (width - 3) / 2
 	contentHeight := height - 4
 
@@ -76,7 +75,6 @@ func NewVersionsScreen(planID int64, planName, markdownRenderedTheme string, wid
 		borderStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(styles.BorderColor),
-		isDarkModeEnabled: isDarkModeEnabled,
 		screenOrientation: screenOrientation,
 	}
 
@@ -88,8 +86,8 @@ func NewVersionsScreen(planID int64, planName, markdownRenderedTheme string, wid
 }
 
 // NewVersionsScreenWithData creates a versions screen with pre-loaded data.
-func NewVersionsScreenWithData(planID int64, planName, markdownRenderedTheme string, versions []busquets.PlanVersionDetail, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool, screenOrientation string) *VersionsScreen {
-	s := NewVersionsScreen(planID, planName, markdownRenderedTheme, width, height, isDarkModeEnabled, renderMarkdownByDefault, screenOrientation)
+func NewVersionsScreenWithData(planID int64, planName, markdownRenderedTheme string, versions []busquets.PlanVersionDetail, width, height int, renderMarkdownByDefault bool, screenOrientation string) *VersionsScreen {
+	s := NewVersionsScreen(planID, planName, markdownRenderedTheme, width, height, renderMarkdownByDefault, screenOrientation)
 	s.versions = versions
 	s.updateListItems()
 	if len(versions) > 0 {
@@ -136,18 +134,6 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			viewerWidth := s.getViewerWidth()
 			s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 		}
-		return s, nil
-
-	case messages.ThemeChangedMsg:
-		s.UpdateDarkMode(msg.DarkMode)
-		return s, nil
-
-	case messages.RenderMarkDownByDefaultMsg:
-		s.RenderedMarkdownByDefault(msg.Enabled)
-		return s, nil
-
-	case messages.MarkdownRenderedThemeChangedMsg:
-		s.RenderedMarkdownTheme(msg.Theme)
 		return s, nil
 	}
 
@@ -622,36 +608,6 @@ func (s *VersionsScreen) SetSize(width, height int) {
 // directly on the next View() call.
 func (s *VersionsScreen) SetScreenOrientation(orientation string) {
 	s.screenOrientation = orientation
-}
-
-// UpdateDarkMode updates the dark mode setting and regenerates content.
-func (s *VersionsScreen) UpdateDarkMode(enabled bool) {
-	s.isDarkModeEnabled = enabled
-	// Regenerate current content with new theme
-	if s.current != nil {
-		viewerWidth := s.getViewerWidth()
-		s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
-	}
-}
-
-// RenderedMarkdownByDefault upddates the renderned markdown by default mesasage.
-func (s *VersionsScreen) RenderedMarkdownByDefault(enabled bool) {
-	renderMode := components.RenderModeRaw
-	if enabled {
-		renderMode = components.RenderModeGlamour
-	}
-
-	if s.viewer.RenderMode() != renderMode {
-		s.viewer.SetRenderMode(renderMode)
-		if s.current != nil {
-			s.viewer.SetContent(content.NewVersionContent(s.current, s.getViewerWidth()))
-		}
-	}
-}
-
-// RenderedMarkdownTheme modifies a markdown rendered theme.
-func (s *VersionsScreen) RenderedMarkdownTheme(theme string) {
-	s.viewer.SetMarkdownTheme(theme)
 }
 
 // getViewerWidth calculates the current viewer width based on layout.
