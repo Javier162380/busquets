@@ -737,9 +737,9 @@ func MemoryDiffCmd(ctx context.Context, svc busquets.UnifiedService, planName, s
 
 		diff, err := svc.DiffPlanVersions(ctx, planName, syncSource, from, to)
 		if err != nil {
-			return messages.MemoryDiffLoadedMsg{Err: err}
+			return messages.ErrorMsg{Error: fmt.Errorf("failed to load diff: %w", err)}
 		}
-		return messages.MemoryDiffLoadedMsg{Diff: diff.Diff, FromVersion: from, ToVersion: to}
+		return messages.MemoryDiffLoadedMsg{Diff: diff.Diff}
 	}
 }
 
@@ -765,10 +765,9 @@ func MemoryChannelListenerCmd(progress <-chan busquets.MemoryProgress) tea.Cmd {
 			return nil
 		}
 		return messages.MemoryProgressMsg{
-			FileName: update.FileName,
-			Current:  update.Current,
-			Total:    update.Total,
-			Source:   progress,
+			Current: update.Current,
+			Total:   update.Total,
+			Source:  progress,
 		}
 	}
 }

@@ -1,6 +1,7 @@
 package screens
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -54,7 +55,7 @@ func newTestMemoryScreen(t *testing.T, memory *busquets.PlanMemory, staleness bu
 	t.Helper()
 	return NewMemoryScreenWithData(
 		"plan.md", "/src", busquets.MarkdownThemeASCII, memory, staleness,
-		100, 40, false, false, busquets.ScreenOrientationHorizontal,
+		100, 40, false, busquets.ScreenOrientationHorizontal,
 	)
 }
 
@@ -399,6 +400,17 @@ func TestMemoryScreenStatusText(t *testing.T) {
 	})
 }
 
+func TestMemoryScreenFailedRunClearsFlag(t *testing.T) {
+	memory := memoryWithEvents(true, []busquets.MemoryEvent{versionEvent(0, 0, 0)})
+	s := newTestMemoryScreen(t, memory, busquets.MemoryStaleness{HasMemory: true})
+	s.generating = true
+
+	s.Update(messages.MemoryGeneratedMsg{Err: errors.New("model is down")})
+
+	require.False(t, s.generating, "a failure must re-enable r")
+	require.Same(t, memory, s.memory, "a failed run keeps the memory already shown")
+}
+
 func TestMemoryScreenGeneratedMsgClearsFlag(t *testing.T) {
 	s := newTestMemoryScreen(t, memoryWithEvents(false, nil), busquets.MemoryStaleness{})
 	s.generating = true
@@ -428,7 +440,7 @@ func TestMemoryScreenGetViewerWidth(t *testing.T) {
 	t.Run("vertical split returns full width minus padding", func(t *testing.T) {
 		s := NewMemoryScreenWithData("plan.md", "/src", busquets.MarkdownThemeASCII,
 			memoryWithEvents(true, nil), busquets.MemoryStaleness{},
-			100, 40, false, false, busquets.ScreenOrientationVertical)
+			100, 40, false, busquets.ScreenOrientationVertical)
 		require.Equal(t, 94, s.getViewerWidth())
 	})
 }
@@ -442,7 +454,7 @@ func TestMemoryScreenRenderNeverOverflowsHeight(t *testing.T) {
 			s := NewMemoryScreenWithData("plan.md", "/src", busquets.MarkdownThemeASCII,
 				memoryWithEvents(true, []busquets.MemoryEvent{versionEvent(0, 0, 0)}),
 				busquets.MemoryStaleness{HasMemory: true},
-				100, height, false, false, orientation)
+				100, height, false, orientation)
 
 			lines := strings.Split(s.renderSplitView(), "\n")
 			require.LessOrEqual(t, len(lines)+1, height, "orientation=%s height=%d", orientation, height)

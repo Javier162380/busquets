@@ -5653,8 +5653,8 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 			updates = append(updates, update)
 		}
 		require.Equal(t, []MemoryProgress{
-			{FileName: name, SyncSource: sourceDir, Current: 1, Total: 2},
-			{FileName: name, SyncSource: sourceDir, Current: 2, Total: 2},
+			{Current: 1, Total: 2},
+			{Current: 2, Total: 2},
 		}, updates)
 	})
 

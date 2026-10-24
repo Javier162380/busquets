@@ -54,10 +54,8 @@ type MemoryScreen struct {
 	width  int
 	height int
 
-	borderStyle           lipgloss.Style
-	isDarkModeEnabled     bool
-	markdownRenderedTheme string
-	screenOrientation     string
+	borderStyle       lipgloss.Style
+	screenOrientation string
 }
 
 // memoryPane selects what the memory screen's content pane shows.
@@ -69,7 +67,7 @@ const (
 )
 
 // NewMemoryScreen creates a memory screen for a plan.
-func NewMemoryScreen(planName, syncSource, markdownRenderedTheme string, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool, screenOrientation string) *MemoryScreen {
+func NewMemoryScreen(planName, syncSource, markdownRenderedTheme string, width, height int, renderMarkdownByDefault bool, screenOrientation string) *MemoryScreen {
 	panelWidth := (width - 3) / 2
 	contentHeight := height - 4
 
@@ -87,9 +85,7 @@ func NewMemoryScreen(planName, syncSource, markdownRenderedTheme string, width, 
 		borderStyle: lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(styles.BorderColor),
-		isDarkModeEnabled:     isDarkModeEnabled,
-		markdownRenderedTheme: markdownRenderedTheme,
-		screenOrientation:     screenOrientation,
+		screenOrientation: screenOrientation,
 	}
 
 	if renderMarkdownByDefault {
@@ -100,8 +96,8 @@ func NewMemoryScreen(planName, syncSource, markdownRenderedTheme string, width, 
 }
 
 // NewMemoryScreenWithData creates a memory screen with its memory already loaded.
-func NewMemoryScreenWithData(planName, syncSource, markdownRenderedTheme string, memory *busquets.PlanMemory, staleness busquets.MemoryStaleness, width, height int, isDarkModeEnabled, renderMarkdownByDefault bool, screenOrientation string) *MemoryScreen {
-	s := NewMemoryScreen(planName, syncSource, markdownRenderedTheme, width, height, isDarkModeEnabled, renderMarkdownByDefault, screenOrientation)
+func NewMemoryScreenWithData(planName, syncSource, markdownRenderedTheme string, memory *busquets.PlanMemory, staleness busquets.MemoryStaleness, width, height int, renderMarkdownByDefault bool, screenOrientation string) *MemoryScreen {
+	s := NewMemoryScreen(planName, syncSource, markdownRenderedTheme, width, height, renderMarkdownByDefault, screenOrientation)
 	s.setMemory(memory, staleness)
 	return s
 }
@@ -208,11 +204,11 @@ func (s *MemoryScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	case tea.KeyMsg:
 		return s.handleKey(msg)
 
-	case messages.MemoryLoadedMsg:
+	case messages.MemoryLoadedMsg: // a reload, e.g. after a delete
 		s.setMemory(msg.Memory, msg.Staleness)
 		return s, nil
 
-	case messages.MemoryGeneratedMsg:
+	case messages.MemoryGeneratedMsg: // both outcomes arrive here
 		s.generating = false
 		if msg.Err == nil {
 			s.setMemory(msg.Memory, msg.Staleness)
@@ -220,29 +216,12 @@ func (s *MemoryScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s, nil
 
 	case messages.MemoryVersionLoadedMsg:
-		if msg.Version != nil {
-			s.versions[msg.Version.VersionNumber] = msg.Version
-			s.refreshViewer()
-		}
+		s.versions[msg.Version.VersionNumber] = msg.Version
+		s.refreshViewer()
 		return s, nil
 
 	case messages.MemoryDiffLoadedMsg:
-		if msg.Err != nil {
-			return s, nil
-		}
 		s.showDiff(msg.Diff)
-		return s, nil
-
-	case messages.ThemeChangedMsg:
-		s.UpdateDarkMode(msg.DarkMode)
-		return s, nil
-
-	case messages.RenderMarkDownByDefaultMsg:
-		s.RenderedMarkdownByDefault(msg.Enabled)
-		return s, nil
-
-	case messages.MarkdownRenderedThemeChangedMsg:
-		s.RenderedMarkdownTheme(msg.Theme)
 		return s, nil
 	}
 
@@ -510,11 +489,6 @@ func (s *MemoryScreen) copyMemory() tea.Cmd {
 	}
 }
 
-// SetGenerating reflects whether a run is in flight, so a failure re-enables the key.
-func (s *MemoryScreen) SetGenerating(generating bool) {
-	s.generating = generating
-}
-
 // updateListItems rebuilds the timeline rows from the computed events.
 func (s *MemoryScreen) updateListItems() {
 	items := make([]components.ListItem, len(s.events))
@@ -638,30 +612,6 @@ func (s *MemoryScreen) SetSize(width, height int) {
 // SetScreenOrientation updates the panel arrangement.
 func (s *MemoryScreen) SetScreenOrientation(orientation string) {
 	s.screenOrientation = orientation
-}
-
-// UpdateDarkMode updates the dark mode setting and redraws.
-func (s *MemoryScreen) UpdateDarkMode(enabled bool) {
-	s.isDarkModeEnabled = enabled
-	s.refreshViewer()
-}
-
-// RenderedMarkdownByDefault switches the viewer's render mode.
-func (s *MemoryScreen) RenderedMarkdownByDefault(enabled bool) {
-	renderMode := components.RenderModeRaw
-	if enabled {
-		renderMode = components.RenderModeGlamour
-	}
-	if s.viewer.RenderMode() != renderMode {
-		s.viewer.SetRenderMode(renderMode)
-		s.refreshViewer()
-	}
-}
-
-// RenderedMarkdownTheme changes the markdown theme.
-func (s *MemoryScreen) RenderedMarkdownTheme(theme string) {
-	s.markdownRenderedTheme = theme
-	s.viewer.SetMarkdownTheme(theme)
 }
 
 // getViewerWidth calculates the viewer width for the current layout.

@@ -29,7 +29,6 @@ func (a *App) handleSettingUpdateResult(msg messages.SettingUpdateResultMsg) (te
 
 func (a *App) handleThemeChanged(msg messages.ThemeChangedMsg) (tea.Model, tea.Cmd) {
 	styles.SetDarkMode(msg.DarkMode)
-	a.isDarkModeEnabled = msg.DarkMode
 	for i, screen := range a.stack {
 		updated, _ := screen.Update(msg)
 		a.stack[i] = updated

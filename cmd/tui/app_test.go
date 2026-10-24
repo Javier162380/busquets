@@ -11,6 +11,7 @@ import (
 	"github.com/Javier162380/busquets/cmd/tui/components"
 	"github.com/Javier162380/busquets/cmd/tui/messages"
 	"github.com/Javier162380/busquets/cmd/tui/screens"
+	"github.com/Javier162380/busquets/cmd/tui/styles"
 	"github.com/Javier162380/busquets/internal/config"
 	"github.com/Javier162380/busquets/internal/storage"
 	"github.com/Javier162380/busquets/services/busquets"
@@ -167,12 +168,13 @@ func TestHandleTagHandlers(t *testing.T) {
 }
 
 func TestHandleSettingsHandlers(t *testing.T) {
-	t.Run("ThemeChangedMsg updates isDarkModeEnabled", func(t *testing.T) {
+	t.Run("ThemeChangedMsg switches the global theme", func(t *testing.T) {
 		app := newTestApp(t)
-		require.True(t, app.isDarkModeEnabled)
-		model, _ := app.Update(messages.ThemeChangedMsg{DarkMode: false})
-		app = model.(*App)
-		require.False(t, app.isDarkModeEnabled)
+		t.Cleanup(func() { styles.SetDarkMode(true) }) // the theme is global; restore it
+		require.Equal(t, styles.DarkTheme, styles.CurrentTheme)
+
+		app.Update(messages.ThemeChangedMsg{DarkMode: false})
+		require.Equal(t, styles.LightTheme, styles.CurrentTheme)
 	})
 
 	t.Run("DisplayModeChangedMsg updates displayMode", func(t *testing.T) {
@@ -307,26 +309,47 @@ func TestInit(t *testing.T) {
 	})
 }
 
-func TestHandleMemoryProgress(t *testing.T) {
+func TestHandleMemory(t *testing.T) {
 	// Total 0 keeps the status bar (and its delayed clear) out of the batch, so
 	// only the re-armed listener runs.
-	t.Run("re-arms the listener on the message's own channel", func(t *testing.T) {
+	t.Run("progress re-arms the listener on the message's own channel", func(t *testing.T) {
 		app := newTestApp(t)
 		progress := commands.NewMemoryProgress()
-		progress <- busquets.MemoryProgress{FileName: "plan.md", Current: 2, Total: 3}
+		progress <- busquets.MemoryProgress{Current: 2, Total: 3}
 
-		_, cmd := app.Update(messages.MemoryProgressMsg{FileName: "plan.md", Source: progress})
+		_, cmd := app.Update(messages.MemoryProgressMsg{Source: progress})
 		require.Equal(t, []tea.Msg{
-			messages.MemoryProgressMsg{FileName: "plan.md", Current: 2, Total: 3, Source: progress},
+			messages.MemoryProgressMsg{Current: 2, Total: 3, Source: progress},
 		}, flattenCmd(cmd))
 	})
 
-	t.Run("the chain ends once the run's channel is closed", func(t *testing.T) {
+	t.Run("progress ends once the run's channel is closed", func(t *testing.T) {
 		app := newTestApp(t)
 		progress := commands.NewMemoryProgress()
 		close(progress)
 
-		_, cmd := app.Update(messages.MemoryProgressMsg{FileName: "plan.md", Source: progress})
+		_, cmd := app.Update(messages.MemoryProgressMsg{Source: progress})
 		require.Equal(t, []tea.Msg{nil}, flattenCmd(cmd))
+	})
+
+	t.Run("a failed generation reaches the screen and re-enables r", func(t *testing.T) {
+		app := newTestApp(t)
+		app.pushMemoryScreen(messages.MemoryLoadedMsg{
+			Memory: &busquets.PlanMemory{FileName: "plan.md", SyncSource: "/src", CoversUpToVersion: busquets.NoMemoryCoverage},
+		})
+		screen := app.stack[len(app.stack)-1]
+
+		press := func() tea.Msg {
+			_, cmd := screen.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("r")})
+			require.NotNil(t, cmd)
+			return cmd()
+		}
+
+		require.IsType(t, messages.GenerateMemoryMsg{}, press())
+		require.IsType(t, messages.ErrorMsg{}, press())
+
+		app.Update(messages.MemoryGeneratedMsg{Err: errors.New("model is down")})
+
+		require.IsType(t, messages.GenerateMemoryMsg{}, press())
 	})
 }

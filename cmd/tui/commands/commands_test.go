@@ -261,12 +261,22 @@ func TestMemoryProgressCmds(t *testing.T) {
 
 	t.Run("MemoryChannelListenerCmd returns the update with its source channel", func(t *testing.T) {
 		progress := NewMemoryProgress()
-		progress <- busquets.MemoryProgress{FileName: "plan.md", SyncSource: "/src", Current: 1, Total: 3}
+		progress <- busquets.MemoryProgress{Current: 1, Total: 3}
 
 		msg := MemoryChannelListenerCmd(progress)()
 		require.Equal(t, messages.MemoryProgressMsg{
-			FileName: "plan.md", Current: 1, Total: 3, Source: progress,
+			Current: 1, Total: 3, Source: progress,
 		}, msg)
+	})
+
+	t.Run("MemoryDiffCmd returns an ErrorMsg on failure", func(t *testing.T) {
+		svc, sourceDir, cleanup := setupTestService(t)
+		defer cleanup()
+
+		msg := MemoryDiffCmd(context.Background(), svc, "missing.md", sourceDir, 0, 1)()
+		errMsg, ok := msg.(messages.ErrorMsg)
+		require.True(t, ok)
+		require.EqualError(t, errMsg.Error, "failed to load diff: plan not found: not found")
 	})
 
 	t.Run("MemoryChannelListenerCmd returns nil once the channel is closed", func(t *testing.T) {
