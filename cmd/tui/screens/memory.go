@@ -651,14 +651,14 @@ func (s *MemoryScreen) ShortHelp() string {
 
 	switch s.focus {
 	case types.FocusTimeline:
-		return fmt.Sprintf("tab: go to memory | down/up: navigate | enter: diff | v: fullscreen version | r: update | R: rewrite | c: copy memory | d: delete | esc: back | %s | Events: %d",
+		return fmt.Sprintf("enter: [CONTENT] | down/up: navigate | enter: diff | v: fullscreen version | r: update | R: rewrite | c: copy memory | d: delete | esc: back | %s | Events: %d",
 			status, len(s.events))
 	case types.FocusContent:
 		fullscreen := ""
 		if s.layout == types.LayoutSplit {
 			fullscreen = "v: fullscreen | "
 		}
-		tab := "tab: go to timeline | "
+		tab := "enter: [TIMELINE] | "
 		if s.layout == types.LayoutFullscreen {
 			tab = "" // fullscreen has no timeline to move to; esc goes back
 		}
