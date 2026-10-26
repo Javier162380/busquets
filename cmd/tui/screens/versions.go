@@ -538,23 +538,37 @@ func (s *VersionsScreen) renderSplitView() string {
 		leftContent = lipgloss.JoinVertical(lipgloss.Left, leftContent, s.searchBar.View())
 	}
 
-	leftPanel := s.borderStyle.
+	activeBorder := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.AccentColor)
+
+	listBorder := s.borderStyle
+	contentBorder := s.borderStyle
+	switch s.focus {
+	case types.FocusList:
+		listBorder = activeBorder
+	case types.FocusContent:
+		contentBorder = activeBorder
+	default:
+	}
+
+	listPanel := listBorder.
 		Width(panelWidth).
 		Height(listPanelHeight).
 		Render(leftContent)
 
-	rightPanel := s.borderStyle.
+	rightPanel := contentBorder.
 		Width(panelWidth).
 		Height(contentPanelHeight).
 		Render(s.viewer.View())
 
 	if vertical {
 		divider := s.renderHorizontalDivider(panelWidth)
-		return lipgloss.JoinVertical(lipgloss.Left, leftPanel, divider, rightPanel)
+		return lipgloss.JoinVertical(lipgloss.Left, listPanel, divider, rightPanel)
 	}
 
 	divider := s.renderDivider(listPanelHeight) // == contentPanelHeight in horizontal mode
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, divider, rightPanel)
+	return lipgloss.JoinHorizontal(lipgloss.Top, listPanel, divider, rightPanel)
 }
 
 // renderFullscreenViewer renders fullscreen content view.
@@ -649,10 +663,10 @@ func (s *VersionsScreen) ShortHelp() string {
 		if s.baseVersion != nil {
 			baseHelp = fmt.Sprintf("m: unmark base [v%d] | d: diff vs base", s.baseVersion.VersionNumber)
 		}
-		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | %s | M: metadata | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back | Versions: %d", baseHelp, mode, lines, searchHelp, len(s.versions))
+		return fmt.Sprintf("tab: [CONTENT] | down/up: navigate | g/G: top/bottom | v: view | R: restore | %s | M: metadata | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back | Versions: %d", baseHelp, mode, lines, searchHelp, len(s.versions))
 	case types.FocusContent:
 		if s.layout != types.LayoutFullscreen {
-			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | esc: back", mode, lines)
+			return fmt.Sprintf("tab: [LIST] |down/up: scroll | g/G: top/bottom | R: restore | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | esc: back", mode, lines)
 		}
 		contentSearchHelp := "/: search"
 		if query := s.viewer.SearchQuery(); query != "" {
