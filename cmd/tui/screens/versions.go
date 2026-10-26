@@ -545,7 +545,7 @@ func (s *VersionsScreen) renderSplitView() string {
 	listBorder := s.borderStyle
 	contentBorder := s.borderStyle
 	switch s.focus {
-	case types.FocusTimeline:
+	case types.FocusList:
 		listBorder = activeBorder
 	case types.FocusContent:
 		contentBorder = activeBorder
@@ -557,18 +557,18 @@ func (s *VersionsScreen) renderSplitView() string {
 		Height(listPanelHeight).
 		Render(leftContent)
 
-	contentPanel := contentBorder.
+	rightPanel := contentBorder.
 		Width(panelWidth).
 		Height(contentPanelHeight).
 		Render(s.viewer.View())
 
 	if vertical {
 		divider := s.renderHorizontalDivider(panelWidth)
-		return lipgloss.JoinVertical(lipgloss.Left, listPanel, divider, contentPanel)
+		return lipgloss.JoinVertical(lipgloss.Left, listPanel, divider, rightPanel)
 	}
 
 	divider := s.renderDivider(listPanelHeight) // == contentPanelHeight in horizontal mode
-	return lipgloss.JoinHorizontal(lipgloss.Top, listPanel, divider, contentPanel)
+	return lipgloss.JoinHorizontal(lipgloss.Top, listPanel, divider, rightPanel)
 }
 
 // renderFullscreenViewer renders fullscreen content view.
