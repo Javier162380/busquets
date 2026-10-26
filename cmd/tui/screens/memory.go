@@ -571,21 +571,35 @@ func (s *MemoryScreen) renderSplitView() string {
 		contentPanelHeight = s.height - types.HorizontalHeightOverhead
 	}
 
+	activeBorder := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(styles.AccentColor)
+
+	timeLineBorder := s.borderStyle
+	contentBorder := s.borderStyle
+	switch s.focus {
+	case types.FocusTimeline:
+		timeLineBorder = activeBorder
+	case types.FocusContent:
+		contentBorder = activeBorder
+	default:
+	}
+
 	s.list.SetSize(panelWidth-4, listPanelHeight-4)
 	s.viewer.SetSize(panelWidth-4, contentPanelHeight-4)
 
-	leftPanel := s.borderStyle.Width(panelWidth).Height(listPanelHeight).Render(s.list.View())
-	rightPanel := s.borderStyle.Width(panelWidth).Height(contentPanelHeight).Render(s.viewer.View())
+	timeLinePanel := timeLineBorder.Width(panelWidth).Height(listPanelHeight).Render(s.list.View())
+	contentPanel := contentBorder.Width(panelWidth).Height(contentPanelHeight).Render(s.viewer.View())
 
 	if vertical {
-		return lipgloss.JoinVertical(lipgloss.Left, leftPanel, strings.Repeat("─", panelWidth), rightPanel)
+		return lipgloss.JoinVertical(lipgloss.Left, timeLinePanel, strings.Repeat("─", panelWidth), contentPanel)
 	}
 
 	var divider strings.Builder
 	for range listPanelHeight {
 		divider.WriteString("│\n")
 	}
-	return lipgloss.JoinHorizontal(lipgloss.Top, leftPanel, strings.TrimSuffix(divider.String(), "\n"), rightPanel)
+	return lipgloss.JoinHorizontal(lipgloss.Top, timeLinePanel, strings.TrimSuffix(divider.String(), "\n"), contentPanel)
 }
 
 // renderFullscreenViewer renders the memory document fullscreen.
@@ -651,14 +665,14 @@ func (s *MemoryScreen) ShortHelp() string {
 
 	switch s.focus {
 	case types.FocusTimeline:
-		return fmt.Sprintf("enter: [CONTENT] | down/up: navigate | enter: diff | v: fullscreen version | r: update | R: rewrite | c: copy memory | d: delete | esc: back | %s | Events: %d",
+		return fmt.Sprintf("tab: [CONTENT] | down/up: navigate | enter: diff | v: fullscreen version | r: update | R: rewrite | c: copy memory | d: delete | esc: back | %s | Events: %d",
 			status, len(s.events))
 	case types.FocusContent:
 		fullscreen := ""
 		if s.layout == types.LayoutSplit {
 			fullscreen = "v: fullscreen | "
 		}
-		tab := "enter: [TIMELINE] | "
+		tab := "tab: [TIMELINE] | "
 		if s.layout == types.LayoutFullscreen {
 			tab = "" // fullscreen has no timeline to move to; esc goes back
 		}
