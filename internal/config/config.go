@@ -67,29 +67,15 @@ type MCPConfig struct {
 	Version    string `toml:"version"`
 }
 
-// LoadConfig loads configuration from the current working directory.
-// If no config file exists, returns default configuration.
+// LoadConfig loads configuration from the current working directory, falling back to defaults when no
+// config file exists. Environment overrides apply either way.
 func LoadConfig() (*Config, error) {
 	cfg := DefaultConfig()
 
-	// Look for config in current working directory
-	cwd, err := os.Getwd()
-	if err != nil {
-		return cfg, nil // Return defaults if can't get CWD
-	}
-
-	configPath := filepath.Join(cwd, ConfigFileName)
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		legacyPath := filepath.Join(cwd, LegacyConfigFileName)
-		if _, err := os.Stat(legacyPath); os.IsNotExist(err) {
-			return cfg, nil // Neither config file exists, use defaults
+	if configPath := findConfigFile(); configPath != "" {
+		if _, err := toml.DecodeFile(configPath, cfg); err != nil {
+			return nil, fmt.Errorf("failed to parse config file %s: %w", configPath, err)
 		}
-		fmt.Fprintf(os.Stderr, "warning: %s is deprecated; rename it to %s\n", LegacyConfigFileName, ConfigFileName)
-		configPath = legacyPath
-	}
-
-	if _, err := toml.DecodeFile(configPath, cfg); err != nil {
-		return nil, fmt.Errorf("failed to parse config file %s: %w", configPath, err)
 	}
 
 	// Apply environment variable overrides
@@ -104,6 +90,27 @@ func LoadConfig() (*Config, error) {
 	cfg.applyDefaults()
 
 	return cfg, nil
+}
+
+// findConfigFile returns the config file in the working directory, preferring busquets.toml over the
+// legacy name; "" when there is none.
+func findConfigFile() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+
+	configPath := filepath.Join(cwd, ConfigFileName)
+	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
+		return configPath // a non-NotExist error surfaces when the file is decoded
+	}
+
+	legacyPath := filepath.Join(cwd, LegacyConfigFileName)
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		fmt.Fprintf(os.Stderr, "warning: %s is deprecated; rename it to %s\n", LegacyConfigFileName, ConfigFileName)
+		return legacyPath
+	}
+	return ""
 }
 
 // DefaultConfig returns the default configuration.

@@ -316,6 +316,38 @@ func TestLoadConfig(t *testing.T) {
 		require.Equal(t, DefaultConfig().Database.Backend, cfg.Database.Backend)
 	})
 
+	t.Run("applies env overrides when no config file exists", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		t.Setenv("BUSQUETS_SQLITE_PATH", "/tmp/override/plans.db")
+		t.Setenv("BUSQUETS_DIR", "/tmp/override")
+
+		cfg, err := LoadConfig()
+		require.NoError(t, err)
+		require.Equal(t, "/tmp/override/plans.db", cfg.Database.SQLite.Path)
+		require.Equal(t, "/tmp/override", cfg.Paths.ViewerDir)
+	})
+
+	t.Run("validates env overrides when no config file exists", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		t.Setenv("BUSQUETS_DB_BACKEND", "postgres")
+
+		_, err := LoadConfig()
+		require.Equal(t, `invalid configuration: postgres connection_string is required when backend is "postgres"`, err.Error())
+	})
+
+	t.Run("env overrides win over busquets.toml", func(t *testing.T) {
+		t.Chdir(t.TempDir())
+		require.NoError(t, os.WriteFile(ConfigFileName, []byte(`
+[database.sqlite]
+path = "/from/file/plans.db"
+`), 0o600))
+		t.Setenv("BUSQUETS_SQLITE_PATH", "/from/env/plans.db")
+
+		cfg, err := LoadConfig()
+		require.NoError(t, err)
+		require.Equal(t, "/from/env/plans.db", cfg.Database.SQLite.Path)
+	})
+
 	t.Run("reads busquets.toml when present", func(t *testing.T) {
 		t.Chdir(t.TempDir())
 		require.NoError(t, os.WriteFile(ConfigFileName, []byte(`
