@@ -188,6 +188,7 @@ func planVersionToDomain(pv PlanVersion) dto.PlanVersion {
 		Content:       pv.Content,
 		WordCount:     pv.WordCount,
 		CreatedAt:     timestamptzToTime(pv.CreatedAt),
+		Milestones:    pv.Milestones,
 	}
 }
 
@@ -835,6 +836,25 @@ func (r *Repository) GetPlanVersionByNumber(ctx context.Context, planID, version
 		return dto.PlanVersion{}, err
 	}
 	return planVersionToDomain(pv), nil
+}
+
+func (r *Repository) SetPlanVersionMilestones(ctx context.Context, params dto.SetPlanVersionMilestonesParams) error {
+	var milestones []string // nil writes NULL; an empty slice would store '{}'
+	if len(params.Milestones) > 0 {
+		milestones = params.Milestones
+	}
+	rows, err := r.q.SetPlanVersionMilestones(ctx, SetPlanVersionMilestonesParams{
+		Milestones:    milestones,
+		PlanID:        params.PlanID,
+		VersionNumber: params.VersionNumber,
+	})
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return dto.ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repository) GetLatestVersionNumber(ctx context.Context, planID int64) (int64, error) {

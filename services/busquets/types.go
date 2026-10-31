@@ -71,6 +71,7 @@ type PlanVersion struct {
 	Content       string
 	WordCount     int64
 	CreatedAt     time.Time
+	Milestones    []VersionMilestone
 }
 
 type PlanVersionDetail struct {

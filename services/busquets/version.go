@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"time"
 
@@ -147,17 +148,8 @@ func (s *Service) GetPlanVersionHistory(ctx context.Context, planName, syncSourc
 
 	planVersionsDetail := make([]PlanVersionDetail, len(versions))
 	for i, version := range versions {
-		planVersion := PlanVersion{
-			ID:            version.ID,
-			PlanID:        version.PlanID,
-			VersionNumber: version.VersionNumber,
-			FilePath:      version.FilePath,
-			Content:       version.Content,
-			WordCount:     version.WordCount,
-			CreatedAt:     version.CreatedAt,
-		}
 		planVersionsDetail[i] = PlanVersionDetail{
-			PlanVersion: planVersion,
+			PlanVersion: toPlanVersion(version),
 			ReadingTime: s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM),
 			Tags:        toTags(tags),
 		}
@@ -173,12 +165,17 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName, syncSource strin
 		return nil, fmt.Errorf("plan not found: %w", err)
 	}
 
-	version, err := s.db.GetPlanVersionByNumber(ctx, plan.ID, versionNumber)
+	return s.planVersionDetail(ctx, plan.ID, versionNumber)
+}
+
+// planVersionDetail loads one version with its reading time and the plan's tags.
+func (s *Service) planVersionDetail(ctx context.Context, planID, versionNumber int64) (*PlanVersionDetail, error) {
+	version, err := s.db.GetPlanVersionByNumber(ctx, planID, versionNumber)
 	if err != nil {
 		return nil, fmt.Errorf("version not found: %w", err)
 	}
 
-	tags, err := s.db.GetPlanTags(ctx, plan.ID)
+	tags, err := s.db.GetPlanTags(ctx, planID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plan tags: %w", err)
 	}
@@ -191,6 +188,33 @@ func (s *Service) GetPlanVersion(ctx context.Context, planName, syncSource strin
 		ReadingTime: readingTime,
 		Tags:        toTags(tags),
 	}, nil
+}
+
+// SetVersionMilestones replaces a version's milestone set; an empty set clears it.
+func (s *Service) SetVersionMilestones(ctx context.Context, planID, versionNumber int64, milestones []VersionMilestone) (*PlanVersionDetail, error) {
+	validated, err := ValidateVersionMilestones(milestoneStrings(milestones))
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.db.SetPlanVersionMilestones(ctx, dto.SetPlanVersionMilestonesParams{
+		PlanID:        planID,
+		VersionNumber: versionNumber,
+		Milestones:    milestoneStrings(validated),
+	}); err != nil {
+		return nil, fmt.Errorf("failed to set milestones on version %d: %w", versionNumber, err)
+	}
+
+	return s.planVersionDetail(ctx, planID, versionNumber)
+}
+
+// SetVersionMilestonesByFileName resolves the plan by fileName+syncSource, then calls SetVersionMilestones.
+func (s *Service) SetVersionMilestonesByFileName(ctx context.Context, fileName, syncSource string, versionNumber int64, milestones []VersionMilestone) (*PlanVersionDetail, error) {
+	plan, err := s.db.GetPlanByFileName(ctx, fileName, syncSource)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get plan: %w", err)
+	}
+	return s.SetVersionMilestones(ctx, plan.ID, versionNumber, milestones)
 }
 
 // DiffPlanVersions returns a unified diff of fromVersion against toVersion,
@@ -369,21 +393,89 @@ func (s *Service) SearchVersions(ctx context.Context, planName, syncSource, quer
 
 	planVersionsDetail := make([]PlanVersionDetail, len(versions))
 	for i, version := range versions {
-		planVersion := PlanVersion{
-			ID:            version.ID,
-			PlanID:        version.PlanID,
-			VersionNumber: version.VersionNumber,
-			FilePath:      version.FilePath,
-			Content:       version.Content,
-			WordCount:     version.WordCount,
-			CreatedAt:     version.CreatedAt,
-		}
 		planVersionsDetail[i] = PlanVersionDetail{
-			PlanVersion: planVersion,
+			PlanVersion: toPlanVersion(version),
 			ReadingTime: s.CalculateReadingTimeWithWPM(int(version.WordCount), readingSpeedWPM),
 			Tags:        toTags(plan.Tags),
 		}
 	}
 
 	return planVersionsDetail, nil
+}
+
+// VersionMilestone is a lifecycle stamp on a plan version. Asserted by a user or agent; never derived.
+type VersionMilestone string
+
+const (
+	MilestoneLLMGenerated             VersionMilestone = "LLMGenerated"
+	MilestoneHumanReview              VersionMilestone = "HumanReview"
+	MilestonePlanImplementationStart  VersionMilestone = "PlanImplementationStart"
+	MilestonePlanImplementationFinish VersionMilestone = "PlanImplementationFinish"
+	MilestonePlanAbandoned            VersionMilestone = "PlanAbandoned"
+)
+
+// VersionMilestones lists every milestone in lifecycle order; storage and display follow it.
+var VersionMilestones = []VersionMilestone{
+	MilestoneLLMGenerated,
+	MilestoneHumanReview,
+	MilestonePlanImplementationStart,
+	MilestonePlanImplementationFinish,
+	MilestonePlanAbandoned,
+}
+
+// conflictingMilestones lists pairs that can never share a version.
+var conflictingMilestones = [][2]VersionMilestone{
+	{MilestoneLLMGenerated, MilestoneHumanReview},
+	{MilestonePlanImplementationFinish, MilestonePlanAbandoned},
+}
+
+// ValidateVersionMilestones is the write gate: known values, no conflicting pair.
+func ValidateVersionMilestones(raw []string) ([]VersionMilestone, error) {
+	parsed, err := ParseVersionMilestones(raw)
+	if err != nil {
+		return nil, err
+	}
+	for _, pair := range conflictingMilestones {
+		if slices.Contains(parsed, pair[0]) && slices.Contains(parsed, pair[1]) {
+			return nil, &dto.Error{
+				Category: dto.CategoryValidation,
+				Op:       "ValidateVersionMilestones",
+				Message:  fmt.Sprintf("%s and %s cannot be on the same version", pair[0], pair[1]),
+			}
+		}
+	}
+	return parsed, nil
+}
+
+// ParseVersionMilestones rejects unknown values; returns the rest deduplicated in lifecycle order.
+func ParseVersionMilestones(raw []string) ([]VersionMilestone, error) {
+	for _, value := range raw {
+		if !slices.Contains(VersionMilestones, VersionMilestone(value)) {
+			return nil, &dto.Error{
+				Category: dto.CategoryValidation,
+				Op:       "ParseVersionMilestones",
+				Message:  fmt.Sprintf("unknown milestone %q", value),
+			}
+		}
+	}
+	return storedMilestones(raw), nil
+}
+
+// storedMilestones filters the canonical list by raw: dedupe and lifecycle order for free, and unknown
+// values are skipped so a stored row always loads. nil when none.
+func storedMilestones(raw []string) []VersionMilestone {
+	if len(raw) == 0 {
+		return nil
+	}
+	return slices.DeleteFunc(slices.Clone(VersionMilestones), func(milestone VersionMilestone) bool {
+		return !slices.Contains(raw, string(milestone))
+	})
+}
+
+func milestoneStrings(milestones []VersionMilestone) []string {
+	raw := make([]string, len(milestones))
+	for i, milestone := range milestones {
+		raw[i] = string(milestone)
+	}
+	return raw
 }

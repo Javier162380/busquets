@@ -39,6 +39,7 @@ const (
 	ModalTextInput                // generic single-field input modal (e.g. go-to-line)
 	ModalContentSearch            // content search modal (viewer search)
 	ModalMetadata                 // metadata popup (paths, size, reading time, timestamps)
+	ModalMilestones               // version milestone checklist (VersionsScreen)
 )
 
 type EditorMode int

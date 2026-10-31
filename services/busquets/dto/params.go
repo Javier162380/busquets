@@ -71,6 +71,13 @@ type VersionHistoryParams struct {
 	Offset int64
 }
 
+// SetPlanVersionMilestonesParams replaces a version's milestone set; empty clears it.
+type SetPlanVersionMilestonesParams struct {
+	PlanID        int64
+	VersionNumber int64
+	Milestones    []string
+}
+
 // DeleteVersionsParams contains parameters for deleting old versions.
 type DeleteVersionsParams struct {
 	PlanID        int64

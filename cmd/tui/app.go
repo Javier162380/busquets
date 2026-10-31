@@ -299,6 +299,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.handleRestoreVersion(msg)
 	case messages.RestoreResultMsg:
 		return a.handleRestoreResult(msg)
+	case messages.SetVersionMilestonesMsg:
+		return a.handleSetVersionMilestones(msg)
+	case messages.VersionMilestonesSavedMsg:
+		return a.handleVersionMilestonesSaved(msg)
 	case messages.RequestMemoryScreenMsg:
 		return a.handleRequestMemoryScreen(msg)
 	case messages.MemoryLoadedMsg:

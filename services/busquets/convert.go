@@ -49,5 +49,6 @@ func toPlanVersion(v dto.PlanVersion) PlanVersion {
 		Content:       v.Content,
 		WordCount:     v.WordCount,
 		CreatedAt:     v.CreatedAt,
+		Milestones:    storedMilestones(v.Milestones),
 	}
 }

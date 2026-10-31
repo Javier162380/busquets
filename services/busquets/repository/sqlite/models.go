@@ -68,13 +68,14 @@ type PlanTag struct {
 }
 
 type PlanVersion struct {
-	ID            int64     `json:"id"`
-	PlanID        int64     `json:"plan_id"`
-	VersionNumber int64     `json:"version_number"`
-	FilePath      string    `json:"file_path"`
-	Content       string    `json:"content"`
-	WordCount     int64     `json:"word_count"`
-	CreatedAt     time.Time `json:"created_at"`
+	ID            int64          `json:"id"`
+	PlanID        int64          `json:"plan_id"`
+	VersionNumber int64          `json:"version_number"`
+	FilePath      string         `json:"file_path"`
+	Content       string         `json:"content"`
+	WordCount     int64          `json:"word_count"`
+	CreatedAt     time.Time      `json:"created_at"`
+	Milestones    sql.NullString `json:"milestones"`
 }
 
 type Setting struct {

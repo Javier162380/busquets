@@ -75,8 +75,17 @@ func renderMemorySections(events []MemoryEvent) string {
 	return sections.String()
 }
 
-// memoryEventHeading builds an event's heading from computed facts only.
+// memoryEventHeading builds an event's heading from stored facts only, never from the narrative.
 func memoryEventHeading(event MemoryEvent) string {
+	heading := memoryEventFacts(event)
+	if len(event.Milestones) > 0 {
+		heading += " · " + joinMilestones(event.Milestones)
+	}
+	return heading
+}
+
+// memoryEventFacts is the heading's when-and-what part.
+func memoryEventFacts(event MemoryEvent) string {
 	when := event.OccurredAt.UTC().Format(memoryTimeFormat)
 
 	if event.Kind == MemoryEventComment {
@@ -103,6 +112,11 @@ func memoryEventHeading(event MemoryEvent) string {
 func memoryEventUserPrompt(planTitle string, event MemoryEvent, diff, versionContent string) string {
 	var prompt strings.Builder
 	fmt.Fprintf(&prompt, "Plan: %s\n\n", planTitle)
+	if len(event.Milestones) > 0 {
+		fmt.Fprintf(&prompt, "Lifecycle milestones recorded on this version: %s. "+
+			"Use them to say what stage the plan was in when this change was made.\n\n",
+			joinMilestones(event.Milestones))
+	}
 
 	switch {
 	case event.Kind == MemoryEventComment:
@@ -125,4 +139,9 @@ func memoryEventUserPrompt(planTitle string, event MemoryEvent, diff, versionCon
 // memoryVersionLabel names a version for diff headers.
 func memoryVersionLabel(versionNumber int64, at time.Time) string {
 	return fmt.Sprintf("v%d (%s)", versionNumber, at.UTC().Format(memoryTimeFormat))
+}
+
+// joinMilestones renders milestones for headings and prompts.
+func joinMilestones(milestones []VersionMilestone) string {
+	return strings.Join(milestoneStrings(milestones), ", ")
 }

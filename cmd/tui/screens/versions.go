@@ -27,6 +27,7 @@ type VersionsScreen struct {
 	contentSearchModal *components.InputModal[string]
 	inputModal         *components.InputModal[int]
 	metadataModal      *components.MetadataModal
+	milestoneModal     *components.MilestoneModal
 
 	// State.
 	layout             types.Layout
@@ -66,6 +67,7 @@ func NewVersionsScreen(planID int64, planName, markdownRenderedTheme string, wid
 		contentSearchModal: components.NewInputModal[string](),
 		inputModal:         components.NewInputModal[int](),
 		metadataModal:      components.NewMetadataModal(),
+		milestoneModal:     components.NewMilestoneModal(),
 		layout:             types.LayoutSplit,
 		focus:              types.FocusList,
 		planID:             planID,
@@ -118,6 +120,8 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s.handleInputModalUpdate(msg)
 	case types.ModalMetadata:
 		return s.handleMetadataModalUpdate(msg)
+	case types.ModalMilestones:
+		return s.handleMilestoneModalUpdate(msg)
 	default:
 		// ModalNone (the only other value VersionsScreen ever sets): handle normally below
 	}
@@ -134,6 +138,10 @@ func (s *VersionsScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 			viewerWidth := s.getViewerWidth()
 			s.viewer.SetContent(content.NewVersionContent(s.current, viewerWidth))
 		}
+		return s, nil
+
+	case messages.VersionMilestonesSavedMsg:
+		s.applySavedVersion(*msg.Version)
 		return s, nil
 	}
 
@@ -220,6 +228,9 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 	case "m":
 		s.toggleBaseVersion()
 		return s, nil
+	case "t":
+		s.openMilestoneModal()
+		return s, nil
 	case "M":
 		if s.current != nil {
 			s.activeModal = types.ModalMetadata
@@ -231,6 +242,7 @@ func (s *VersionsScreen) handleListKey(key string, msg tea.KeyMsg) (Screen, tea.
 					{Label: "Size in Bytes", Value: strconv.Itoa(len(s.current.Content))},
 					{Label: "Reading Time", Value: fmt.Sprintf("%d min", s.current.ReadingTime)},
 					{Label: "Created At", Value: s.current.CreatedAt.Format("2006-01-02 15:04")},
+					{Label: "Milestones", Value: milestoneList(s.current.Milestones)},
 				},
 			)
 		}
@@ -284,6 +296,9 @@ func (s *VersionsScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, t
 		if s.current != nil {
 			return s, s.restoreVersion()
 		}
+		return s, nil
+	case "t":
+		s.openMilestoneModal()
 		return s, nil
 	case "r":
 		s.viewer.ToggleRenderMode()
@@ -445,6 +460,15 @@ func (s *VersionsScreen) handleMetadataModalUpdate(msg tea.Msg) (Screen, tea.Cmd
 	return s, cmd
 }
 
+// handleMilestoneModalUpdate routes messages while the milestone modal is active.
+func (s *VersionsScreen) handleMilestoneModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
+	cmd := s.milestoneModal.Update(msg)
+	if !s.milestoneModal.IsActive() {
+		s.activeModal = types.ModalNone
+	}
+	return s, cmd
+}
+
 // handleSearchKey handles keys in search mode.
 func (s *VersionsScreen) handleSearchKey(key string, msg tea.KeyMsg) (Screen, tea.Cmd) {
 	switch key {
@@ -496,6 +520,8 @@ func (s *VersionsScreen) View() string {
 		return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.inputModal.View())
 	case types.ModalMetadata:
 		return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.metadataModal.View())
+	case types.ModalMilestones:
+		return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.milestoneModal.View())
 	default:
 		return mainContent
 	}
@@ -649,17 +675,17 @@ func (s *VersionsScreen) ShortHelp() string {
 		if s.baseVersion != nil {
 			baseHelp = fmt.Sprintf("m: unmark base [v%d] | d: diff vs base", s.baseVersion.VersionNumber)
 		}
-		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | %s | M: metadata | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back | Versions: %d", baseHelp, mode, lines, searchHelp, len(s.versions))
+		return fmt.Sprintf("down/up: navigate | g/G: top/bottom | tab: content | v: view | R: restore | t: milestones | %s | M: metadata | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back | Versions: %d", baseHelp, mode, lines, searchHelp, len(s.versions))
 	case types.FocusContent:
 		if s.layout != types.LayoutFullscreen {
-			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | esc: back", mode, lines)
+			return fmt.Sprintf("down/up: scroll | g/G: top/bottom | tab: list | R: restore | t: milestones | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | esc: back", mode, lines)
 		}
 		contentSearchHelp := "/: search"
 		if query := s.viewer.SearchQuery(); query != "" {
 			current, total := s.viewer.SearchStatus()
 			contentSearchHelp = fmt.Sprintf("/: search | N/P: next/prev match | ctrl+u: clear [%s] | Hits %d/%d", query, current, total)
 		}
-		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | R: restore | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | %s | esc: back", mode, lines, contentSearchHelp)
+		return fmt.Sprintf("down/up: scroll | g/G: top/bottom | R: restore | t: milestones | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | %s | esc: back", mode, lines, contentSearchHelp)
 	case types.FocusSearch:
 		return "enter: search | esc: cancel"
 	default:
@@ -685,6 +711,9 @@ func (s *VersionsScreen) updateListItems() {
 		if s.baseVersion != nil && s.baseVersion.VersionNumber == version.VersionNumber {
 			title = "● " + title
 		}
+		if badges := milestoneBadges(version.Milestones); badges != "" {
+			title += " " + badges // the list renders titles only
+		}
 		items[i] = components.NewListItem(
 			title,
 			fmt.Sprintf("%s | %d min read | Path: %s", version.CreatedAt.Format("2006-01-02 15:04"), version.ReadingTime, version.PlanVersion.FilePath),
@@ -692,6 +721,33 @@ func (s *VersionsScreen) updateListItems() {
 		)
 	}
 	s.list.SetItems(items)
+}
+
+// openMilestoneModal opens the checklist for the selected version.
+func (s *VersionsScreen) openMilestoneModal() {
+	if s.current == nil {
+		return
+	}
+	s.activeModal = types.ModalMilestones
+	s.milestoneModal.SetSize(min(60, s.width-4), min(18, s.height-2))
+	s.milestoneModal.Open(s.planID, s.current.VersionNumber, s.current.Milestones)
+}
+
+// applySavedVersion swaps the stored version into the list, keeping selection and the diff base in sync.
+func (s *VersionsScreen) applySavedVersion(saved busquets.PlanVersionDetail) {
+	for i := range s.versions {
+		if s.versions[i].VersionNumber == saved.VersionNumber {
+			s.versions[i] = saved
+		}
+	}
+	if s.current != nil && s.current.VersionNumber == saved.VersionNumber {
+		s.current = &saved
+	}
+	if s.baseVersion != nil && s.baseVersion.VersionNumber == saved.VersionNumber {
+		base := saved
+		s.baseVersion = &base
+	}
+	s.updateListItems()
 }
 
 // Command helpers.

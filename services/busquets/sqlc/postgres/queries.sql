@@ -104,17 +104,21 @@ INSERT INTO plan_versions (plan_id, version_number, file_path, content, word_cou
 VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: GetPlanVersionHistory :many
-SELECT id, plan_id, version_number, file_path, content, word_count, created_at
+SELECT id, plan_id, version_number, file_path, content, word_count, created_at, milestones
 FROM plan_versions
 WHERE plan_id = $1
 ORDER BY version_number DESC
 LIMIT $2 OFFSET $3;
 
 -- name: GetPlanVersionByNumber :one
-SELECT id, plan_id, version_number, file_path, content, word_count, created_at
+SELECT id, plan_id, version_number, file_path, content, word_count, created_at, milestones
 FROM plan_versions
 WHERE plan_id = $1 AND version_number = $2
 LIMIT 1;
+
+-- name: SetPlanVersionMilestones :execrows
+UPDATE plan_versions SET milestones = $1
+WHERE plan_id = $2 AND version_number = $3;
 
 -- name: GetLatestVersionNumber :one
 SELECT COALESCE(MAX(version_number), 0) FROM plan_versions WHERE plan_id = $1;
@@ -127,7 +131,7 @@ DELETE FROM plan_versions
 WHERE plan_id = $1 AND version_number <= $2;
 
 -- name: SearchVersionsByContent :many
-SELECT id, plan_id, version_number, file_path, content, word_count, created_at
+SELECT id, plan_id, version_number, file_path, content, word_count, created_at, milestones
 FROM plan_versions
 WHERE plan_id = $1 AND content LIKE $2
 ORDER BY version_number DESC;

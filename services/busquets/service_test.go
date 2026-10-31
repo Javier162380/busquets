@@ -371,6 +371,55 @@ func TestRemapSyncSource(t *testing.T) {
 	})
 }
 
+func TestVersionMilestones(t *testing.T) {
+	t.Run("ParseVersionMilestones dedupes and returns lifecycle order", func(t *testing.T) {
+		parsed, err := ParseVersionMilestones([]string{"PlanImplementationFinish", "HumanReview", "HumanReview"})
+		require.NoError(t, err)
+		require.Equal(t, []VersionMilestone{MilestoneHumanReview, MilestonePlanImplementationFinish}, parsed)
+	})
+
+	t.Run("ParseVersionMilestones returns nil for no input", func(t *testing.T) {
+		parsed, err := ParseVersionMilestones(nil)
+		require.NoError(t, err)
+		require.Nil(t, parsed)
+	})
+
+	t.Run("ParseVersionMilestones rejects an unknown value by name", func(t *testing.T) {
+		_, err := ParseVersionMilestones([]string{"HumanReview", "Bogus"})
+		require.Equal(t, `ParseVersionMilestones: unknown milestone "Bogus"`, err.Error())
+		require.Equal(t, dto.CategoryValidation, dto.GetCategory(err))
+	})
+
+	t.Run("ParseVersionMilestones accepts a conflicting pair", func(t *testing.T) {
+		parsed, err := ParseVersionMilestones([]string{"PlanAbandoned", "PlanImplementationFinish"})
+		require.NoError(t, err)
+		require.Equal(t, []VersionMilestone{MilestonePlanImplementationFinish, MilestonePlanAbandoned}, parsed)
+	})
+
+	t.Run("ValidateVersionMilestones rejects each conflicting pair", func(t *testing.T) {
+		cases := map[string][]string{
+			"ValidateVersionMilestones: LLMGenerated and HumanReview cannot be on the same version":               {"HumanReview", "LLMGenerated"},
+			"ValidateVersionMilestones: PlanImplementationFinish and PlanAbandoned cannot be on the same version": {"PlanAbandoned", "PlanImplementationFinish"},
+		}
+		for want, raw := range cases {
+			_, err := ValidateVersionMilestones(raw)
+			require.Equal(t, want, err.Error())
+			require.Equal(t, dto.CategoryValidation, dto.GetCategory(err))
+		}
+	})
+
+	t.Run("ValidateVersionMilestones allows starting then abandoning", func(t *testing.T) {
+		validated, err := ValidateVersionMilestones([]string{"PlanAbandoned", "PlanImplementationStart"})
+		require.NoError(t, err)
+		require.Equal(t, []VersionMilestone{MilestonePlanImplementationStart, MilestonePlanAbandoned}, validated)
+	})
+
+	t.Run("storedMilestones skips unknown values so a row always loads", func(t *testing.T) {
+		require.Equal(t, []VersionMilestone{MilestoneHumanReview}, storedMilestones([]string{"Retired", "HumanReview"}))
+		require.Nil(t, storedMilestones(nil))
+	})
+}
+
 func TestSyncOperations(t *testing.T) {
 	for _, b := range registeredBackends {
 		t.Run(b.name, func(t *testing.T) {
@@ -1960,6 +2009,90 @@ func testVersionOperations(t *testing.T, service *Service, sourcePlansDir string
 	t.Run("RestorePlanVersion fails for non-existent plan id", func(t *testing.T) {
 		err := service.RestorePlanVersion(ctx, -1, 1)
 		require.Error(t, err)
+	})
+
+	t.Run("milestones", func(t *testing.T) {
+		createTestPlanFile(t, sourcePlansDir, "milestones.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+		require.NoError(t, service.SavePlanVersion(ctx, "milestones.md", sourcePlansDir, sampleMarkdownUpdated))
+
+		plan, err := service.GetPlanByFileName(ctx, "milestones.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		t.Run("a new version has none", func(t *testing.T) {
+			version, err := service.GetPlanVersion(ctx, "milestones.md", sourcePlansDir, 1)
+			require.NoError(t, err)
+			require.Nil(t, version.Milestones)
+		})
+
+		t.Run("set stores the deduplicated set in lifecycle order", func(t *testing.T) {
+			detail, err := service.SetVersionMilestones(ctx, plan.ID, 1, []VersionMilestone{
+				MilestonePlanImplementationFinish, MilestoneHumanReview, MilestoneHumanReview,
+			})
+			require.NoError(t, err)
+			want := []VersionMilestone{MilestoneHumanReview, MilestonePlanImplementationFinish}
+			require.Equal(t, want, detail.Milestones)
+
+			version, err := service.GetPlanVersion(ctx, "milestones.md", sourcePlansDir, 1)
+			require.NoError(t, err)
+			require.Equal(t, want, version.Milestones)
+
+			history, err := service.GetPlanVersionHistory(ctx, "milestones.md", sourcePlansDir, 0, 10)
+			require.NoError(t, err)
+			require.Equal(t, int64(1), history[0].VersionNumber)
+			require.Equal(t, want, history[0].Milestones)
+			require.Nil(t, history[1].Milestones)
+		})
+
+		t.Run("ByFileName sets through the same gate", func(t *testing.T) {
+			detail, err := service.SetVersionMilestonesByFileName(ctx, "milestones.md", sourcePlansDir, 0,
+				[]VersionMilestone{MilestoneLLMGenerated})
+			require.NoError(t, err)
+			require.Equal(t, []VersionMilestone{MilestoneLLMGenerated}, detail.Milestones)
+		})
+
+		t.Run("a conflicting pair is rejected and the row is unchanged", func(t *testing.T) {
+			_, err := service.SetVersionMilestones(ctx, plan.ID, 1, []VersionMilestone{
+				MilestonePlanImplementationFinish, MilestonePlanAbandoned,
+			})
+			require.Equal(t, dto.CategoryValidation, dto.GetCategory(err))
+
+			version, err := service.GetPlanVersion(ctx, "milestones.md", sourcePlansDir, 1)
+			require.NoError(t, err)
+			require.Equal(t, []VersionMilestone{MilestoneHumanReview, MilestonePlanImplementationFinish}, version.Milestones)
+		})
+
+		t.Run("an unknown value is rejected", func(t *testing.T) {
+			_, err := service.SetVersionMilestones(ctx, plan.ID, 1, []VersionMilestone{"Bogus"})
+			require.Equal(t, dto.CategoryValidation, dto.GetCategory(err))
+		})
+
+		t.Run("an unknown version is not found", func(t *testing.T) {
+			_, err := service.SetVersionMilestones(ctx, plan.ID, 99, []VersionMilestone{MilestoneHumanReview})
+			require.True(t, dto.IsNotFound(err))
+		})
+
+		t.Run("an empty set clears to NULL", func(t *testing.T) {
+			_, err := service.SetVersionMilestones(ctx, plan.ID, 1, nil)
+			require.NoError(t, err)
+
+			row, err := service.DB().GetPlanVersionByNumber(ctx, plan.ID, 1)
+			require.NoError(t, err)
+			require.Nil(t, row.Milestones, "NULL decodes to nil; a stored '[]' or '{}' would decode to an empty slice")
+		})
+
+		t.Run("a restore does not copy the source version's milestones", func(t *testing.T) {
+			require.NoError(t, service.RestorePlanVersion(ctx, plan.ID, 0))
+
+			restored, err := service.GetPlanVersion(ctx, "milestones.md", sourcePlansDir, 2)
+			require.NoError(t, err)
+			require.Nil(t, restored.Milestones)
+
+			source, err := service.GetPlanVersion(ctx, "milestones.md", sourcePlansDir, 0)
+			require.NoError(t, err)
+			require.Equal(t, []VersionMilestone{MilestoneLLMGenerated}, source.Milestones)
+		})
 	})
 }
 
@@ -4670,6 +4803,16 @@ func TestMemoryTimeline(t *testing.T) {
 	t.Run("buildTimeline handles a plan with no versions or comments", func(t *testing.T) {
 		require.Empty(t, buildTimeline(nil, nil))
 	})
+
+	t.Run("buildTimeline carries version milestones; comments have none", func(t *testing.T) {
+		at := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
+		events := buildTimeline(
+			[]dto.PlanVersion{{ID: 10, VersionNumber: 0, Content: "x\n", CreatedAt: at, Milestones: []string{"PlanImplementationStart", "HumanReview"}}},
+			[]dto.Comment{{ID: 5, Content: "note", CreatedAt: at.Add(time.Hour)}},
+		)
+		require.Equal(t, []VersionMilestone{MilestoneHumanReview, MilestonePlanImplementationStart}, events[0].Milestones)
+		require.Nil(t, events[1].Milestones)
+	})
 }
 
 func TestMemoryOperations(t *testing.T) {
@@ -5038,6 +5181,29 @@ func TestMemoryRendering(t *testing.T) {
 
 		comment := MemoryEvent{Kind: MemoryEventComment, RefID: 5, OccurredAt: at}
 		require.Equal(t, "Comment — 2026-09-02 14:02 UTC", memoryEventHeading(comment))
+	})
+
+	t.Run("headings append milestones", func(t *testing.T) {
+		stamped := version(1, 9, 9, 1199)
+		stamped.Milestones = []VersionMilestone{MilestoneHumanReview, MilestonePlanImplementationStart}
+		require.Equal(t, "v1 — 2026-09-02 14:02 UTC · +9 −9 · HumanReview, PlanImplementationStart", memoryEventHeading(stamped))
+	})
+
+	t.Run("the event prompt names the version's milestones", func(t *testing.T) {
+		stamped := version(1, 1, 0, 2)
+		stamped.Milestones = []VersionMilestone{MilestoneHumanReview}
+		require.Equal(t,
+			"Plan: Test Plan\n\n"+
+				"Lifecycle milestones recorded on this version: HumanReview. "+
+				"Use them to say what stage the plan was in when this change was made.\n\n"+
+				"The plan changed. Describe what changed.\n\n@@ diff @@",
+			memoryEventUserPrompt("Test Plan", stamped, "@@ diff @@", ""))
+	})
+
+	t.Run("the event prompt is unchanged without milestones", func(t *testing.T) {
+		require.Equal(t,
+			"Plan: Test Plan\n\nThe plan changed. Describe what changed.\n\n@@ diff @@",
+			memoryEventUserPrompt("Test Plan", version(1, 1, 0, 2), "@@ diff @@", ""))
 	})
 
 	t.Run("document carries title, summary and timeline", func(t *testing.T) {

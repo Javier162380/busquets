@@ -147,7 +147,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	}
 
 	switch s.activeModal {
-	case types.ModalNone:
+	case types.ModalNone, types.ModalMilestones: // milestones is VersionsScreen-only
 		// no modal active, handle normally below
 	case types.ModalTLDR:
 		return s.handleTLDRUpdate(msg)
@@ -1238,7 +1238,7 @@ func (s *PlansScreen) View() string {
 	}
 
 	switch s.activeModal {
-	case types.ModalNone:
+	case types.ModalNone, types.ModalMilestones: // milestones is VersionsScreen-only
 		// no overlay, fall through to confirmDialog check below
 	case types.ModalTLDR:
 		popupWidth := s.width * 2 / 3

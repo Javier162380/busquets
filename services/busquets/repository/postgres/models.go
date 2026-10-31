@@ -74,6 +74,7 @@ type PlanVersion struct {
 	Content       string             `json:"content"`
 	WordCount     int64              `json:"word_count"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	Milestones    []string           `json:"milestones"`
 }
 
 type Setting struct {

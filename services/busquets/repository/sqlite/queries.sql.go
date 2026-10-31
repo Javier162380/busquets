@@ -414,7 +414,7 @@ func (q *Queries) GetPlanTags(ctx context.Context, planID int64) ([]Tag, error) 
 }
 
 const getPlanVersionByNumber = `-- name: GetPlanVersionByNumber :one
-SELECT id, plan_id, version_number, file_path, content, word_count, created_at
+SELECT id, plan_id, version_number, file_path, content, word_count, created_at, milestones
 FROM plan_versions
 WHERE plan_id = ? AND version_number = ?
 LIMIT 1
@@ -436,12 +436,13 @@ func (q *Queries) GetPlanVersionByNumber(ctx context.Context, arg GetPlanVersion
 		&i.Content,
 		&i.WordCount,
 		&i.CreatedAt,
+		&i.Milestones,
 	)
 	return i, err
 }
 
 const getPlanVersionHistory = `-- name: GetPlanVersionHistory :many
-SELECT id, plan_id, version_number, file_path, content, word_count, created_at
+SELECT id, plan_id, version_number, file_path, content, word_count, created_at, milestones
 FROM plan_versions
 WHERE plan_id = ?
 ORDER BY version_number DESC
@@ -471,6 +472,7 @@ func (q *Queries) GetPlanVersionHistory(ctx context.Context, arg GetPlanVersionH
 			&i.Content,
 			&i.WordCount,
 			&i.CreatedAt,
+			&i.Milestones,
 		); err != nil {
 			return nil, err
 		}
@@ -1099,7 +1101,7 @@ func (q *Queries) ListConnectors(ctx context.Context) ([]Connector, error) {
 }
 
 const listPlanVersionsAll = `-- name: ListPlanVersionsAll :many
-SELECT id, plan_id, version_number, file_path, content, word_count, created_at FROM plan_versions WHERE plan_id = ?
+SELECT id, plan_id, version_number, file_path, content, word_count, created_at, milestones FROM plan_versions WHERE plan_id = ?
 ORDER BY version_number
 `
 
@@ -1120,6 +1122,7 @@ func (q *Queries) ListPlanVersionsAll(ctx context.Context, planID int64) ([]Plan
 			&i.Content,
 			&i.WordCount,
 			&i.CreatedAt,
+			&i.Milestones,
 		); err != nil {
 			return nil, err
 		}
@@ -1284,7 +1287,7 @@ func (q *Queries) RenamePlanRow(ctx context.Context, arg RenamePlanRowParams) er
 }
 
 const searchVersionsByContent = `-- name: SearchVersionsByContent :many
-SELECT id, plan_id, version_number, file_path, content, word_count, created_at
+SELECT id, plan_id, version_number, file_path, content, word_count, created_at, milestones
 FROM plan_versions
 WHERE plan_id = ? AND content LIKE ?
 ORDER BY version_number DESC
@@ -1312,6 +1315,7 @@ func (q *Queries) SearchVersionsByContent(ctx context.Context, arg SearchVersion
 			&i.Content,
 			&i.WordCount,
 			&i.CreatedAt,
+			&i.Milestones,
 		); err != nil {
 			return nil, err
 		}
@@ -1338,6 +1342,25 @@ type SetConnectorRoleParams struct {
 func (q *Queries) SetConnectorRole(ctx context.Context, arg SetConnectorRoleParams) error {
 	_, err := q.db.ExecContext(ctx, setConnectorRole, arg.Role, arg.Name)
 	return err
+}
+
+const setPlanVersionMilestones = `-- name: SetPlanVersionMilestones :execrows
+UPDATE plan_versions SET milestones = ?
+WHERE plan_id = ? AND version_number = ?
+`
+
+type SetPlanVersionMilestonesParams struct {
+	Milestones    sql.NullString `json:"milestones"`
+	PlanID        int64          `json:"plan_id"`
+	VersionNumber int64          `json:"version_number"`
+}
+
+func (q *Queries) SetPlanVersionMilestones(ctx context.Context, arg SetPlanVersionMilestonesParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setPlanVersionMilestones, arg.Milestones, arg.PlanID, arg.VersionNumber)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const updatePlan = `-- name: UpdatePlan :one

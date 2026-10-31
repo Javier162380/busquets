@@ -54,6 +54,7 @@ type PlanVersion struct {
 	Content       string
 	WordCount     int64
 	CreatedAt     time.Time
+	Milestones    []string // nil when none; values are validated by the service
 }
 
 // Connector represents an external connector (e.g., Telegram).

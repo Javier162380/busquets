@@ -502,8 +502,17 @@ func (s *MemoryScreen) updateListItems() {
 	s.list.SetItems(items)
 }
 
-// memoryEventTitle labels a timeline row from computed facts.
+// memoryEventTitle labels a timeline row from computed facts, plus the version's milestone badges.
 func memoryEventTitle(event busquets.MemoryEvent) string {
+	title := memoryEventLabel(event)
+	if badges := milestoneBadges(event.Milestones); badges != "" {
+		title += " " + badges // the list renders titles only
+	}
+	return title
+}
+
+// memoryEventLabel names the event kind and version.
+func memoryEventLabel(event busquets.MemoryEvent) string {
 	if event.Kind == busquets.MemoryEventComment {
 		return "Comment"
 	}

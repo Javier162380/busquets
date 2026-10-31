@@ -12,21 +12,21 @@ type SearchPlansArgs struct {
 
 // GetPlanArgs contains arguments for the get_plan tool.
 type GetPlanArgs struct {
-	FileName   string `json:"fileName"`   // Plan filename (e.g., "my-plan.md")
-	SyncSource string `json:"syncSource"` // Source directory path, as shown in sync_source of search_plans results
+	FileName   string `json:"fileName"` // Plan filename (e.g., "my-plan.md")
+	SyncSource string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 }
 
 // AddPlanCommentArgs contains arguments for the add_plan_comment tool.
 type AddPlanCommentArgs struct {
 	FileName   string `json:"fileName"`
-	SyncSource string `json:"syncSource"`
+	SyncSource string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 	Comment    string `json:"comment"`
 }
 
 // GetPlanCommentsArgs contains arguments for the get_plan_comments tool.
 type GetPlanCommentsArgs struct {
 	FileName   string `json:"fileName"`
-	SyncSource string `json:"syncSource"`
+	SyncSource string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 }
 
 // DeleteCommentArgs contains arguments for the delete_comment tool.
@@ -37,13 +37,13 @@ type DeleteCommentArgs struct {
 // GenerateTLDRPromptArgs contains arguments for the generate_tldr_prompt tool.
 type GenerateTLDRPromptArgs struct {
 	FileName   string `json:"fileName"`
-	SyncSource string `json:"syncSource"`
+	SyncSource string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 }
 
 // GetPlanVersionHistoryArgs contains arguments for the get_plan_version_history tool.
 type GetPlanVersionHistoryArgs struct {
 	FileName   string `json:"fileName"`
-	SyncSource string `json:"syncSource"`
+	SyncSource string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 	Offset     int64  `json:"offset,omitempty"`
 	Limit      int64  `json:"limit,omitempty"` // default 20, max 50
 }
@@ -51,29 +51,37 @@ type GetPlanVersionHistoryArgs struct {
 // GetPlanVersionArgs contains arguments for the get_plan_version tool.
 type GetPlanVersionArgs struct {
 	FileName      string `json:"fileName"`
-	SyncSource    string `json:"syncSource"`
+	SyncSource    string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 	VersionNumber int64  `json:"versionNumber"`
 }
 
 // RestorePlanVersionArgs contains arguments for the restore_plan_version tool.
 type RestorePlanVersionArgs struct {
 	FileName      string `json:"fileName"`
-	SyncSource    string `json:"syncSource"`
+	SyncSource    string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 	VersionNumber int64  `json:"versionNumber"`
 }
 
 // DiffPlanVersionsArgs contains arguments for the diff_plan_versions tool.
 type DiffPlanVersionsArgs struct {
 	FileName    string `json:"fileName"`
-	SyncSource  string `json:"syncSource"`
+	SyncSource  string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 	FromVersion int64  `json:"fromVersion"`
 	ToVersion   int64  `json:"toVersion"`
+}
+
+// SetVersionMilestonesArgs contains arguments for the set_version_milestones tool.
+type SetVersionMilestonesArgs struct {
+	FileName      string   `json:"fileName"`
+	SyncSource    string   `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
+	VersionNumber int64    `json:"versionNumber"`
+	Milestones    []string `json:"milestones" jsonschema:"full replacement set; an empty list clears it"`
 }
 
 // DeletePlanTagArgs contains arguments for the delete_tag tool (removes one tag from one plan).
 type DeletePlanTagArgs struct {
 	FileName   string `json:"fileName"`
-	SyncSource string `json:"syncSource"`
+	SyncSource string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 	Tag        string `json:"tag"`
 }
 
@@ -81,14 +89,14 @@ type DeletePlanTagArgs struct {
 // Replaces the plan's full tag list — not additive.
 type SetPlanTagsArgs struct {
 	FileName   string   `json:"fileName"`
-	SyncSource string   `json:"syncSource"`
+	SyncSource string   `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 	Tags       []string `json:"tags"`
 }
 
 // GetPlanTagsArgs contains arguments for the get_plan_tags tool.
 type GetPlanTagsArgs struct {
 	FileName   string `json:"fileName"`
-	SyncSource string `json:"syncSource"`
+	SyncSource string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 }
 
 // Result wrapper types: a bare slice isn't a valid MCP output schema (must be struct/map,
@@ -133,7 +141,7 @@ type DiffResult struct {
 // from these two fields, then optionally persist it via add_comment.
 type TLDRPrompt struct {
 	FileName     string `json:"fileName"`
-	SyncSource   string `json:"syncSource"`
+	SyncSource   string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 	SystemPrompt string `json:"systemPrompt"`
 	UserPrompt   string `json:"userPrompt"`
 }
@@ -141,13 +149,13 @@ type TLDRPrompt struct {
 // GetPlanMemoryArgs contains arguments for the get_plan_memory tool.
 type GetPlanMemoryArgs struct {
 	FileName   string `json:"fileName"`
-	SyncSource string `json:"syncSource"`
+	SyncSource string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 }
 
 // GenerateMemoryPromptArgs contains arguments for the generate_memory_prompt tool.
 type GenerateMemoryPromptArgs struct {
 	FileName   string `json:"fileName"`
-	SyncSource string `json:"syncSource"`
+	SyncSource string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 	// Rebuild asks for every event rather than only those not yet narrated.
 	Rebuild bool `json:"rebuild,omitempty"`
 }
@@ -164,7 +172,7 @@ type SaveMemoryEventArg struct {
 // SavePlanMemoryArgs contains arguments for the save_plan_memory tool.
 type SavePlanMemoryArgs struct {
 	FileName   string               `json:"fileName"`
-	SyncSource string               `json:"syncSource"`
+	SyncSource string               `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 	Mode       string               `json:"mode,omitempty"` // "incremental" (default) or "rebuild"
 	Summary    string               `json:"summary,omitempty"`
 	Events     []SaveMemoryEventArg `json:"events"`
@@ -173,7 +181,7 @@ type SavePlanMemoryArgs struct {
 // DeletePlanMemoryArgs contains arguments for the delete_plan_memory tool.
 type DeletePlanMemoryArgs struct {
 	FileName   string `json:"fileName"`
-	SyncSource string `json:"syncSource"`
+	SyncSource string `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 }
 
 // MemoryPromptResult is what generate_memory_prompt returns: the prompts plus
@@ -181,7 +189,7 @@ type DeletePlanMemoryArgs struct {
 // calling assistant writes the narratives and persists them via save_plan_memory.
 type MemoryPromptResult struct {
 	FileName            string              `json:"fileName"`
-	SyncSource          string              `json:"syncSource"`
+	SyncSource          string              `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 	PlanTitle           string              `json:"planTitle"`
 	Mode                string              `json:"mode"`
 	SummarySystemPrompt string              `json:"summarySystemPrompt"`
@@ -204,7 +212,7 @@ type MemoryEventPrompt struct {
 // PlanMemoryResult wraps a memory and its computed timeline.
 type PlanMemoryResult struct {
 	FileName            string             `json:"fileName"`
-	SyncSource          string             `json:"syncSource"`
+	SyncSource          string             `json:"syncSource" jsonschema:"absolute source directory path, as returned in SyncSource"`
 	PlanTitle           string             `json:"planTitle"`
 	Exists              bool               `json:"exists"`
 	Summary             string             `json:"summary,omitempty"`
