@@ -692,7 +692,7 @@ func (s *VersionsScreen) ShortHelp() string {
 		return fmt.Sprintf("tab: [CONTENT] | down/up: navigate | g/G: top/bottom | v: view | R: restore | t: milestones | %s | M: metadata | r: render (%s) | l: lines (%s) | c: copy | %s | esc: back | Versions: %d", baseHelp, mode, lines, searchHelp, len(s.versions))
 	case types.FocusContent:
 		if s.layout != types.LayoutFullscreen {
-			return fmt.Sprintf("tab: [LIST] |down/up: scroll | g/G: top/bottom | R: restore | t: milestones | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | esc: back", mode, lines)
+			return fmt.Sprintf("tab: [LIST] | down/up: scroll | g/G: top/bottom | R: restore | t: milestones | r: render (%s) | l: lines (%s) | c: copy | ctrl+l: go to line | esc: back", mode, lines)
 		}
 		contentSearchHelp := "/: search"
 		if query := s.viewer.SearchQuery(); query != "" {

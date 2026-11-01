@@ -331,9 +331,9 @@ func TestMemoryScreenPanes(t *testing.T) {
 
 	t.Run("the legend leads with tab", func(t *testing.T) {
 		s := twoVersions(t)
-		require.True(t, strings.HasPrefix(s.ShortHelp(), "tab: go to memory | "))
+		require.True(t, strings.HasPrefix(s.ShortHelp(), "tab: [CONTENT] | "))
 		press(s, "tab")
-		require.True(t, strings.HasPrefix(s.ShortHelp(), "tab: go to timeline | "))
+		require.True(t, strings.HasPrefix(s.ShortHelp(), "tab: [TIMELINE] | "))
 		require.NotContains(t, s.ShortHelp(), "shift+tab")
 	})
 }
