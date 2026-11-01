@@ -744,7 +744,13 @@ func (s *VersionsScreen) openMilestoneModal() {
 	}
 	s.activeModal = types.ModalMilestones
 	s.milestoneModal.SetSize(min(60, s.width-4), min(18, s.height-2))
-	s.milestoneModal.Open(s.planID, s.current.VersionNumber, s.current.Milestones)
+	planID, versionNumber := s.planID, s.current.VersionNumber
+	s.milestoneModal.Open(fmt.Sprintf("Version %d milestones", versionNumber), s.current.Milestones,
+		func(milestones []busquets.VersionMilestone) tea.Cmd {
+			return func() tea.Msg {
+				return messages.SetVersionMilestonesMsg{PlanID: planID, VersionNumber: versionNumber, Milestones: milestones}
+			}
+		})
 }
 
 // applySavedVersion swaps the stored version into the list, keeping selection and the diff base in sync.

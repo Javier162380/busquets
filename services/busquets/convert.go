@@ -1,6 +1,10 @@
 package busquets
 
-import "github.com/Javier162380/busquets/services/busquets/dto"
+import (
+	"errors"
+
+	"github.com/Javier162380/busquets/services/busquets/dto"
+)
 
 func toTag(t dto.Tag) Tag {
 	return Tag{
@@ -51,4 +55,13 @@ func toPlanVersion(v dto.PlanVersion) PlanVersion {
 		CreatedAt:     v.CreatedAt,
 		Milestones:    storedMilestones(v.Milestones),
 	}
+}
+
+// ValidationMessage returns the plain message of a validation error, so cmd/* can show it without importing dto.
+func ValidationMessage(err error) (string, bool) {
+	var e *dto.Error
+	if !errors.As(err, &e) || e.Category != dto.CategoryValidation {
+		return "", false
+	}
+	return e.Message, true
 }

@@ -39,6 +39,7 @@ type PlansScreen struct {
 	inputModal         *components.InputModal[int]
 	contentSearchModal *components.InputModal[string]
 	metadataModal      *components.MetadataModal
+	milestoneModal     *components.MilestoneModal
 
 	// State.
 	layout types.Layout
@@ -93,6 +94,7 @@ func NewPlansScreen(width, height int, isDarkModeEnabled, renderMarkdownByDefaul
 		inputModal:         components.NewInputModal[int](),
 		contentSearchModal: components.NewInputModal[string](),
 		metadataModal:      components.NewMetadataModal(),
+		milestoneModal:     components.NewMilestoneModal(),
 		tagFilter:          components.NewTagFilter(panelWidth),
 		layout:             types.LayoutSplit,
 		baseLayout:         types.LayoutSplit,
@@ -147,7 +149,7 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 	}
 
 	switch s.activeModal {
-	case types.ModalNone, types.ModalMilestones: // milestones is VersionsScreen-only
+	case types.ModalNone:
 		// no modal active, handle normally below
 	case types.ModalTLDR:
 		return s.handleTLDRUpdate(msg)
@@ -163,6 +165,8 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		return s.handleContentSearchModalUpdate(msg)
 	case types.ModalMetadata:
 		return s.handleMetadataModalUpdate(msg)
+	case types.ModalMilestones:
+		return s.handleMilestoneModalUpdate(msg)
 	}
 
 	switch msg := msg.(type) {
@@ -223,6 +227,16 @@ func (s *PlansScreen) Update(msg tea.Msg) (Screen, tea.Cmd) {
 		viewerWidth := s.getViewerWidth()
 		s.viewer.SetContent(content.NewPlanContent(msg.Detail, viewerWidth))
 		s.editor.SetContent(msg.Detail.Content)
+		return s, nil
+
+	case messages.SavePreparedMsg:
+		if s.current == nil {
+			return s, nil
+		}
+		if !msg.Changed {
+			return s, s.savePlan(msg.Content, nil)
+		}
+		s.askVersionMilestones(msg.Content)
 		return s, nil
 
 	case messages.SaveResultMsg:
@@ -863,7 +877,7 @@ func (s *PlansScreen) handleContentKey(key string, msg tea.KeyMsg) (Screen, tea.
 		}
 		// Save.
 		if s.current != nil {
-			return s, s.savePlan()
+			return s, s.prepareSave()
 		}
 		return s, nil
 
@@ -909,8 +923,7 @@ func (s *PlansScreen) handleEditorKey(key string, msg tea.KeyMsg) (Screen, tea.C
 	case "ctrl+s":
 		// Save.
 		if s.current != nil {
-			s.editor.ClearStash()
-			return s, s.savePlan()
+			return s, s.prepareSave()
 		}
 		return s, nil
 
@@ -1186,6 +1199,15 @@ func (s *PlansScreen) handleMetadataModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
 	return s, cmd
 }
 
+// handleMilestoneModalUpdate routes messages while the new-version milestone modal is active.
+func (s *PlansScreen) handleMilestoneModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
+	cmd := s.milestoneModal.Update(msg)
+	if !s.milestoneModal.IsActive() {
+		s.activeModal = types.ModalNone
+	}
+	return s, cmd
+}
+
 // handleInputModalUpdate routes messages while the generic input modal is active.
 func (s *PlansScreen) handleInputModalUpdate(msg tea.Msg) (Screen, tea.Cmd) {
 	cmd := s.inputModal.Update(msg)
@@ -1238,7 +1260,7 @@ func (s *PlansScreen) View() string {
 	}
 
 	switch s.activeModal {
-	case types.ModalNone, types.ModalMilestones: // milestones is VersionsScreen-only
+	case types.ModalNone:
 		// no overlay, fall through to confirmDialog check below
 	case types.ModalTLDR:
 		popupWidth := s.width * 2 / 3
@@ -1285,6 +1307,8 @@ func (s *PlansScreen) View() string {
 
 	case types.ModalMetadata:
 		return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.metadataModal.View())
+	case types.ModalMilestones:
+		return overlayContent(mainContent, s.width, s.height, lipgloss.Center, lipgloss.Center, s.milestoneModal.View())
 	}
 
 	if s.confirmDialog.IsActive() {
@@ -1939,15 +1963,31 @@ func (s *PlansScreen) loadPlanDetail(fileName, syncSource string) tea.Cmd {
 	}
 }
 
-func (s *PlansScreen) savePlan() tea.Cmd {
-	return func() tea.Msg {
-		return messages.SavePlanMsg{
-			FileName:   s.current.FileName,
-			SyncSource: s.current.SyncSource,
-			Content:    s.editor.Content(),
-			Modified:   s.current.ModifiedAt,
-		}
+// prepareSave captures the content now; SavePreparedMsg carries it to the actual save.
+func (s *PlansScreen) prepareSave() tea.Cmd {
+	req := messages.PrepareSaveMsg{PlanID: s.current.ID, Content: s.editor.Content()}
+	return func() tea.Msg { return req }
+}
+
+// askVersionMilestones opens the optional milestone picker for the version this save will create.
+func (s *PlansScreen) askVersionMilestones(content string) {
+	s.activeModal = types.ModalMilestones
+	s.milestoneModal.SetSize(min(60, s.width-4), min(18, s.height-2))
+	s.milestoneModal.Open("Add milestones to the new version? (optional)", nil,
+		func(milestones []busquets.VersionMilestone) tea.Cmd { return s.savePlan(content, milestones) })
+}
+
+// savePlan sends the save; the stash is cleared only once a save really happens.
+func (s *PlansScreen) savePlan(content string, milestones []busquets.VersionMilestone) tea.Cmd {
+	s.editor.ClearStash()
+	save := messages.SavePlanMsg{
+		FileName:   s.current.FileName,
+		SyncSource: s.current.SyncSource,
+		Content:    content,
+		Modified:   s.current.ModifiedAt,
+		Milestones: milestones,
 	}
+	return func() tea.Msg { return save }
 }
 
 func (s *PlansScreen) stashPlan() tea.Cmd {

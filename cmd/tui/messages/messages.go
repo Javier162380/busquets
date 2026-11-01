@@ -44,6 +44,19 @@ type SavePlanMsg struct {
 	SyncSource string
 	Content    string
 	Modified   time.Time
+	Milestones []busquets.VersionMilestone // nil for a plain save
+}
+
+// PrepareSaveMsg asks whether saving Content would create a version, before any write.
+type PrepareSaveMsg struct {
+	PlanID  int64
+	Content string
+}
+
+// SavePreparedMsg carries the captured content and whether it differs from the latest version.
+type SavePreparedMsg struct {
+	Content string
+	Changed bool
 }
 
 // SyncPlansMsg requests syncing plans.

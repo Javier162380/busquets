@@ -1208,6 +1208,139 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		require.Equal(t, sampleMarkdownUpdated, string(viewerContent))
 	})
 
+	t.Run("UpdatePlan stamps the new version with the requested milestones", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "stamped.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		result, err := service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource: sourcePlansDir, FileName: "stamped.md", NewContent: sampleMarkdownUpdated, Force: true,
+			Milestones: []VersionMilestone{MilestoneHumanReview, MilestoneHumanReview},
+		})
+		require.NoError(t, err)
+		require.True(t, result.NewVersionCreated)
+
+		version, err := service.GetPlanVersion(ctx, "stamped.md", sourcePlansDir, 1)
+		require.NoError(t, err)
+		require.Equal(t, sampleMarkdownUpdated, version.Content)
+		require.Equal(t, []VersionMilestone{MilestoneHumanReview}, version.Milestones)
+	})
+
+	t.Run("UpdatePlan without milestones leaves the new version unstamped", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "plain.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource: sourcePlansDir, FileName: "plain.md", NewContent: sampleMarkdownUpdated, Force: true,
+		})
+		require.NoError(t, err)
+
+		row, err := service.DB().GetPlanByFileName(ctx, "plain.md", sourcePlansDir)
+		require.NoError(t, err)
+		stored, err := service.DB().GetPlanVersionByNumber(ctx, row.ID, 1)
+		require.NoError(t, err)
+		require.Nil(t, stored.Milestones, "no milestones must be stored as NULL")
+	})
+
+	t.Run("UpdatePlan rejects conflicting milestones before writing anything", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "rejected.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource: sourcePlansDir, FileName: "rejected.md", NewContent: sampleMarkdownUpdated, Force: true,
+			Milestones: []VersionMilestone{MilestoneLLMGenerated, MilestoneHumanReview},
+		})
+		message, ok := ValidationMessage(err)
+		require.True(t, ok)
+		require.Equal(t, "LLMGenerated and HumanReview cannot be on the same version", message)
+
+		sourceContent, err := os.ReadFile(filepath.Join(sourcePlansDir, "rejected.md"))
+		require.NoError(t, err)
+		require.Equal(t, sampleMarkdown, string(sourceContent))
+		count, err := service.GetVersionCount(ctx, "rejected.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, int64(1), count)
+	})
+
+	t.Run("UpdatePlan with unchanged content ignores milestones and creates no version", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "unchanged.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		result, err := service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource: sourcePlansDir, FileName: "unchanged.md", NewContent: sampleMarkdown, Force: true,
+			Milestones: []VersionMilestone{MilestoneHumanReview},
+		})
+		require.NoError(t, err)
+		require.False(t, result.NewVersionCreated)
+
+		history, err := service.GetPlanVersionHistory(ctx, "unchanged.md", sourcePlansDir, 0, 10)
+		require.NoError(t, err)
+		require.Len(t, history, 1)
+		require.Nil(t, history[0].Milestones, "milestones must never land on an older version")
+	})
+
+	t.Run("VersionContentChanged compares against the latest version", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "changed.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+		plan, err := service.GetPlanByFileName(ctx, "changed.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		changed, err := service.VersionContentChanged(ctx, plan.ID, sampleMarkdown)
+		require.NoError(t, err)
+		require.False(t, changed)
+
+		changed, err = service.VersionContentChanged(ctx, plan.ID, sampleMarkdownUpdated)
+		require.NoError(t, err)
+		require.True(t, changed)
+	})
+
+	t.Run("a restore after a stamped save stays unstamped", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "restore-stamp.md", sampleMarkdown)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+			SyncSource: sourcePlansDir, FileName: "restore-stamp.md", NewContent: sampleMarkdownUpdated, Force: true,
+			Milestones: []VersionMilestone{MilestoneHumanReview},
+		})
+		require.NoError(t, err)
+		plan, err := service.GetPlanByFileName(ctx, "restore-stamp.md", sourcePlansDir)
+		require.NoError(t, err)
+
+		require.NoError(t, service.RestorePlanVersion(ctx, plan.ID, 0))
+
+		restored, err := service.GetPlanVersion(ctx, "restore-stamp.md", sourcePlansDir, 2)
+		require.NoError(t, err)
+		require.Nil(t, restored.Milestones)
+	})
+
 	t.Run("UpdatePlan creates a version snapshot atomically with the content update", func(t *testing.T) {
 		service, sourcePlansDir, _, cleanup := setup(t)
 		defer cleanup()

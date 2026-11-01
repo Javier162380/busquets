@@ -25,7 +25,8 @@ func shouldCreateVersion(latestFound bool, latestContent, newContent string) boo
 	return latestContent != newContent
 }
 
-func (s *Service) versionContentChanged(ctx context.Context, planID int64, content string) (bool, error) {
+// VersionContentChanged reports whether content differs from the plan's latest version (true when it has none).
+func (s *Service) VersionContentChanged(ctx context.Context, planID int64, content string) (bool, error) {
 	lastVersionNum, err := s.db.GetLatestVersionNumber(ctx, planID)
 	if err != nil {
 		return false, fmt.Errorf("failed to get latest version number: %w", err)
@@ -45,7 +46,7 @@ func (s *Service) versionContentChanged(ctx context.Context, planID int64, conte
 // from the latest snapshot. A nil callback tells UpdatePlanContent to skip the
 // snapshot while still updating the plan files and row.
 func (s *Service) optionalVersionWriter(ctx context.Context, planID int64, content string, createdAt time.Time, wordCount int) (func(planID, versionNumber int64) (string, int64, error), bool, error) {
-	create, err := s.versionContentChanged(ctx, planID, content)
+	create, err := s.VersionContentChanged(ctx, planID, content)
 	if err != nil || !create {
 		return nil, false, err
 	}
@@ -59,7 +60,7 @@ func (s *Service) SavePlanVersion(ctx context.Context, planName, syncSource, con
 		return fmt.Errorf("plan not found: %w", err)
 	}
 
-	createVersion, err := s.versionContentChanged(ctx, plan.ID, content)
+	createVersion, err := s.VersionContentChanged(ctx, plan.ID, content)
 	if err != nil {
 		return err
 	}

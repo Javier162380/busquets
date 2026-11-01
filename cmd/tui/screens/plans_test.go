@@ -653,3 +653,95 @@ func TestStashPreservesEditAcrossEscAndBackToEditor(t *testing.T) {
 	require.Equal(t, "some content", ps.editor.Content())
 	require.False(t, ps.editor.IsModified())
 }
+
+func TestSaveWithMilestones(t *testing.T) {
+	modified := time.Date(2026, 11, 1, 9, 0, 0, 0, time.UTC)
+	newScreen := func() *PlansScreen {
+		s := NewPlansScreen(100, 40, false, false, false, "plan_content", busquets.MarkdownThemeASCII, busquets.ScreenOrientationHorizontal)
+		s.current = &busquets.PlanDetail{
+			PlanSummary: busquets.PlanSummary{ID: 7, FileName: "p.md", SyncSource: "/src", ModifiedAt: modified},
+			Content:     "# A",
+		}
+		s.editor.SetContent("# A")
+		return s
+	}
+	ctrlS := tea.KeyMsg{Type: tea.KeyCtrlS}
+	enter := tea.KeyMsg{Type: tea.KeyEnter}
+	plainSave := func(content string, milestones []busquets.VersionMilestone) messages.SavePlanMsg {
+		return messages.SavePlanMsg{FileName: "p.md", SyncSource: "/src", Content: content, Modified: modified, Milestones: milestones}
+	}
+
+	for _, tc := range []struct {
+		name   string
+		focus  types.Focus
+		layout types.Layout
+	}{
+		{"from the editor", types.FocusEditor, types.LayoutSplit},
+		{"from fullscreen content", types.FocusContent, types.LayoutFullscreen},
+	} {
+		t.Run("ctrl+s asks before saving "+tc.name, func(t *testing.T) {
+			s := newScreen()
+			s.focus, s.layout = tc.focus, tc.layout
+
+			_, cmd := s.Update(ctrlS)
+			require.Equal(t, messages.PrepareSaveMsg{PlanID: 7, Content: "# A"}, cmd())
+		})
+	}
+
+	t.Run("no content change saves straight away without the popup", func(t *testing.T) {
+		s := newScreen()
+
+		_, cmd := s.Update(messages.SavePreparedMsg{Content: "# A", Changed: false})
+		require.Equal(t, types.ModalNone, s.activeModal)
+		require.Equal(t, plainSave("# A", nil), cmd())
+	})
+
+	t.Run("a new version opens the optional popup with nothing checked", func(t *testing.T) {
+		s := newScreen()
+
+		_, cmd := s.Update(messages.SavePreparedMsg{Content: "# B", Changed: true})
+		require.Nil(t, cmd)
+		require.Equal(t, types.ModalMilestones, s.activeModal)
+
+		_, cmd = s.Update(enter)
+		require.Equal(t, types.ModalNone, s.activeModal)
+		require.Equal(t, plainSave("# B", nil), cmd())
+	})
+
+	t.Run("checked milestones go with the captured content", func(t *testing.T) {
+		s := newScreen()
+		s.Update(messages.SavePreparedMsg{Content: "# B", Changed: true})
+		s.editor.SetContent("# typed during the round trip")
+
+		s.Update(tea.KeyMsg{Type: tea.KeyDown})
+		s.Update(tea.KeyMsg{Type: tea.KeySpace})
+		_, cmd := s.Update(enter)
+		require.Equal(t, plainSave("# B", []busquets.VersionMilestone{busquets.MilestoneHumanReview}), cmd())
+	})
+
+	t.Run("esc in the popup saves nothing and keeps the stash", func(t *testing.T) {
+		s := newScreen()
+		s.editor.SetContent("# stashed")
+		s.editor.Stash()
+		s.editor.SetContent("# A")
+
+		s.Update(messages.SavePreparedMsg{Content: "# B", Changed: true})
+		_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyEsc})
+		require.Nil(t, cmd)
+		require.Equal(t, types.ModalNone, s.activeModal)
+
+		s.editor.RestoreStash()
+		require.Equal(t, "# stashed", s.editor.Content())
+	})
+
+	t.Run("a real save clears the stash", func(t *testing.T) {
+		s := newScreen()
+		s.editor.SetContent("# stashed")
+		s.editor.Stash()
+		s.editor.SetContent("# A")
+
+		s.Update(messages.SavePreparedMsg{Content: "# A", Changed: false})
+		s.editor.RestoreStash()
+		require.Equal(t, "# A", s.editor.Content())
+	})
+}

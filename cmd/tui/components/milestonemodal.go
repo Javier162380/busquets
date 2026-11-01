@@ -3,7 +3,6 @@ package components
 import (
 	"strings"
 
-	"github.com/Javier162380/busquets/cmd/tui/messages"
 	"github.com/Javier162380/busquets/cmd/tui/styles"
 	"github.com/Javier162380/busquets/services/busquets"
 
@@ -23,9 +22,9 @@ var milestoneHints = map[busquets.VersionMilestone]string{
 // MilestoneModal toggles a version's lifecycle milestones from the fixed enum. Validation stays in the service.
 type MilestoneModal struct {
 	active        bool
-	planID        int64
-	versionNumber int64
+	title         string
 	selected      map[busquets.VersionMilestone]bool
+	onSubmit      func([]busquets.VersionMilestone) tea.Cmd
 	cursor        int
 	width, height int
 }
@@ -35,10 +34,10 @@ func NewMilestoneModal() *MilestoneModal {
 	return &MilestoneModal{selected: make(map[busquets.VersionMilestone]bool)}
 }
 
-// Open activates the modal for one version, pre-checking its current milestones.
-func (m *MilestoneModal) Open(planID, versionNumber int64, current []busquets.VersionMilestone) {
-	m.planID = planID
-	m.versionNumber = versionNumber
+// Open shows the checklist with current pre-checked; enter hands the checked set to onSubmit.
+func (m *MilestoneModal) Open(title string, current []busquets.VersionMilestone, onSubmit func([]busquets.VersionMilestone) tea.Cmd) {
+	m.title = title
+	m.onSubmit = onSubmit
 	clear(m.selected)
 	for _, milestone := range current {
 		m.selected[milestone] = true
@@ -78,12 +77,7 @@ func (m *MilestoneModal) Update(msg tea.Msg) tea.Cmd {
 		m.selected[milestone] = !m.selected[milestone]
 	case "enter":
 		m.active = false
-		save := messages.SetVersionMilestonesMsg{
-			PlanID:        m.planID,
-			VersionNumber: m.versionNumber,
-			Milestones:    m.selectedInOrder(),
-		}
-		return func() tea.Msg { return save }
+		return m.onSubmit(m.selectedInOrder())
 	case "esc":
 		m.active = false
 	}
@@ -117,7 +111,7 @@ func (m *MilestoneModal) View() string {
 	mutedStyle := lipgloss.NewStyle().Foreground(styles.MutedColor)
 
 	var body strings.Builder
-	body.WriteString(titleStyle.Render("Version milestones"))
+	body.WriteString(titleStyle.Render(m.title))
 	body.WriteString("\n\n")
 
 	for i, milestone := range busquets.VersionMilestones {
