@@ -294,7 +294,7 @@ func (r *Repository) InsertPlan(
 	ctx context.Context,
 	params dto.InsertPlanParams,
 	writeFile func(id int64) (string, error),
-	version func(planID int64) (dto.InsertPlanVersionParams, func() error, error),
+	version func(planID int64) (dto.InsertPlanVersionParams, func() error),
 ) (int64, error) {
 	var id int64
 	err := r.withTx(ctx, func(q *Queries) error {
@@ -324,10 +324,7 @@ func (r *Repository) InsertPlan(
 		}
 
 		if version != nil {
-			versionParams, writeVersionFile, err := version(insertedID)
-			if err != nil {
-				return err
-			}
+			versionParams, writeVersionFile := version(insertedID)
 			milestones, err := encodeMilestones(versionParams.Milestones)
 			if err != nil {
 				return err

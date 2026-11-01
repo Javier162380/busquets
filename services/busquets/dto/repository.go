@@ -16,12 +16,11 @@ type Repository interface {
 	// invokes writeFile with the newly assigned id so the caller can write
 	// the id-keyed mirror file, then persists the path writeFile returns —
 	// all atomically. If writeFile fails, the insert rolls back with it.
-	// version builds v0 inside the same transaction; an error from it (e.g. milestone validation) rolls back too.
 	InsertPlan(
 		ctx context.Context,
 		params InsertPlanParams,
 		writeFile func(id int64) (filePath string, err error),
-		version func(planID int64) (InsertPlanVersionParams, func() error, error),
+		version func(planID int64) (InsertPlanVersionParams, func() error),
 	) (int64, error)
 	UpdatePlan(ctx context.Context, params UpdatePlanParams) (Plan, error)
 	// UpdatePlanContent writes new content and updates the row atomically,

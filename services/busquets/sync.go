@@ -438,11 +438,7 @@ func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileNa
 			return "", err
 		}
 		return destPath, nil
-	}, func(id int64) (dto.InsertPlanVersionParams, func() error, error) {
-		milestones, err := validateMilestoneStrings(syncedVersionMilestones(dir))
-		if err != nil {
-			return dto.InsertPlanVersionParams{}, nil, err
-		}
+	}, func(id int64) (dto.InsertPlanVersionParams, func() error) {
 		versionFilePath := filepath.Join(s.versionsDirFor(id), fmt.Sprintf("0-%s.md", timestamp))
 		versionParams := dto.InsertPlanVersionParams{
 			PlanID:        id,
@@ -451,7 +447,7 @@ func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileNa
 			Content:       string(content),
 			WordCount:     int64(wordCount),
 			CreatedAt:     now,
-			Milestones:    milestones,
+			Milestones:    syncedVersionMilestones(dir),
 		}
 		writeVersionFile := func() error {
 			if _, err := os.Stat(filepath.Dir(versionFilePath)); os.IsNotExist(err) {
@@ -481,7 +477,7 @@ func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileNa
 			}
 			return nil
 		}
-		return versionParams, writeVersionFile, nil
+		return versionParams, writeVersionFile
 	})
 	if err != nil {
 		return false, fmt.Errorf("failed to insert plan: %w", err)
