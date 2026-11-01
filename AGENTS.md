@@ -187,9 +187,11 @@ viewer_dir = "/Users/yourname/.busquets"
 
 # One block per source directory; `label` defaults to the dir's base name and
 # is slugified to name the source's mirror dir under viewer_dir.
+# `llm_generated = true` stamps v0 of newly synced plans as LLMGenerated.
 [[paths.plans_dirs]]
-  path  = "/Users/yourname/.claude/plans"
-  label = "claudeRoot"
+  path          = "/Users/yourname/.claude/plans"
+  label         = "claudeRoot"
+  llm_generated = true
 
 [mcp]
 server_name = "busquets"

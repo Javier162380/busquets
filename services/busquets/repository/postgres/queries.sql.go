@@ -702,8 +702,8 @@ func (q *Queries) InsertPlan(ctx context.Context, arg InsertPlanParams) (int32, 
 }
 
 const insertPlanVersion = `-- name: InsertPlanVersion :exec
-INSERT INTO plan_versions (plan_id, version_number, file_path, content, word_count, created_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO plan_versions (plan_id, version_number, file_path, content, word_count, created_at, milestones)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type InsertPlanVersionParams struct {
@@ -713,6 +713,7 @@ type InsertPlanVersionParams struct {
 	Content       string             `json:"content"`
 	WordCount     int64              `json:"word_count"`
 	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	Milestones    []string           `json:"milestones"`
 }
 
 func (q *Queries) InsertPlanVersion(ctx context.Context, arg InsertPlanVersionParams) error {
@@ -723,6 +724,7 @@ func (q *Queries) InsertPlanVersion(ctx context.Context, arg InsertPlanVersionPa
 		arg.Content,
 		arg.WordCount,
 		arg.CreatedAt,
+		arg.Milestones,
 	)
 	return err
 }

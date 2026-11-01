@@ -66,12 +66,17 @@ max_idle_conns = 5
 # source's mirror directory under viewer_dir, so two sources must not share
 # a path or resolve to the same slug — startup fails if they do.
 #
+# `llm_generated` (optional, default false) marks the source as written by an
+# LLM: when sync first imports a plan from it, its version 0 is stamped with
+# the LLMGenerated milestone. Leave it off for dirs where humans write plans.
+#
 # Default when omitted entirely: a single source at $HOME/.claude/plans
 # labelled "plans".
 #
 # [[paths.plans_dirs]]
-#   path  = "/Users/yourname/.claude/plans"
-#   label = "claudeRoot"
+#   path          = "/Users/yourname/.claude/plans"
+#   label         = "claudeRoot"
+#   llm_generated = true
 #
 # [[paths.plans_dirs]]
 #   path  = "/Users/yourname/work/some-repo/docs/plans"

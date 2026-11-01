@@ -721,17 +721,18 @@ func (q *Queries) InsertPlan(ctx context.Context, arg InsertPlanParams) (int64, 
 }
 
 const insertPlanVersion = `-- name: InsertPlanVersion :exec
-INSERT INTO plan_versions (plan_id, version_number, file_path, content, word_count, created_at)
-VALUES (?, ?, ?, ?, ?, ?)
+INSERT INTO plan_versions (plan_id, version_number, file_path, content, word_count, created_at, milestones)
+VALUES (?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertPlanVersionParams struct {
-	PlanID        int64     `json:"plan_id"`
-	VersionNumber int64     `json:"version_number"`
-	FilePath      string    `json:"file_path"`
-	Content       string    `json:"content"`
-	WordCount     int64     `json:"word_count"`
-	CreatedAt     time.Time `json:"created_at"`
+	PlanID        int64          `json:"plan_id"`
+	VersionNumber int64          `json:"version_number"`
+	FilePath      string         `json:"file_path"`
+	Content       string         `json:"content"`
+	WordCount     int64          `json:"word_count"`
+	CreatedAt     time.Time      `json:"created_at"`
+	Milestones    sql.NullString `json:"milestones"`
 }
 
 func (q *Queries) InsertPlanVersion(ctx context.Context, arg InsertPlanVersionParams) error {
@@ -742,6 +743,7 @@ func (q *Queries) InsertPlanVersion(ctx context.Context, arg InsertPlanVersionPa
 		arg.Content,
 		arg.WordCount,
 		arg.CreatedAt,
+		arg.Milestones,
 	)
 	return err
 }
