@@ -4733,7 +4733,7 @@ func testInsertPlanRollbackOnVersionWriteFailure(t *testing.T, b backendSetup) {
 	}
 
 	var capturedVersionFilePath string
-	failingVersion := func(planID int64) (dto.InsertPlanVersionParams, func() error) {
+	failingVersion := func(planID int64) (dto.InsertPlanVersionParams, func() error, error) {
 		capturedVersionFilePath = filepath.Join(service.versionsDirFor(planID), "0-test.md")
 		return dto.InsertPlanVersionParams{
 				PlanID:        planID,
@@ -4744,7 +4744,7 @@ func testInsertPlanRollbackOnVersionWriteFailure(t *testing.T, b backendSetup) {
 				CreatedAt:     now,
 			}, func() error {
 				return fmt.Errorf("simulated version write failure")
-			}
+			}, nil
 	}
 
 	_, err := service.db.InsertPlan(ctx, params, writeFile, failingVersion)
@@ -4760,8 +4760,18 @@ func testInsertPlanRollbackOnVersionWriteFailure(t *testing.T, b backendSetup) {
 	_, err = os.Stat(capturedVersionFilePath)
 	require.True(t, os.IsNotExist(err), "a rolled-back insert must not leave an orphaned version file on disk")
 
+	// A version callback that rejects its milestones rolls the plan row back too, before any file is written.
+	rejectingVersion := func(planID int64) (dto.InsertPlanVersionParams, func() error, error) {
+		_, err := validateMilestoneStrings([]string{"HumanReview", "LLMGenerated"})
+		return dto.InsertPlanVersionParams{}, nil, err
+	}
+	_, err = service.db.InsertPlan(ctx, params, writeFile, rejectingVersion)
+	require.Equal(t, "ValidateVersionMilestones: LLMGenerated and HumanReview cannot be on the same version", err.Error())
+	_, err = service.db.GetPlanByFileName(ctx, "rollback-version.md", sourcePlansDir)
+	require.True(t, dto.IsNotFound(err), "a rejected v0 must not leave a persisted plan row")
+
 	// A subsequent, successful insert (with a working version write) must work cleanly.
-	workingVersion := func(planID int64) (dto.InsertPlanVersionParams, func() error) {
+	workingVersion := func(planID int64) (dto.InsertPlanVersionParams, func() error, error) {
 		versionFilePath := filepath.Join(service.versionsDirFor(planID), "0-test.md")
 		return dto.InsertPlanVersionParams{
 				PlanID:        planID,
@@ -4772,7 +4782,7 @@ func testInsertPlanRollbackOnVersionWriteFailure(t *testing.T, b backendSetup) {
 				CreatedAt:     now,
 			}, func() error {
 				return os.MkdirAll(filepath.Dir(versionFilePath), 0o750)
-			}
+			}, nil
 	}
 	id, err := service.db.InsertPlan(ctx, params, writeFile, workingVersion)
 	require.NoError(t, err)

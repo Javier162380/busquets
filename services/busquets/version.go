@@ -192,7 +192,7 @@ func (s *Service) planVersionDetail(ctx context.Context, planID, versionNumber i
 
 // SetVersionMilestones replaces a version's milestone set; an empty set clears it.
 func (s *Service) SetVersionMilestones(ctx context.Context, planID, versionNumber int64, milestones []VersionMilestone) (*PlanVersionDetail, error) {
-	validated, err := ValidateVersionMilestones(milestoneStrings(milestones))
+	validated, err := validateMilestoneStrings(milestoneStrings(milestones))
 	if err != nil {
 		return nil, err
 	}
@@ -200,7 +200,7 @@ func (s *Service) SetVersionMilestones(ctx context.Context, planID, versionNumbe
 	if err := s.db.SetPlanVersionMilestones(ctx, dto.SetPlanVersionMilestonesParams{
 		PlanID:        planID,
 		VersionNumber: versionNumber,
-		Milestones:    milestoneStrings(validated),
+		Milestones:    validated,
 	}); err != nil {
 		return nil, fmt.Errorf("failed to set milestones on version %d: %w", versionNumber, err)
 	}
@@ -470,6 +470,15 @@ func storedMilestones(raw []string) []VersionMilestone {
 	return slices.DeleteFunc(slices.Clone(VersionMilestones), func(milestone VersionMilestone) bool {
 		return !slices.Contains(raw, string(milestone))
 	})
+}
+
+// validateMilestoneStrings is the gate every milestone write goes through before reaching the repository.
+func validateMilestoneStrings(raw []string) ([]string, error) {
+	validated, err := ValidateVersionMilestones(raw)
+	if err != nil {
+		return nil, err
+	}
+	return milestoneStrings(validated), nil
 }
 
 func milestoneStrings(milestones []VersionMilestone) []string {
