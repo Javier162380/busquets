@@ -280,7 +280,6 @@ More testing details.`
 		}
 
 		result, plan, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
-		require.Error(t, err)
 		require.Nil(t, result)
 		require.Nil(t, plan)
 		require.Equal(t, "failed to get plan: not found", err.Error())
@@ -294,19 +293,26 @@ More testing details.`
 
 		result, plan, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.NotEmpty(t, result.Content)
+		require.Len(t, result.Content, 1)
+		require.Equal(t, fmt.Sprintf(`plan:
+  file_name: test-plan.md
+  sync_source: %s
+  sync_label: test
+  title: Test Plan
+  created_at: "%s"
+  modified_at: "%s"
+  tags: ""
+  reading_time: 1 min
+  file_size: %d
 
-		textContent, ok := result.Content[0].(*mcp.TextContent)
-		require.True(t, ok, "result should be TextContent")
-
-		firstLine, _, found := strings.Cut(textContent.Text, "\n")
-		require.True(t, found)
-		require.Equal(t, "plan:", firstLine)
-
-		_, content, found := strings.Cut(textContent.Text, "\n\ncontent:\n")
-		require.True(t, found)
-		require.Equal(t, plan.Content, content)
+content:
+%s`,
+			sourcePlansDir,
+			plan.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+			plan.ModifiedAt.UTC().Format("2006-01-02T15:04:05Z"),
+			len(testContent),
+			testContent,
+		), result.Content[0].(*mcp.TextContent).Text)
 	})
 }
 
@@ -600,14 +606,19 @@ func TestSetVersionMilestones(t *testing.T) {
 		}
 		result, _, err := handler.SetVersionMilestones(ctx, &mcp.CallToolRequest{}, args)
 		require.NoError(t, err)
-		text := result.Content[0].(*mcp.TextContent).Text
-		require.Contains(t, text, "LLMGenerated,PlanImplementationStart")
-
 		history, err := service.GetPlanVersionHistory(ctx, "test-plan.md", sourcePlansDir, 0, 10)
 		require.NoError(t, err)
+		v0 := history[0]
 		require.Equal(t,
 			[]busquets.VersionMilestone{busquets.MilestoneLLMGenerated, busquets.MilestonePlanImplementationStart},
-			history[0].Milestones)
+			v0.Milestones)
+
+		require.Len(t, result.Content, 1)
+		require.Equal(t, fmt.Sprintf(
+			"versions[1]{id,version_number,word_count,created_at,reading_time,tags,milestones}:\n"+
+				"  %d,0,%d,\"%s\",1 min,\"\",\"LLMGenerated,PlanImplementationStart\"",
+			v0.ID, v0.WordCount, v0.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		), result.Content[0].(*mcp.TextContent).Text)
 	})
 
 	t.Run("rejects an unknown value", func(t *testing.T) {
