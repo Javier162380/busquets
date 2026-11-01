@@ -28,7 +28,7 @@ func TestMilestoneModal(t *testing.T) {
 		m := NewMilestoneModal()
 		m.Open(7, 3, []busquets.VersionMilestone{busquets.MilestonePlanImplementationStart})
 
-		cmd := press(m, down, space, enter) // check HumanReview
+		cmd := press(m, down, space, enter)
 		require.False(t, m.IsActive())
 		require.Equal(t, messages.SetVersionMilestonesMsg{
 			PlanID:        7,
