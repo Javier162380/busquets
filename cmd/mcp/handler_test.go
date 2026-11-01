@@ -280,7 +280,6 @@ More testing details.`
 		}
 
 		result, plan, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
-		require.Error(t, err)
 		require.Nil(t, result)
 		require.Nil(t, plan)
 		require.Equal(t, "failed to get plan: not found", err.Error())
@@ -294,19 +293,26 @@ More testing details.`
 
 		result, plan, err := handler.GetPlanHandler(ctx, &mcp.CallToolRequest{}, args)
 		require.NoError(t, err)
-		require.NotNil(t, result)
-		require.NotEmpty(t, result.Content)
+		require.Len(t, result.Content, 1)
+		require.Equal(t, fmt.Sprintf(`plan:
+  file_name: test-plan.md
+  sync_source: %s
+  sync_label: test
+  title: Test Plan
+  created_at: "%s"
+  modified_at: "%s"
+  tags: ""
+  reading_time: 1 min
+  file_size: %d
 
-		textContent, ok := result.Content[0].(*mcp.TextContent)
-		require.True(t, ok, "result should be TextContent")
-
-		firstLine, _, found := strings.Cut(textContent.Text, "\n")
-		require.True(t, found)
-		require.Equal(t, "plan:", firstLine)
-
-		_, content, found := strings.Cut(textContent.Text, "\n\ncontent:\n")
-		require.True(t, found)
-		require.Equal(t, plan.Content, content)
+content:
+%s`,
+			sourcePlansDir,
+			plan.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+			plan.ModifiedAt.UTC().Format("2006-01-02T15:04:05Z"),
+			len(testContent),
+			testContent,
+		), result.Content[0].(*mcp.TextContent).Text)
 	})
 }
 
@@ -579,6 +585,108 @@ func TestRestorePlanVersion(t *testing.T) {
 		require.Error(t, err)
 		require.Nil(t, result)
 		require.Equal(t, "versionNumber is required", err.Error())
+	})
+}
+
+func TestSetVersionMilestones(t *testing.T) {
+	ctx := context.Background()
+	service, sourcePlansDir, cleanup := setupTestService(t)
+	defer cleanup()
+
+	createTestPlanFile(t, sourcePlansDir, "test-plan.md", "# Test\n\nContent v1.")
+	_, err := service.SyncPlans(ctx)
+	require.NoError(t, err)
+
+	handler := &Handler{service: service, server: nil}
+
+	t.Run("stamps v0 and reports the milestones in lifecycle order", func(t *testing.T) {
+		args := SetVersionMilestonesArgs{
+			FileName: "test-plan.md", SyncSource: sourcePlansDir, VersionNumber: 0,
+			Milestones: []string{"PlanImplementationStart", "LLMGenerated"},
+		}
+		result, _, err := handler.SetVersionMilestones(ctx, &mcp.CallToolRequest{}, args)
+		require.NoError(t, err)
+		history, err := service.GetPlanVersionHistory(ctx, "test-plan.md", sourcePlansDir, 0, 10)
+		require.NoError(t, err)
+		v0 := history[0]
+		require.Equal(t,
+			[]busquets.VersionMilestone{busquets.MilestoneLLMGenerated, busquets.MilestonePlanImplementationStart},
+			v0.Milestones)
+
+		require.Len(t, result.Content, 1)
+		require.Equal(t, fmt.Sprintf(
+			"versions[1]{id,version_number,word_count,created_at,reading_time,tags,milestones}:\n"+
+				"  %d,0,%d,\"%s\",1 min,\"\",\"LLMGenerated,PlanImplementationStart\"",
+			v0.ID, v0.WordCount, v0.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
+		), result.Content[0].(*mcp.TextContent).Text)
+	})
+
+	t.Run("rejects an unknown value", func(t *testing.T) {
+		args := SetVersionMilestonesArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir, Milestones: []string{"Bogus"}}
+		result, _, err := handler.SetVersionMilestones(ctx, &mcp.CallToolRequest{}, args)
+		require.Nil(t, result)
+		require.Equal(t, `ParseVersionMilestones: unknown milestone "Bogus"`, err.Error())
+	})
+
+	t.Run("rejects a conflicting pair", func(t *testing.T) {
+		args := SetVersionMilestonesArgs{
+			FileName: "test-plan.md", SyncSource: sourcePlansDir,
+			Milestones: []string{"PlanAbandoned", "PlanImplementationFinish"},
+		}
+		_, _, err := handler.SetVersionMilestones(ctx, &mcp.CallToolRequest{}, args)
+		require.Equal(t,
+			"failed to set milestones: ValidateVersionMilestones: PlanImplementationFinish and PlanAbandoned cannot be on the same version",
+			err.Error())
+	})
+
+	t.Run("missing syncSource", func(t *testing.T) {
+		args := SetVersionMilestonesArgs{FileName: "test-plan.md"}
+		_, _, err := handler.SetVersionMilestones(ctx, &mcp.CallToolRequest{}, args)
+		require.Equal(t, "syncSource is required", err.Error())
+	})
+
+	t.Run("negative versionNumber", func(t *testing.T) {
+		args := SetVersionMilestonesArgs{FileName: "test-plan.md", SyncSource: sourcePlansDir, VersionNumber: -1}
+		_, _, err := handler.SetVersionMilestones(ctx, &mcp.CallToolRequest{}, args)
+		require.Equal(t, "versionNumber must be 0 or greater", err.Error())
+	})
+}
+
+func TestRegisteredToolSchemas(t *testing.T) {
+	ctx := context.Background()
+	service, _, cleanup := setupTestService(t)
+	defer cleanup()
+
+	server := mcp.NewServer(&mcp.Implementation{Name: "busquets-test", Version: "test"}, nil)
+	require.NoError(t, NewHandler(service, server).Register())
+
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	_, err := server.Connect(ctx, serverTransport, nil)
+	require.NoError(t, err)
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "client", Version: "test"}, nil).Connect(ctx, clientTransport, nil)
+	require.NoError(t, err)
+	defer session.Close()
+
+	listed, err := session.ListTools(ctx, nil)
+	require.NoError(t, err)
+	tools := make(map[string]*mcp.Tool, len(listed.Tools))
+	for _, tool := range listed.Tools {
+		tools[tool.Name] = tool
+	}
+
+	t.Run("syncSource carries its description to clients", func(t *testing.T) {
+		schema, ok := tools["get_plan"].InputSchema.(map[string]any)
+		require.True(t, ok)
+		syncSource := schema["properties"].(map[string]any)["syncSource"].(map[string]any)
+		require.Equal(t, "absolute source directory path, as returned in SyncSource", syncSource["description"])
+	})
+
+	t.Run("set_version_milestones lists every milestone", func(t *testing.T) {
+		tool, ok := tools["set_version_milestones"]
+		require.True(t, ok)
+		for _, milestone := range busquets.VersionMilestones {
+			require.Contains(t, tool.Description, string(milestone))
+		}
 	})
 }
 

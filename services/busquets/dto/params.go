@@ -56,6 +56,7 @@ type InsertPlanVersionParams struct {
 	Content       string
 	WordCount     int64
 	CreatedAt     time.Time
+	Milestones    []string // nil for none
 }
 
 // PaginationParams contains limit/offset for paginated queries.
@@ -69,6 +70,13 @@ type VersionHistoryParams struct {
 	PlanID int64
 	Limit  int64
 	Offset int64
+}
+
+// SetPlanVersionMilestonesParams replaces a version's milestone set; empty clears it.
+type SetPlanVersionMilestonesParams struct {
+	PlanID        int64
+	VersionNumber int64
+	Milestones    []string
 }
 
 // DeleteVersionsParams contains parameters for deleting old versions.

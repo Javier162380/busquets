@@ -264,3 +264,56 @@ func TestVersionRestoreKeyEmitsRestoreMsgWithPlanID(t *testing.T) {
 		})
 	}
 }
+
+func TestVersionMilestones(t *testing.T) {
+	newScreen := func() *VersionsScreen {
+		versions := []busquets.PlanVersionDetail{
+			{PlanVersion: busquets.PlanVersion{VersionNumber: 2, FilePath: "/v/2.md", CreatedAt: time.Date(2026, 10, 1, 9, 0, 0, 0, time.UTC)}, ReadingTime: 1},
+			{PlanVersion: busquets.PlanVersion{
+				VersionNumber: 1, FilePath: "/v/1.md", CreatedAt: time.Date(2026, 9, 1, 9, 0, 0, 0, time.UTC),
+				Milestones: []busquets.VersionMilestone{busquets.MilestoneHumanReview},
+			}, ReadingTime: 1},
+		}
+		return NewVersionsScreenWithData(42, "plan.md", busquets.MarkdownThemeASCII, versions, 100, 40, false, busquets.ScreenOrientationHorizontal)
+	}
+
+	for _, tc := range []struct {
+		name  string
+		focus types.Focus
+	}{
+		{"t opens the modal from the list", types.FocusList},
+		{"t opens the modal from the content", types.FocusContent},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := newScreen()
+			s.focus = tc.focus
+
+			s.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}})
+			require.Equal(t, types.ModalMilestones, s.activeModal)
+			require.True(t, s.IsInputMode(), "global keys must not fire while the modal is open")
+
+			_, cmd := s.Update(tea.KeyMsg{Type: tea.KeyEnter})
+			require.Equal(t, types.ModalNone, s.activeModal)
+			require.Equal(t, messages.SetVersionMilestonesMsg{PlanID: 42, VersionNumber: 2}, cmd())
+		})
+	}
+
+	t.Run("row titles carry milestone badges", func(t *testing.T) {
+		s := newScreen()
+		require.Equal(t, "Version 2", s.list.SelectedItem().Title())
+
+		s.list.Select(1)
+		require.Equal(t, "Version 1 ◆ Review", s.list.SelectedItem().Title())
+	})
+
+	t.Run("a saved version updates its row and the selection", func(t *testing.T) {
+		s := newScreen()
+		saved := s.versions[0]
+		saved.Milestones = []busquets.VersionMilestone{busquets.MilestoneLLMGenerated, busquets.MilestonePlanImplementationStart}
+
+		s.Update(messages.VersionMilestonesSavedMsg{Version: &saved})
+		require.Equal(t, saved.Milestones, s.current.Milestones)
+		require.Equal(t, saved.Milestones, s.versions[0].Milestones)
+		require.Equal(t, "Version 2 ◆ LLM, Impl▶", s.list.SelectedItem().Title())
+	})
+}

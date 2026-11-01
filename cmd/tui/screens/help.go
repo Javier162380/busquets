@@ -130,6 +130,7 @@ VERSION HISTORY (left panel):
   Ctrl+L         Clear the version search
   v              View the version fullscreen
   R              Restore the selected version
+  t              Set lifecycle milestones on the selected version
   m              Mark/unmark the selected version as the diff base
   d              Show a unified diff: marked base vs. selected version
   r              Toggle markdown rendering (raw vs rendered)
@@ -142,6 +143,7 @@ VERSION VIEW (fullscreen):
   g / G          Jump to top / bottom
   Tab            Switch to the versions list
   R              Restore this version
+  t              Set lifecycle milestones on this version
   r              Toggle markdown rendering (raw vs rendered)
   l              Toggle line numbers
   c              Copy the version content to clipboard
@@ -150,6 +152,15 @@ VERSION VIEW (fullscreen):
   N / P          Jump to next / previous search match
   Ctrl+U         Clear the search highlight
   Esc            Back to the versions list
+
+VERSION MILESTONES (t):
+  ↑/↓            Select a milestone
+  Space / x      Toggle it
+  Enter          Save the checked set
+  Esc            Cancel
+
+  LLMGenerated + HumanReview and PlanImplementationFinish + PlanAbandoned
+  can't share a version. Milestones also show on memory timeline rows.
 
 VERSION DIFF (fullscreen, d):
   j/k, ↑/↓       Scroll the diff

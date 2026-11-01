@@ -407,6 +407,18 @@ type RestoreVersionMsg struct {
 	VersionNumber int64
 }
 
+// SetVersionMilestonesMsg requests replacing a version's milestone set.
+type SetVersionMilestonesMsg struct {
+	PlanID        int64
+	VersionNumber int64
+	Milestones    []busquets.VersionMilestone
+}
+
+// VersionMilestonesSavedMsg carries the version as stored after a milestone change.
+type VersionMilestonesSavedMsg struct {
+	Version *busquets.PlanVersionDetail
+}
+
 // RestoreResultMsg is sent when restore completes.
 type RestoreResultMsg struct {
 	Success  bool

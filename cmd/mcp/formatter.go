@@ -82,6 +82,7 @@ type planVersionTOON struct {
 	CreatedAt     string `toon:"created_at"`
 	ReadingTime   string `toon:"reading_time"`
 	Tags          string `toon:"tags"`
+	Milestones    string `toon:"milestones"`
 }
 
 type planVersionHistoryResponse struct {
@@ -256,7 +257,17 @@ func toPlanVersionTOON(v busquets.PlanVersionDetail) planVersionTOON {
 		CreatedAt:     v.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 		ReadingTime:   formatReadingTime(v.ReadingTime),
 		Tags:          formatTagNames(v.Tags),
+		Milestones:    formatMilestones(v.Milestones),
 	}
+}
+
+// formatMilestones joins milestones like tags; "" when none.
+func formatMilestones(milestones []busquets.VersionMilestone) string {
+	names := make([]string, len(milestones))
+	for i, milestone := range milestones {
+		names[i] = string(milestone)
+	}
+	return strings.Join(names, ",")
 }
 
 // formatTagNames extracts tag names from a Tag slice and joins them.
@@ -364,6 +375,7 @@ type memoryEventTOON struct {
 	VersionNumber string `toon:"version_number"`
 	OccurredAt    string `toon:"occurred_at"`
 	Change        string `toon:"change"`
+	Milestones    string `toon:"milestones"`
 }
 
 type memoryResponse struct {
@@ -410,6 +422,7 @@ func memoryEventsTOON(events []busquets.MemoryEvent) []memoryEventTOON {
 			VersionNumber: versionNumber,
 			OccurredAt:    event.OccurredAt.UTC().Format("2006-01-02T15:04:05Z"),
 			Change:        memoryEventChange(event),
+			Milestones:    formatMilestones(event.Milestones),
 		}
 	}
 	return out

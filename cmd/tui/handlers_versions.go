@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+
 	"github.com/Javier162380/busquets/cmd/tui/commands"
 	"github.com/Javier162380/busquets/cmd/tui/messages"
 
@@ -35,4 +37,15 @@ func (a *App) handleRestoreResult(msg messages.RestoreResultMsg) (tea.Model, tea
 		a.reloadPlans(),
 		commands.ClearStatusCmdWithDefaultDuration(),
 	)
+}
+
+func (a *App) handleSetVersionMilestones(msg messages.SetVersionMilestonesMsg) (tea.Model, tea.Cmd) {
+	return a, commands.SetVersionMilestonesCmd(a.ctx, a.service, msg.PlanID, msg.VersionNumber, msg.Milestones)
+}
+
+// handleVersionMilestonesSaved confirms the change and lets the versions screen update the row in place.
+func (a *App) handleVersionMilestonesSaved(msg messages.VersionMilestonesSavedMsg) (tea.Model, tea.Cmd) {
+	a.statusBar.SetSuccess(fmt.Sprintf("Milestones saved on version %d", msg.Version.VersionNumber))
+	model, cmd := a.delegateToCurrentScreen(msg)
+	return model, tea.Batch(cmd, commands.ClearStatusCmdWithDefaultDuration())
 }

@@ -4,6 +4,7 @@ package sqlite
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
@@ -199,7 +200,32 @@ func planVersionToDomain(pv PlanVersion) dto.PlanVersion {
 		Content:       pv.Content,
 		WordCount:     pv.WordCount,
 		CreatedAt:     pv.CreatedAt,
+		Milestones:    decodeMilestones(pv.Milestones),
 	}
+}
+
+// decodeMilestones reads the nullable JSON array column; NULL means none.
+func decodeMilestones(raw sql.NullString) []string {
+	if !raw.Valid {
+		return nil
+	}
+	var milestones []string
+	if err := json.Unmarshal([]byte(raw.String), &milestones); err != nil {
+		return nil
+	}
+	return milestones
+}
+
+// encodeMilestones stores an empty set as NULL, never '[]'.
+func encodeMilestones(milestones []string) (sql.NullString, error) {
+	if len(milestones) == 0 {
+		return sql.NullString{}, nil
+	}
+	encoded, err := json.Marshal(milestones)
+	if err != nil {
+		return sql.NullString{}, fmt.Errorf("failed to encode milestones: %w", err)
+	}
+	return sql.NullString{String: string(encoded), Valid: true}, nil
 }
 
 func connectorToDomain(c Connector) dto.Connector {
@@ -299,6 +325,10 @@ func (r *Repository) InsertPlan(
 
 		if version != nil {
 			versionParams, writeVersionFile := version(insertedID)
+			milestones, err := encodeMilestones(versionParams.Milestones)
+			if err != nil {
+				return err
+			}
 			if err := q.InsertPlanVersion(ctx, InsertPlanVersionParams{
 				PlanID:        versionParams.PlanID,
 				VersionNumber: versionParams.VersionNumber,
@@ -306,6 +336,7 @@ func (r *Repository) InsertPlan(
 				Content:       versionParams.Content,
 				WordCount:     versionParams.WordCount,
 				CreatedAt:     versionParams.CreatedAt,
+				Milestones:    milestones,
 			}); err != nil {
 				return fmt.Errorf("failed to save initial version to database: %w", err)
 			}
@@ -799,6 +830,10 @@ func (r *Repository) matchesTagFilter(planTags []dto.Tag, filterTags []string, m
 // Plan version operations
 
 func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPlanVersionParams, writeFile func() error) error {
+	milestones, err := encodeMilestones(params.Milestones)
+	if err != nil {
+		return err
+	}
 	return r.withTx(ctx, func(queries *Queries) error {
 		err := queries.InsertPlanVersion(ctx, InsertPlanVersionParams{
 			PlanID:        params.PlanID,
@@ -807,6 +842,7 @@ func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPla
 			Content:       params.Content,
 			WordCount:     params.WordCount,
 			CreatedAt:     params.CreatedAt,
+			Milestones:    milestones,
 		})
 		if err != nil {
 			return err
@@ -846,6 +882,25 @@ func (r *Repository) GetPlanVersionByNumber(ctx context.Context, planID, version
 		return dto.PlanVersion{}, err
 	}
 	return planVersionToDomain(pv), nil
+}
+
+func (r *Repository) SetPlanVersionMilestones(ctx context.Context, params dto.SetPlanVersionMilestonesParams) error {
+	milestones, err := encodeMilestones(params.Milestones)
+	if err != nil {
+		return err
+	}
+	rows, err := r.q.SetPlanVersionMilestones(ctx, SetPlanVersionMilestonesParams{
+		Milestones:    milestones,
+		PlanID:        params.PlanID,
+		VersionNumber: params.VersionNumber,
+	})
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return dto.ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repository) GetLatestVersionNumber(ctx context.Context, planID int64) (int64, error) {

@@ -188,6 +188,7 @@ func planVersionToDomain(pv PlanVersion) dto.PlanVersion {
 		Content:       pv.Content,
 		WordCount:     pv.WordCount,
 		CreatedAt:     timestamptzToTime(pv.CreatedAt),
+		Milestones:    pv.Milestones,
 	}
 }
 
@@ -295,6 +296,7 @@ func (r *Repository) InsertPlan(
 				Content:       versionParams.Content,
 				WordCount:     versionParams.WordCount,
 				CreatedAt:     timeToTimestamptz(versionParams.CreatedAt),
+				Milestones:    nullableMilestones(versionParams.Milestones),
 			}); err != nil {
 				return fmt.Errorf("failed to save initial version to database: %w", err)
 			}
@@ -795,6 +797,7 @@ func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPla
 			Content:       params.Content,
 			WordCount:     params.WordCount,
 			CreatedAt:     timeToTimestamptz(params.CreatedAt),
+			Milestones:    nullableMilestones(params.Milestones),
 		})
 		if err != nil {
 			return err
@@ -835,6 +838,29 @@ func (r *Repository) GetPlanVersionByNumber(ctx context.Context, planID, version
 		return dto.PlanVersion{}, err
 	}
 	return planVersionToDomain(pv), nil
+}
+
+// nullableMilestones writes an empty set as NULL; pgx stores a nil slice as NULL but an empty one as '{}'.
+func nullableMilestones(milestones []string) []string {
+	if len(milestones) == 0 {
+		return nil
+	}
+	return milestones
+}
+
+func (r *Repository) SetPlanVersionMilestones(ctx context.Context, params dto.SetPlanVersionMilestonesParams) error {
+	rows, err := r.q.SetPlanVersionMilestones(ctx, SetPlanVersionMilestonesParams{
+		Milestones:    nullableMilestones(params.Milestones),
+		PlanID:        params.PlanID,
+		VersionNumber: params.VersionNumber,
+	})
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return dto.ErrNotFound
+	}
+	return nil
 }
 
 func (r *Repository) GetLatestVersionNumber(ctx context.Context, planID int64) (int64, error) {

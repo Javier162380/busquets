@@ -81,6 +81,12 @@ func TestMemoryScreenTimelineRows(t *testing.T) {
 		require.Equal(t, "needs a rethink", memoryEventDetail(comment))
 	})
 
+	t.Run("titles carry the version's milestone badges", func(t *testing.T) {
+		stamped := versionEvent(1, 38, 12)
+		stamped.Milestones = []busquets.VersionMilestone{busquets.MilestoneHumanReview, busquets.MilestonePlanImplementationFinish}
+		require.Equal(t, "Version 1 ◆ Review, Impl■", memoryEventTitle(stamped))
+	})
+
 	t.Run("truncates a long comment to one row", func(t *testing.T) {
 		long := strings.Repeat("a", 100)
 		require.Len(t, firstLine(long), 60)
@@ -325,9 +331,9 @@ func TestMemoryScreenPanes(t *testing.T) {
 
 	t.Run("the legend leads with tab", func(t *testing.T) {
 		s := twoVersions(t)
-		require.True(t, strings.HasPrefix(s.ShortHelp(), "tab: go to memory | "))
+		require.True(t, strings.HasPrefix(s.ShortHelp(), "tab: [CONTENT] | "))
 		press(s, "tab")
-		require.True(t, strings.HasPrefix(s.ShortHelp(), "tab: go to timeline | "))
+		require.True(t, strings.HasPrefix(s.ShortHelp(), "tab: [TIMELINE] | "))
 		require.NotContains(t, s.ShortHelp(), "shift+tab")
 	})
 }

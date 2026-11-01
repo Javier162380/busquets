@@ -37,6 +37,8 @@ type VersionService interface {
 	DiffPlanVersions(ctx context.Context, fileName, syncSource string, fromVersion, toVersion int64) (VersionDiff, error)
 	RestorePlanVersion(ctx context.Context, planID, versionNumber int64) error
 	RestorePlanVersionByFileName(ctx context.Context, fileName, syncSource string, versionNumber int64) error
+	SetVersionMilestones(ctx context.Context, planID, versionNumber int64, milestones []VersionMilestone) (*PlanVersionDetail, error)
+	SetVersionMilestonesByFileName(ctx context.Context, fileName, syncSource string, versionNumber int64, milestones []VersionMilestone) (*PlanVersionDetail, error)
 }
 
 // SettingsService defines settings operations.

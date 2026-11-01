@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Javier162380/busquets/cmd/tui/commands"
 	"github.com/Javier162380/busquets/cmd/tui/components"
@@ -351,5 +352,30 @@ func TestHandleMemory(t *testing.T) {
 		app.Update(messages.MemoryGeneratedMsg{Err: errors.New("model is down")})
 
 		require.IsType(t, messages.GenerateMemoryMsg{}, press())
+	})
+}
+
+func TestHandleVersionMilestones(t *testing.T) {
+	t.Run("a set request runs the service and reports its error", func(t *testing.T) {
+		app := newTestApp(t)
+		_, cmd := app.Update(messages.SetVersionMilestonesMsg{PlanID: 999, VersionNumber: 0})
+		msg, ok := cmd().(messages.ErrorMsg)
+		require.True(t, ok)
+		require.Equal(t, "failed to set milestones on version 0: not found", msg.Error.Error())
+	})
+
+	t.Run("a saved version reaches the versions screen and the status bar", func(t *testing.T) {
+		app := newTestApp(t)
+		version := busquets.PlanVersionDetail{PlanVersion: busquets.PlanVersion{VersionNumber: 0, CreatedAt: time.Now()}}
+		app.pushVersionsScreenWithData(1, "plan.md", []busquets.PlanVersionDetail{version})
+
+		version.Milestones = []busquets.VersionMilestone{busquets.MilestonePlanAbandoned}
+		model, cmd := app.Update(messages.VersionMilestonesSavedMsg{Version: &version})
+		app = model.(*App)
+		require.NotNil(t, cmd)
+		require.Equal(t, "Milestones saved on version 0", app.statusBar.SuccessMessage())
+
+		screen := app.stack[len(app.stack)-1].(*screens.VersionsScreen)
+		require.Contains(t, screen.View(), "◆ Abandoned")
 	})
 }

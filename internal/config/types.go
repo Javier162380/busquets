@@ -3,8 +3,9 @@ package config
 
 // SyncDir represents a source directory to sync plans from.
 type SyncDir struct {
-	Path  string `toml:"path"`
-	Label string `toml:"label"`
+	Path         string `toml:"path"`
+	Label        string `toml:"label"`
+	LLMGenerated bool   `toml:"llm_generated"`
 }
 
 // DatabaseBackend represents the type of database backend to use.

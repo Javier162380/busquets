@@ -233,6 +233,20 @@ func RestoreVersionCmd(ctx context.Context, svc busquets.UnifiedService, planID 
 	}
 }
 
+// SetVersionMilestonesCmd replaces a version's milestones; errors go to the status bar.
+func SetVersionMilestonesCmd(ctx context.Context, svc busquets.UnifiedService, planID, versionNumber int64, milestones []busquets.VersionMilestone) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		version, err := svc.SetVersionMilestones(ctx, planID, versionNumber, milestones)
+		if err != nil {
+			return messages.ErrorMsg{Error: err}
+		}
+		return messages.VersionMilestonesSavedMsg{Version: version}
+	}
+}
+
 // LoadSettingsCmd loads settings by name, in one query.
 func LoadSettingsCmd(ctx context.Context, svc busquets.UnifiedService, settingNames []string) tea.Cmd {
 	return func() tea.Msg {

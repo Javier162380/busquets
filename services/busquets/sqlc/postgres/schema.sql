@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS plan_versions (
     content TEXT NOT NULL,
     word_count BIGINT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL,
+    milestones TEXT[],
     UNIQUE(plan_id, version_number)
 );
 

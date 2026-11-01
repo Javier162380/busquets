@@ -59,6 +59,8 @@ type Repository interface {
 	GetVersionCount(ctx context.Context, planID int64) (int64, error)
 	DeleteVersionsOlderThan(ctx context.Context, params DeleteVersionsParams) error
 	SearchVersionsByContent(ctx context.Context, params SearchVersionsParams) ([]PlanVersion, error)
+	// SetPlanVersionMilestones returns ErrNotFound when the version doesn't exist.
+	SetPlanVersionMilestones(ctx context.Context, params SetPlanVersionMilestonesParams) error
 
 	// Setting operations
 	GetSettingByName(ctx context.Context, name string) (Setting, error)

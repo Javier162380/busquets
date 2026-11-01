@@ -58,8 +58,9 @@ type MemoryEvent struct {
 	LinesAdded    int
 	LinesRemoved  int
 	WordCount     int
-	Body          string // comment text; empty on version events
-	Narrative     string // transport only; "" means not narrated
+	Milestones    []VersionMilestone // read from the version row; nil on comments
+	Body          string             // comment text; empty on version events
+	Narrative     string             // transport only; "" means not narrated
 }
 
 // PlanMemory is a plan's stored memory plus the timeline it describes. Events is
@@ -162,6 +163,7 @@ func buildTimeline(versions []dto.PlanVersion, comments []dto.Comment) []MemoryE
 			VersionNumber: &versionNumber,
 			OccurredAt:    version.CreatedAt,
 			WordCount:     int(version.WordCount),
+			Milestones:    storedMilestones(version.Milestones),
 		}
 
 		// The first version is a baseline, not a change, so it carries no diff.

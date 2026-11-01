@@ -84,7 +84,7 @@ MCP Handler (cmd/mcp) → TOON Formatter → MCP Tools
     ↓
 Tools: search_plans, get_plan, add_comment, get_plan_comments, delete_comment, get_all_tags,
 get_plan_tags, set_plan_tags, delete_tag, get_plan_version_history, get_plan_version,
-restore_plan_version, diff_plan_versions, sync_plans, rsync_plans, generate_tldr_prompt,
+restore_plan_version, diff_plan_versions, set_version_milestones, sync_plans, rsync_plans, generate_tldr_prompt,
 get_plan_memory, generate_memory_prompt, save_plan_memory, delete_plan_memory
 ```
 
@@ -187,9 +187,11 @@ viewer_dir = "/Users/yourname/.busquets"
 
 # One block per source directory; `label` defaults to the dir's base name and
 # is slugified to name the source's mirror dir under viewer_dir.
+# `llm_generated = true` stamps v0 of newly synced plans as LLMGenerated.
 [[paths.plans_dirs]]
-  path  = "/Users/yourname/.claude/plans"
-  label = "claudeRoot"
+  path          = "/Users/yourname/.claude/plans"
+  label         = "claudeRoot"
+  llm_generated = true
 
 [mcp]
 server_name = "busquets"
@@ -216,13 +218,13 @@ version = "1.0.0"
 5. **Tests are comprehensive** - ~2000 lines with subtests pattern, keep tests on the same module as far as possible, use a single set up function for encapsulate test logic on the same module. 
 6. **Time is injectable** - Use `nowProvider` for testability
 7. **WatchManager locking** - In `Stop()`, read `wm.running` directly under the write lock; never call `IsRunning()` from within a method that already holds `wm.mu` (deadlock)
-8. **Tags are DB-only** - Tags live exclusively in the database. `SyncPlans` uses `InsertPlan`/`UpdatePlan` (no tag params). Never add tag extraction to sync, and never write tags back to markdown files. `DeleteTag` only deletes the DB row — no file I/O.
+8. **Plan metadata is DB-only** - Tags, comments and version milestones live exclusively in the database. `SyncPlans` uses `InsertPlan`/`UpdatePlan` (no tag params): never extract metadata from markdown during sync, and never write it back to plan or version files. Deleting metadata (e.g. `DeleteTag`) is a row delete with no file I/O.
 9. **One TUI component, one responsibility** - a component under `cmd/tui/components/` serves exactly one domain concept. When a feature looks like "an existing component plus a mode flag", build a separate component: its own type, its own `types.Focus` value, its own key handler on the screen, and its own messages. Never widen a component to serve two concepts via a `SetXEntries` variant, a display-mode branch, or a sentinel value - the branching does not stay in the component, it spreads into the screen's key handling, focus cycling, and rendering, and messages belonging to one concept end up mutating the other's state. `TagPanel` (DB-backed, async, mutable) and `LabelPanel` (read-only projection of `PlanSummary.SyncLabel`) are the reference split; duplicated row rendering between them is the accepted cost.
 10. **Keep the help screen in sync with keybindings** - Whenever you add, remove, or change a TUI keybinding (in a screen's key handler under `cmd/tui/screens/*.go` or a modal's `Update` in `cmd/tui/components/*.go`), update BOTH the affected screen's `ShortHelp()` string AND the `helpContent` block in `cmd/tui/screens/help.go`, under the matching context section. `helpContent` is the full reference users open with `?`; a binding that isn't listed there is effectively undiscoverable.
 11. **Always use gomock-generated stubs for interfaces under test — never hand-written fakes.** Add `//go:generate mockgen -package <pkg>_test -destination ./test/<name>_stub.go . <Interface>` directly above the interface declaration, then run `go generate ./...` (see `internal/connectors/connector.go`, `internal/clipboard/clipboard.go`, `cmd/tui/content/displayable.go` for the pattern). A generated mock can't silently drift out of sync when the interface gains/loses methods the way a hand-written fake can, and `.EXPECT()` makes exactly which methods a given test exercises explicit instead of implicit.
 12. **Atomicity is a must** - Whenever you need to deal with operations over md files together with db changes, everything should be atomic either everything succeeds or fails, please use transactions whenever is needed.
 13. **Keep Schemas in sync**- Migration db schemas for directories internal/storage/migrations/* and services/busquets/sqlc/* needs to be always in sync. 
-14. **Prefer deterministic test assertions** - When the expected value is fully known, use `require.Equal`, not `Contains`/`HasPrefix`/`HasSuffix`. Those matchers can pass on a wrong, truncated, or partially-matching value, giving a false impression of coverage. Reserve them for genuinely variable or large content where an exact match isn't practical (e.g. a substring inside a full rendered TUI view).
+14. **Prefer deterministic test assertions** - When the expected value is fully known, use `require.Equal`, not `Contains`/`HasPrefix`/`HasSuffix`/`NonEmpty`. Those matchers can pass on a wrong, truncated, or partially-matching value, giving a false impression of coverage. Reserve them for genuinely variable or large content where an exact match isn't practical (e.g. a substring inside a full rendered TUI view).
 15. **Memory facts are computed, never stored or accepted from a caller** - A plan memory is two things with different trust levels: the timeline (when, which version, `+x/-y` lines, restore-vs-edit) is derived from `plan_versions`/`plan_comments` on every read, and only the prose is LLM-written. Never persist a derived event — a stored copy of rows that already exist goes stale the moment a comment is deleted, which is why `plan_memories` is one row per plan and carries no event table. `SavePlanMemory` recomputes the timeline and accepts only `{eventKind, refID, narrative}` from callers, rejecting any id that is not a real version or comment; never widen it to take timestamps or change counts. Incrementality comes from the `covers_up_to_*` watermarks alone, and they advance only over a contiguous prefix — a gap must stop the walk, or a skipped event is silently marked as narrated.
 16. **Prefer sorting at the DB layer over the service layer** - When a query's results must come back in a particular order, put an `ORDER BY` in the query (`sqlc/{sqlite,postgres}/queries.sql`, then `make generate`) rather than sorting the slice in the service.
 17. **Comments needs to be concise** - Please keep your comments, clean short and concise. Make code self-explanatory; avoid overly detailed comments. Keep it simple; keep comments to a maximum of 144 characters, like the old Twitter days.

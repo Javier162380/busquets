@@ -31,6 +31,13 @@ func (h *Handler) registerVersionTools() error {
 		Description: "Returns a unified (git-diff-style) diff of fromVersion's content against toVersion's, plus both versions' metadata.",
 	}, h.DiffPlanVersions)
 
+	mcp.AddTool(h.server, &mcp.Tool{
+		Name: "set_version_milestones",
+		Description: "Replaces the lifecycle milestones on one plan version (v0 included). Allowed: LLMGenerated, HumanReview, " +
+			"PlanImplementationStart, PlanImplementationFinish, PlanAbandoned. LLMGenerated+HumanReview and " +
+			"PlanImplementationFinish+PlanAbandoned cannot be combined. Pass the full set; an empty list clears it.",
+	}, h.SetVersionMilestones)
+
 	return nil
 }
 
@@ -138,4 +145,33 @@ func (h *Handler) DiffPlanVersions(ctx context.Context, req *mcp.CallToolRequest
 		ToVersion:     vd.To.VersionNumber,
 		ToCreatedAt:   vd.To.CreatedAt.UTC().Format("2006-01-02T15:04:05Z"),
 	}, nil
+}
+
+// SetVersionMilestones handles the set_version_milestones tool. Returns the version's metadata, not its content.
+func (h *Handler) SetVersionMilestones(ctx context.Context, req *mcp.CallToolRequest, args SetVersionMilestonesArgs) (*mcp.CallToolResult, any, error) {
+	if args.FileName == "" {
+		return nil, nil, fmt.Errorf("fileName is required")
+	}
+	if args.SyncSource == "" {
+		return nil, nil, fmt.Errorf("syncSource is required")
+	}
+	if args.VersionNumber < 0 {
+		return nil, nil, fmt.Errorf("versionNumber must be 0 or greater")
+	}
+
+	milestones, err := busquets.ParseVersionMilestones(args.Milestones)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	version, err := h.service.SetVersionMilestonesByFileName(ctx, args.FileName, args.SyncSource, args.VersionNumber, milestones)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to set milestones: %w", err)
+	}
+
+	toonOutput, err := FormatPlanVersionHistory([]busquets.PlanVersionDetail{*version})
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to format version: %w", err)
+	}
+	return buildMCPResult(toonOutput), nil, nil
 }
