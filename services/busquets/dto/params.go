@@ -56,6 +56,7 @@ type InsertPlanVersionParams struct {
 	Content       string
 	WordCount     int64
 	CreatedAt     time.Time
+	Milestones    []string // nil for none
 }
 
 // PaginationParams contains limit/offset for paginated queries.

@@ -5,6 +5,8 @@ package config
 type SyncDir struct {
 	Path  string `toml:"path"`
 	Label string `toml:"label"`
+	// LLMGenerated stamps v0 of plans first synced from this dir with the LLMGenerated milestone.
+	LLMGenerated bool `toml:"llm_generated"`
 }
 
 // DatabaseBackend represents the type of database backend to use.

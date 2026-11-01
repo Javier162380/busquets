@@ -3319,6 +3319,49 @@ func testMultiDirSyncPlans(t *testing.T, b backendSetup) {
 		require.Len(t, plans, 2)
 	})
 
+	t.Run("v0 is stamped LLMGenerated only for llm_generated dirs", func(t *testing.T) {
+		svc, dirs, cleanup := newMultiSourceTest(t, b)
+		defer cleanup()
+		svc.sourcePlansDirs[0].LLMGenerated = true
+
+		createTestPlanFile(t, dirs.sourceDir1, "llm.md", "# LLM\n\nWritten by an assistant.")
+		createTestPlanFile(t, dirs.sourceDir2, "human.md", "# Human\n\nWritten by hand.")
+		_, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		llm, err := svc.GetPlanVersion(ctx, "llm.md", dirs.sourceDir1, 0)
+		require.NoError(t, err)
+		require.Equal(t, []VersionMilestone{MilestoneLLMGenerated}, llm.Milestones)
+
+		human, err := svc.GetPlanVersion(ctx, "human.md", dirs.sourceDir2, 0)
+		require.NoError(t, err)
+		require.Nil(t, human.Milestones)
+	})
+
+	t.Run("re-syncing a changed plan leaves v0's stamp alone and adds no version", func(t *testing.T) {
+		svc, dirs, cleanup := newMultiSourceTest(t, b)
+		defer cleanup()
+		svc.sourcePlansDirs[0].LLMGenerated = true
+
+		createTestPlanFile(t, dirs.sourceDir1, "llm.md", "# LLM\n\nFirst draft.")
+		_, err := svc.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		time.Sleep(10 * time.Millisecond) // a later mtime marks the file as changed
+		createTestPlanFile(t, dirs.sourceDir1, "llm.md", "# LLM\n\nSecond draft.")
+		_, err = svc.SyncPlans(ctx)
+		require.NoError(t, err)
+
+		plan, err := svc.GetPlanDetailByFileName(ctx, "llm.md", dirs.sourceDir1)
+		require.NoError(t, err)
+		require.Equal(t, "# LLM\n\nSecond draft.", plan.Content, "the second sync must have picked up the edit")
+
+		history, err := svc.GetPlanVersionHistory(ctx, "llm.md", dirs.sourceDir1, 0, 10)
+		require.NoError(t, err)
+		require.Len(t, history, 1)
+		require.Equal(t, []VersionMilestone{MilestoneLLMGenerated}, history[0].Milestones)
+	})
+
 	t.Run("same filename in two dirs no collision", func(t *testing.T) {
 		svc, dirs, cleanup := newMultiSourceTest(t, b)
 		defer cleanup()
