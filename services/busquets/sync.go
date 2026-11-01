@@ -447,7 +447,6 @@ func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileNa
 			Content:       string(content),
 			WordCount:     int64(wordCount),
 			CreatedAt:     now,
-			Milestones:    syncedVersionMilestones(dir),
 		}
 		writeVersionFile := func() error {
 			if _, err := os.Stat(filepath.Dir(versionFilePath)); os.IsNotExist(err) {
@@ -516,12 +515,4 @@ func extractTitle(content string) string {
 		}
 	}
 	return "Untitled Plan"
-}
-
-// syncedVersionMilestones stamps v0 as LLMGenerated when the source dir is configured as LLM-written.
-func syncedVersionMilestones(dir config.SyncDir) []string {
-	if !dir.LLMGenerated {
-		return nil
-	}
-	return milestoneStrings([]VersionMilestone{MilestoneLLMGenerated})
 }

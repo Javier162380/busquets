@@ -370,9 +370,8 @@ backend = "sqlite"
 
 [paths]
 [[paths.plans_dirs]]
-  path          = "/Users/llorenj1/.claude/plans"
-  label         = "claudeRoot"
-  llm_generated = true
+  path  = "/Users/llorenj1/.claude/plans"
+  label = "claudeRoot"
 
 [[paths.plans_dirs]]
   path  = "/Users/llorenj1/fuga/trends-data-platform/docs/superpowers/plans"
@@ -387,7 +386,7 @@ backend = "sqlite"
 		require.NoError(t, err)
 		require.Equal(t, BackendSQLite, cfg.Database.Backend)
 		require.Equal(t, []SyncDir{
-			{Path: "/Users/llorenj1/.claude/plans", Label: "claudeRoot", LLMGenerated: true},
+			{Path: "/Users/llorenj1/.claude/plans", Label: "claudeRoot"},
 			{Path: "/Users/llorenj1/fuga/trends-data-platform/docs/superpowers/plans", Label: "trendsDataPlatformPlans"},
 			{Path: "/Users/llorenj1/fuga/trends-data-platform/docs/superpowers/specs", Label: "trendsDataPlatformSpecs"},
 		}, cfg.Paths.PlansDirs)

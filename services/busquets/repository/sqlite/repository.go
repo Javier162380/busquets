@@ -325,10 +325,6 @@ func (r *Repository) InsertPlan(
 
 		if version != nil {
 			versionParams, writeVersionFile := version(insertedID)
-			milestones, err := encodeMilestones(versionParams.Milestones)
-			if err != nil {
-				return err
-			}
 			if err := q.InsertPlanVersion(ctx, InsertPlanVersionParams{
 				PlanID:        versionParams.PlanID,
 				VersionNumber: versionParams.VersionNumber,
@@ -336,7 +332,6 @@ func (r *Repository) InsertPlan(
 				Content:       versionParams.Content,
 				WordCount:     versionParams.WordCount,
 				CreatedAt:     versionParams.CreatedAt,
-				Milestones:    milestones,
 			}); err != nil {
 				return fmt.Errorf("failed to save initial version to database: %w", err)
 			}
@@ -830,10 +825,6 @@ func (r *Repository) matchesTagFilter(planTags []dto.Tag, filterTags []string, m
 // Plan version operations
 
 func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPlanVersionParams, writeFile func() error) error {
-	milestones, err := encodeMilestones(params.Milestones)
-	if err != nil {
-		return err
-	}
 	return r.withTx(ctx, func(queries *Queries) error {
 		err := queries.InsertPlanVersion(ctx, InsertPlanVersionParams{
 			PlanID:        params.PlanID,
@@ -842,7 +833,6 @@ func (r *Repository) InsertPlanVersion(ctx context.Context, params dto.InsertPla
 			Content:       params.Content,
 			WordCount:     params.WordCount,
 			CreatedAt:     params.CreatedAt,
-			Milestones:    milestones,
 		})
 		if err != nil {
 			return err

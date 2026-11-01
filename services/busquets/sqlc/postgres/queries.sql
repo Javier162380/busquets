@@ -100,8 +100,8 @@ ON CONFLICT(variable_name) DO UPDATE SET
 DELETE FROM settings WHERE variable_name = $1;
 
 -- name: InsertPlanVersion :exec
-INSERT INTO plan_versions (plan_id, version_number, file_path, content, word_count, created_at, milestones)
-VALUES ($1, $2, $3, $4, $5, $6, $7);
+INSERT INTO plan_versions (plan_id, version_number, file_path, content, word_count, created_at)
+VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: GetPlanVersionHistory :many
 SELECT id, plan_id, version_number, file_path, content, word_count, created_at, milestones
