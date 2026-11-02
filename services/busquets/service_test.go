@@ -270,6 +270,16 @@ func TestMain(m *testing.M) {
 // ---- Tests ----
 
 func TestUtilityFunctions(t *testing.T) {
+	t.Run("fileChangedSince compares at the microsecond precision Postgres stores", func(t *testing.T) {
+		file := time.Unix(0, 1793644028736033932) // nanosecond mtime, as on APFS
+		stored := file.Truncate(time.Microsecond) // what TIMESTAMPTZ keeps: 1793644028736033000
+
+		require.Equal(t, false, fileChangedSince(file, stored), "the same instant, truncated by the DB")
+		require.Equal(t, true, fileChangedSince(stored.Add(time.Microsecond), stored))
+		require.Equal(t, false, fileChangedSince(stored.Add(-time.Microsecond), stored))
+		require.Equal(t, false, fileChangedSince(file, file), "SQLite keeps the exact value")
+	})
+
 	t.Run("CountWords returns 0 for empty string", func(t *testing.T) {
 		count := CountWords("")
 		require.Equal(t, 0, count)
@@ -987,7 +997,8 @@ func testSearchAndListing(t *testing.T, setup serviceSetupFn) {
 		defer cleanup()
 		ctx := context.Background()
 
-		createTestPlanFile(t, sourcePlansDir, "verbose-plan.md", sampleMarkdown)
+		// Over 200 words is 2 min at the default 200 wpm; both short samples are 1 min and would tie.
+		createTestPlanFile(t, sourcePlansDir, "verbose-plan.md", sampleMarkdown+strings.Repeat(" word", 250))
 		createTestPlanFile(t, sourcePlansDir, "terse-plan.md", sampleMarkdownUpdated)
 		_, err := service.SyncPlans(ctx)
 		require.NoError(t, err)
@@ -1001,6 +1012,33 @@ func testSearchAndListing(t *testing.T, setup serviceSetupFn) {
 		require.Len(t, plans, 2)
 		require.Equal(t, "verbose-plan.md", plans[0].FileName)
 		require.Equal(t, "terse-plan.md", plans[1].FileName)
+	})
+
+	t.Run("ListAllPlansWithReadingTime breaks reading_time ties by id", func(t *testing.T) {
+		service, sourcePlansDir, _, cleanup := setup(t)
+		defer cleanup()
+		ctx := context.Background()
+
+		createTestPlanFile(t, sourcePlansDir, "a-plan.md", sampleMarkdown) // both 1 min: a tie
+		createTestPlanFile(t, sourcePlansDir, "b-plan.md", sampleMarkdownUpdated)
+		_, err := service.SyncPlans(ctx)
+		require.NoError(t, err)
+		a, err := service.GetPlanByFileName(ctx, "a-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+		b, err := service.GetPlanByFileName(ctx, "b-plan.md", sourcePlansDir)
+		require.NoError(t, err)
+		byID := []string{"a-plan.md", "b-plan.md"} // sync's import order isn't fixed, so derive the expected order from ids
+		if b.ID < a.ID {
+			byID = []string{"b-plan.md", "a-plan.md"}
+		}
+
+		sortKey, sortDir := SortKeyReadingTime, SortDirDesc
+		require.NoError(t, service.SetSetting(ctx, SettingPlansSortKey, SettingValues{StringValue: &sortKey}))
+		require.NoError(t, service.SetSetting(ctx, SettingPlansSortDir, SettingValues{StringValue: &sortDir}))
+
+		plans, err := service.ListAllPlansWithReadingTime(ctx)
+		require.NoError(t, err)
+		require.Equal(t, byID, []string{plans[0].FileName, plans[1].FileName})
 	})
 
 	t.Run("SearchPlansWithReadingTime with empty query returns all plans", func(t *testing.T) {
@@ -5077,13 +5115,14 @@ func testMemoryOperations(t *testing.T, setup serviceSetupFn) {
 		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
 		require.NoError(t, err)
 
-		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+		saved, err := service.UpdatePlan(ctx, UpdatePlanRequest{
 			FileName:         name,
 			SyncSource:       sourceDir,
 			NewContent:       sampleMarkdown + "\nA new line.\n",
 			LastModifiedTime: plan.ModifiedAt,
 		})
 		require.NoError(t, err)
+		require.True(t, saved.Success, "the edit must create the version this test relies on")
 
 		_, err = service.AddComment(ctx, name, sourceDir, "worth revisiting")
 		require.NoError(t, err)
@@ -5290,13 +5329,14 @@ func testMemoryOperations(t *testing.T, setup serviceSetupFn) {
 		}, nil)
 		require.NoError(t, err)
 
-		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+		saved, err := service.UpdatePlan(ctx, UpdatePlanRequest{
 			FileName:         name,
 			SyncSource:       sourceDir,
 			NewContent:       sampleMarkdown + "\nAnother line.\n",
 			LastModifiedTime: plan.ModifiedAt,
 		})
 		require.NoError(t, err)
+		require.True(t, saved.Success, "the edit must create the version this test relies on")
 
 		staleness, err := service.MemoryStaleness(ctx, name, sourceDir)
 		require.NoError(t, err)
@@ -5542,11 +5582,12 @@ func testMemoryWrites(t *testing.T, setup serviceSetupFn) {
 		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
 		require.NoError(t, err)
 
-		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+		saved, err := service.UpdatePlan(ctx, UpdatePlanRequest{
 			FileName: name, SyncSource: sourceDir,
 			NewContent: sampleMarkdown + "\nEdited.\n", LastModifiedTime: plan.ModifiedAt,
 		})
 		require.NoError(t, err)
+		require.True(t, saved.Success, "the edit must create the version this test relies on")
 		require.NoError(t, service.RestorePlanVersionByFileName(ctx, name, sourceDir, 0))
 
 		events, err := service.BuildMemoryTimeline(ctx, name, sourceDir)
@@ -5615,11 +5656,12 @@ func testMemoryWrites(t *testing.T, setup serviceSetupFn) {
 		name := syncedPlan(t, service, sourceDir)
 		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
 		require.NoError(t, err)
-		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+		saved, err := service.UpdatePlan(ctx, UpdatePlanRequest{
 			FileName: name, SyncSource: sourceDir,
 			NewContent: sampleMarkdown + "\nEdited.\n", LastModifiedTime: plan.ModifiedAt,
 		})
 		require.NoError(t, err)
+		require.True(t, saved.Success, "the edit must create the version this test relies on")
 
 		events, err := service.BuildMemoryTimeline(ctx, name, sourceDir)
 		require.NoError(t, err)
@@ -5672,11 +5714,12 @@ func testMemoryWrites(t *testing.T, setup serviceSetupFn) {
 		name := syncedPlan(t, service, sourceDir)
 		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
 		require.NoError(t, err)
-		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+		saved, err := service.UpdatePlan(ctx, UpdatePlanRequest{
 			FileName: name, SyncSource: sourceDir,
 			NewContent: sampleMarkdown + "\nA distinctive new line.\n", LastModifiedTime: plan.ModifiedAt,
 		})
 		require.NoError(t, err)
+		require.True(t, saved.Success, "the edit must create the version this test relies on")
 
 		prompts, err := service.BuildMemoryPrompts(ctx, name, sourceDir, MemoryModeIncremental)
 		require.NoError(t, err)
@@ -5862,11 +5905,12 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 		name := syncedPlan(t, service, sourceDir)
 		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
 		require.NoError(t, err)
-		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+		saved, err := service.UpdatePlan(ctx, UpdatePlanRequest{
 			FileName: name, SyncSource: sourceDir,
 			NewContent: sampleMarkdown + "\nSecond.\n", LastModifiedTime: plan.ModifiedAt,
 		})
 		require.NoError(t, err)
+		require.True(t, saved.Success, "the edit must create the version this test relies on")
 
 		cap := float64(1)
 		require.NoError(t, service.SetSetting(ctx, SettingMemoryMaxEventsPerRun, SettingValues{NumberValue: &cap}))
@@ -5916,11 +5960,12 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 		name := syncedPlan(t, service, sourceDir)
 		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
 		require.NoError(t, err)
-		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+		saved, err := service.UpdatePlan(ctx, UpdatePlanRequest{
 			FileName: name, SyncSource: sourceDir,
 			NewContent: sampleMarkdown + "\nSecond.\n", LastModifiedTime: plan.ModifiedAt,
 		})
 		require.NoError(t, err)
+		require.True(t, saved.Success, "the edit must create the version this test relies on")
 
 		mock := setupMockGenerativeConnector(t, ctrl, service)
 		gomock.InOrder(
@@ -5980,11 +6025,12 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 		name := syncedPlan(t, service, sourceDir)
 		plan, err := service.GetPlanByFileName(ctx, name, sourceDir)
 		require.NoError(t, err)
-		_, err = service.UpdatePlan(ctx, UpdatePlanRequest{
+		saved, err := service.UpdatePlan(ctx, UpdatePlanRequest{
 			FileName: name, SyncSource: sourceDir,
 			NewContent: sampleMarkdown + "\nSecond.\n", LastModifiedTime: plan.ModifiedAt,
 		})
 		require.NoError(t, err)
+		require.True(t, saved.Success, "the edit must create the version this test relies on")
 
 		// Two events, then the header summary.
 		mock := setupMockGenerativeConnector(t, ctrl, service)
@@ -6016,11 +6062,12 @@ func testMemoryGeneration(t *testing.T, setup serviceSetupFn) {
 		name := syncedPlan(t, service, sourceDir)
 		plan, err := service.GetPlanByFileName(context.Background(), name, sourceDir)
 		require.NoError(t, err)
-		_, err = service.UpdatePlan(context.Background(), UpdatePlanRequest{
+		saved, err := service.UpdatePlan(context.Background(), UpdatePlanRequest{
 			FileName: name, SyncSource: sourceDir,
 			NewContent: sampleMarkdown + "\nSecond.\n", LastModifiedTime: plan.ModifiedAt,
 		})
 		require.NoError(t, err)
+		require.True(t, saved.Success, "the edit must create the version this test relies on")
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
