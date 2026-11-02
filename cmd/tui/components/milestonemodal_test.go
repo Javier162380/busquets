@@ -1,6 +1,7 @@
 package components
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Javier162380/busquets/services/busquets"
@@ -79,7 +80,8 @@ func TestMilestoneModal(t *testing.T) {
 		m.SetSize(70, 20)
 		m.Open("Add milestones to the new version? (optional)", nil, (&submitted{}).onSubmit)
 
-		require.Contains(t, m.View(), "Add milestones to the new version? (optional)") // inside a styled box
+		titleRow := strings.Split(m.View(), "\n")[2] // below the top border and padding row
+		require.Equal(t, "│  Add milestones to the new version? (optional)                     │", titleRow)
 	})
 
 	t.Run("the cursor clamps at both ends", func(t *testing.T) {
