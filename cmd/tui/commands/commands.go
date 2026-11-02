@@ -99,7 +99,7 @@ func LoadVersionsForNavigationCmd(ctx context.Context, svc busquets.UnifiedServi
 // SavePlanCmd saves a plan and syncs to source directory.
 func SavePlanCmd(ctx context.Context, svc busquets.UnifiedService, fileName, syncSource, content string, lastModified time.Time, milestones []busquets.VersionMilestone) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
 		req := busquets.UpdatePlanRequest{
