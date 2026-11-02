@@ -1228,6 +1228,9 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, err)
 		require.Equal(t, sampleMarkdownUpdated, version.Content)
 		require.Equal(t, []VersionMilestone{MilestoneHumanReview}, version.Milestones)
+		count, err := service.GetVersionCount(ctx, "stamped.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), count)
 	})
 
 	t.Run("UpdatePlan without milestones leaves the new version unstamped", func(t *testing.T) {
@@ -1248,7 +1251,10 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		require.NoError(t, err)
 		stored, err := service.DB().GetPlanVersionByNumber(ctx, row.ID, 1)
 		require.NoError(t, err)
-		require.Nil(t, stored.Milestones, "no milestones must be stored as NULL")
+		require.Nil(t, stored.Milestones)
+		count, err := service.GetVersionCount(ctx, "plain.md", sourcePlansDir)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), count)
 	})
 
 	t.Run("UpdatePlan rejects conflicting milestones before writing anything", func(t *testing.T) {
@@ -1295,7 +1301,7 @@ func testUpdateOperations(t *testing.T, setup serviceSetupFn) {
 		history, err := service.GetPlanVersionHistory(ctx, "unchanged.md", sourcePlansDir, 0, 10)
 		require.NoError(t, err)
 		require.Len(t, history, 1)
-		require.Nil(t, history[0].Milestones, "milestones must never land on an older version")
+		require.Nil(t, history[0].Milestones)
 	})
 
 	t.Run("VersionContentChanged compares against the latest version", func(t *testing.T) {
