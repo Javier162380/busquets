@@ -97,9 +97,9 @@ func LoadVersionsForNavigationCmd(ctx context.Context, svc busquets.UnifiedServi
 }
 
 // SavePlanCmd saves a plan and syncs to source directory.
-func SavePlanCmd(ctx context.Context, svc busquets.UnifiedService, fileName, syncSource, content string, lastModified time.Time) tea.Cmd {
+func SavePlanCmd(ctx context.Context, svc busquets.UnifiedService, fileName, syncSource, content string, lastModified time.Time, milestones []busquets.VersionMilestone) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
 		defer cancel()
 
 		req := busquets.UpdatePlanRequest{
@@ -108,6 +108,7 @@ func SavePlanCmd(ctx context.Context, svc busquets.UnifiedService, fileName, syn
 			NewContent:       content,
 			LastModifiedTime: lastModified,
 			Force:            true,
+			Milestones:       milestones,
 		}
 
 		result, err := svc.UpdatePlan(ctx, req)
@@ -115,6 +116,20 @@ func SavePlanCmd(ctx context.Context, svc busquets.UnifiedService, fileName, syn
 			return messages.SaveResultMsg{Error: err}
 		}
 		return messages.SaveResultMsg{Result: result, Plan: result.Plan}
+	}
+}
+
+// PrepareSaveCmd checks, without writing, whether saving content would create a new version.
+func PrepareSaveCmd(ctx context.Context, svc busquets.UnifiedService, planID int64, content string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		defer cancel()
+
+		changed, err := svc.VersionContentChanged(ctx, planID, content)
+		if err != nil {
+			return messages.ErrorMsg{Error: err}
+		}
+		return messages.SavePreparedMsg{Content: content, Changed: changed}
 	}
 }
 

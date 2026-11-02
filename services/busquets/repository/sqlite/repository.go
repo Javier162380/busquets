@@ -463,6 +463,11 @@ func (r *Repository) UpdatePlanContent(
 		}
 		nextVersionNum := coalesceToInt64(lastVersionNum) + 1
 
+		milestones, err := encodeMilestones(params.VersionMilestones)
+		if err != nil {
+			return err
+		}
+
 		versionFilePath, versionWordCount, err := writeVersionFile(plan.ID, nextVersionNum)
 		if err != nil {
 			return fmt.Errorf("failed to write version file: %w", err)
@@ -475,6 +480,7 @@ func (r *Repository) UpdatePlanContent(
 			Content:       params.VersionContent,
 			WordCount:     versionWordCount,
 			CreatedAt:     params.VersionCreatedAt,
+			Milestones:    milestones,
 		}); err != nil {
 			return fmt.Errorf("failed to save version to database: %w", err)
 		}

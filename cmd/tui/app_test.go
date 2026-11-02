@@ -131,6 +131,28 @@ func TestHandleSaveResult(t *testing.T) {
 		app = model.(*App)
 		require.Equal(t, "Unable to save result", app.statusBar.ErrorMessage())
 	})
+
+	t.Run("invalid milestones say why nothing was saved", func(t *testing.T) {
+		app := newTestApp(t)
+		_, err := busquets.ValidateVersionMilestones([]string{"LLMGenerated", "HumanReview"})
+		model, _ := app.Update(messages.SaveResultMsg{Error: err})
+		app = model.(*App)
+		require.Equal(t, "Unable to save: LLMGenerated and HumanReview cannot be on the same version", app.statusBar.ErrorMessage())
+	})
+}
+
+func TestHandlePrepareSave(t *testing.T) {
+	t.Run("asks the service and reports whether the content is new", func(t *testing.T) {
+		app := newTestApp(t)
+		_, cmd := app.Update(messages.PrepareSaveMsg{PlanID: 999, Content: "# New"})
+		require.Equal(t, messages.SavePreparedMsg{Content: "# New", Changed: true}, cmd(), "a plan with no versions always has new content")
+	})
+
+	t.Run("the result is delegated to the current screen", func(t *testing.T) {
+		app := newTestApp(t)
+		_, cmd := app.Update(messages.SavePreparedMsg{Content: "# New", Changed: false})
+		require.Nil(t, cmd, "the plans screen has no plan open, so it ignores the result")
+	})
 }
 
 func TestHandleRestoreResult(t *testing.T) {

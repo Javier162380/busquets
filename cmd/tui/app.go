@@ -179,8 +179,10 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.delegateToCurrentScreen(msg)
 	case messages.LoadPlanDetailMsg:
 		return a, commands.LoadPlanDetailCmd(a.ctx, a.service, msg.FileName, msg.SyncSource)
+	case messages.PrepareSaveMsg:
+		return a, commands.PrepareSaveCmd(a.ctx, a.service, msg.PlanID, msg.Content)
 	case messages.SavePlanMsg:
-		return a, commands.SavePlanCmd(a.ctx, a.service, msg.FileName, msg.SyncSource, msg.Content, msg.Modified)
+		return a, commands.SavePlanCmd(a.ctx, a.service, msg.FileName, msg.SyncSource, msg.Content, msg.Modified, msg.Milestones)
 	case messages.LoadVersionsMsg:
 		return a, commands.LoadVersionsCmd(a.ctx, a.service, msg.PlanName, msg.SyncSource)
 	case messages.SearchVersionsMsg:

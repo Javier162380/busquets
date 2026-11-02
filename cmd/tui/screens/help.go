@@ -46,6 +46,8 @@ PLAN CONTENT (right panel / fullscreen):
   /              Search within the plan content (fullscreen only)
   N / P          Jump to next / previous search match (fullscreen only)
   Ctrl+U         Clear the search highlight (fullscreen only)
+  Ctrl+S         Save as a new version if it differs from the last (fullscreen only);
+                 optionally add milestones first
   e              Edit the plan
   v              View version history
   i              Open the plan's memory
@@ -55,7 +57,8 @@ PLAN CONTENT (right panel / fullscreen):
 
 EDITING (starts in Navigation mode):
   Enter          Toggle Navigation / Insert mode
-  Ctrl+S         Save and sync changes
+  Ctrl+S         Save and sync changes; if it creates a new version, optionally
+                 add milestones first (Space toggles, Enter saves, Esc goes back)
   Ctrl+L         Jump to a specific line
   Esc            Cancel without saving
 
@@ -153,7 +156,7 @@ VERSION VIEW (fullscreen):
   Ctrl+U         Clear the search highlight
   Esc            Back to the versions list
 
-VERSION MILESTONES (t):
+VERSION MILESTONES (t, or Ctrl+S when a save creates a version):
   ↑/↓            Select a milestone
   Space / x      Toggle it
   Enter          Save the checked set

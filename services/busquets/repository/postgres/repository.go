@@ -435,6 +435,7 @@ func (r *Repository) UpdatePlanContent(
 			Content:       params.VersionContent,
 			WordCount:     versionWordCount,
 			CreatedAt:     timeToTimestamptz(params.VersionCreatedAt),
+			Milestones:    nullableMilestones(params.VersionMilestones),
 		})
 		if err != nil {
 			return fmt.Errorf("failed to save version to database: %w", err)

@@ -6,12 +6,16 @@ import (
 
 	"github.com/Javier162380/busquets/cmd/tui/commands"
 	"github.com/Javier162380/busquets/cmd/tui/messages"
+	"github.com/Javier162380/busquets/services/busquets"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (a *App) handleSaveResult(msg messages.SaveResultMsg) (tea.Model, tea.Cmd) {
+	invalid, isInvalid := busquets.ValidationMessage(msg.Error)
 	switch {
+	case isInvalid:
+		a.statusBar.SetError("Unable to save: " + invalid)
 	case msg.Error != nil:
 		a.statusBar.SetError("Unable to save result")
 	case msg.Result.Success && msg.Result.NewVersionCreated:

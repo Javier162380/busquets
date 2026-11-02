@@ -33,9 +33,10 @@ type UpdatePlanParams struct {
 // the full new content, independent of Plan.Content (which is truncated to
 // the title when the caller isn't indexing full content).
 type UpdatePlanContentParams struct {
-	Plan             UpdatePlanParams
-	VersionContent   string
-	VersionCreatedAt time.Time
+	Plan              UpdatePlanParams
+	VersionContent    string
+	VersionCreatedAt  time.Time
+	VersionMilestones []string // nil for none
 }
 
 // RenamePlanFileParams holds the writes for an atomic file rename: the plan row's

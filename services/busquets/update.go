@@ -16,8 +16,9 @@ type UpdatePlanRequest struct {
 	FileName         string
 	SyncSource       string // source directory path (stored in DB)
 	NewContent       string
-	LastModifiedTime time.Time // Client's version timestamp
-	Force            bool      // If true, skip conflict check
+	LastModifiedTime time.Time          // Client's version timestamp
+	Force            bool               // If true, skip conflict check
+	Milestones       []VersionMilestone // stamped on the version this save creates; ignored if none is created
 }
 
 // UpdatePlanResult contains the result of an update operation.
@@ -39,6 +40,15 @@ type ConflictInfo struct {
 // UpdatePlan updates a plan file and syncs it back to the source directory.
 // It checks for conflicts by comparing timestamps.
 func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*UpdatePlanResult, error) {
+	var versionMilestones []string // nil: no milestones
+	if len(req.Milestones) > 0 {
+		validated, err := ValidateVersionMilestones(milestoneStrings(req.Milestones))
+		if err != nil {
+			return nil, err
+		}
+		versionMilestones = milestoneStrings(validated)
+	}
+
 	plan, err := s.db.GetPlanByFileName(ctx, req.FileName, req.SyncSource)
 	if err != nil {
 		return nil, fmt.Errorf("plan not found: %w", err)
@@ -88,8 +98,9 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 			IndexedAt:  now,
 			WordCount:  int64(wordCount),
 		},
-		VersionContent:   req.NewContent,
-		VersionCreatedAt: now,
+		VersionContent:    req.NewContent,
+		VersionCreatedAt:  now,
+		VersionMilestones: versionMilestones,
 	}, func() (time.Time, int64, error) {
 		if err := os.WriteFile(sourcePath, []byte(req.NewContent), 0o600); err != nil {
 			return time.Time{}, 0, fmt.Errorf("failed to write to source directory: %w", err)

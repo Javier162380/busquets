@@ -118,7 +118,7 @@ func TestSavePlanCmd(t *testing.T) {
 		plan, err := svc.GetPlanByFileName(ctx, "save.md", sourcePlansDir)
 		require.NoError(t, err)
 
-		msg := SavePlanCmd(ctx, svc, "save.md", sourcePlansDir, "# Save Plan\nUpdated", plan.ModifiedAt)()
+		msg := SavePlanCmd(ctx, svc, "save.md", sourcePlansDir, "# Save Plan\nUpdated", plan.ModifiedAt, nil)()
 		result, ok := msg.(messages.SaveResultMsg)
 		require.True(t, ok)
 		require.NoError(t, result.Error)
@@ -129,7 +129,7 @@ func TestSavePlanCmd(t *testing.T) {
 	t.Run("error omits Plan", func(t *testing.T) {
 		svc, sourcePlansDir, cleanup := setupTestService(t)
 		defer cleanup()
-		msg := SavePlanCmd(ctx, svc, "missing.md", sourcePlansDir, "content", time.Now())()
+		msg := SavePlanCmd(ctx, svc, "missing.md", sourcePlansDir, "content", time.Now(), nil)()
 		result, ok := msg.(messages.SaveResultMsg)
 		require.True(t, ok)
 		require.Error(t, result.Error)
