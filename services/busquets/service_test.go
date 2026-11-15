@@ -32,13 +32,35 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// newTestRepository creates a new SQLite repository with migrations for testing.
-func newTestRepository(ctx context.Context, dbPath string) (*sqlite.Repository, error) {
-	db, err := storage.NewSQLiteClientWithMigrations(ctx, dbPath, nil)
+// sqliteTemplatePath is a database migrated once in TestMain; tests copy it, so goose's globals never run concurrently.
+var sqliteTemplatePath string
+
+// newTestRepository creates a SQLite repository from a copy of the migrated template.
+func newTestRepository(_ context.Context, dbPath string) (*sqlite.Repository, error) {
+	if err := copyFile(sqliteTemplatePath, dbPath); err != nil {
+		return nil, err
+	}
+	db, err := storage.NewSQLiteClient(dbPath)
 	if err != nil {
 		return nil, err
 	}
 	return sqlite.NewRepository(db.DB()), nil
+}
+
+func createSQLiteTemplate(ctx context.Context) (string, func(), error) {
+	dir, err := os.MkdirTemp(os.TempDir(), "busquets-template-*")
+	if err != nil {
+		return "", nil, err
+	}
+	path := filepath.Join(dir, "template.db")
+	db, err := storage.NewSQLiteClientWithMigrations(ctx, path, nil)
+	if err != nil {
+		return "", nil, err
+	}
+	if err := db.Close(); err != nil { // closing checkpoints the WAL into the file we copy
+		return "", nil, err
+	}
+	return path, func() { _ = os.RemoveAll(dir) }, nil
 }
 
 type mockNowProvider struct {
@@ -108,24 +130,40 @@ func newServiceFromRepo(t *testing.T, tempDir string, repo dto.Repository, syncD
 	return svc, viewerDir
 }
 
-// newPostgresRepo creates an isolated Postgres database and returns the repository
-// plus a cleanup function that drops the database and closes the pool.
-func newPostgresRepo(t *testing.T) (dto.Repository, func()) {
+const pgTemplateDB = "busquets_template"
+
+// pgAdmin creates the per-test databases; one pool for the whole run.
+var pgAdmin *pgxpool.Pool
+
+// createPostgresTemplate migrates a template database once; tests clone it instead of replaying migrations.
+func createPostgresTemplate(ctx context.Context) error {
+	admin, err := pgxpool.New(ctx, pgDBConnStr(pgBaseConnStr, "postgres"))
+	if err != nil {
+		return err
+	}
+	pgAdmin = admin
+	if _, err := admin.Exec(ctx, "CREATE DATABASE "+pgTemplateDB); err != nil {
+		return err
+	}
+	template, err := storage.NewPostgresClientWithMigrations(ctx, storage.PostgresConfig{ConnectionString: pgDBConnStr(pgBaseConnStr, pgTemplateDB)}, nil)
+	if err != nil {
+		return err
+	}
+	template.Close() // a template must have no open connections to be cloned
+	return nil
+}
+
+// newPostgresRepo creates an isolated Postgres database cloned from the migrated template.
+// It isn't dropped: every database goes with the container at the end of the run.
+func newPostgresRepo(t *testing.T) dto.Repository {
 	t.Helper()
 	ctx := context.Background()
 
 	dbName := fmt.Sprintf("testdb_%d", time.Now().UnixNano())
-	adminConnStr := pgDBConnStr(pgBaseConnStr, "postgres")
-
-	adminPool, err := pgxpool.New(ctx, adminConnStr)
-	require.NoError(t, err)
-	_, err = adminPool.Exec(ctx, "CREATE DATABASE "+dbName)
-	adminPool.Close()
+	_, err := pgAdmin.Exec(ctx, "CREATE DATABASE "+dbName+" TEMPLATE "+pgTemplateDB)
 	require.NoError(t, err)
 
 	testConnStr := pgDBConnStr(pgBaseConnStr, dbName)
-	err = storage.RunPostgresMigrations(ctx, storage.PostgresConfig{ConnectionString: testConnStr}, nil)
-	require.NoError(t, err)
 
 	pool, err := storage.NewPostgresClient(ctx, storage.PostgresConfig{
 		ConnectionString: testConnStr,
@@ -133,16 +171,9 @@ func newPostgresRepo(t *testing.T) (dto.Repository, func()) {
 		MaxIdleConns:     2,
 	})
 	require.NoError(t, err)
+	t.Cleanup(pool.Close) // per test: each pool holds MinConns, so leaving 218 open would exceed max_connections
 
-	cleanup := func() {
-		pool.Close()
-		dropPool, dropErr := pgxpool.New(ctx, adminConnStr)
-		if dropErr == nil {
-			_, _ = dropPool.Exec(ctx, "DROP DATABASE "+dbName+" WITH (FORCE)")
-			dropPool.Close()
-		}
-	}
-	return postgresrepo.NewRepository(pool.Pool()), cleanup
+	return postgresrepo.NewRepository(pool.Pool())
 }
 
 func setupTestServiceBackendSQLite(t *testing.T) (*Service, string, string, func()) {
@@ -172,7 +203,7 @@ func createTestPlanFile(t *testing.T, dir, filename, content string) {
 func setupTestServiceBackendPostgres(t *testing.T) (*Service, string, string, func()) {
 	t.Helper()
 
-	repo, dbCleanup := newPostgresRepo(t)
+	repo := newPostgresRepo(t)
 
 	tempDir, err := os.MkdirTemp(os.TempDir(), "busquets-pg-test-*")
 	require.NoError(t, err)
@@ -181,7 +212,7 @@ func setupTestServiceBackendPostgres(t *testing.T) (*Service, string, string, fu
 	require.NoError(t, os.MkdirAll(sourcePlansDir, 0o755))
 
 	svc, viewerDir := newServiceFromRepo(t, tempDir, repo, []config.SyncDir{{Path: sourcePlansDir, Label: "test"}})
-	cleanup := func() { dbCleanup(); os.RemoveAll(tempDir) }
+	cleanup := func() { os.RemoveAll(tempDir) }
 	return svc, sourcePlansDir, viewerDir, cleanup
 }
 
@@ -201,8 +232,8 @@ type serviceSetupFn func(t *testing.T) (*Service, string, string, func())
 
 // repoFn creates a repository backed by the given backend.
 // tempDir is available for backends (e.g. SQLite) that store state on disk
-// alongside the test's other files. cleanup is nil when the caller owns teardown.
-type repoFn func(t *testing.T, tempDir string) (dto.Repository, func())
+// alongside the test's other files. Backends release their own resources via t.Cleanup.
+type repoFn func(t *testing.T, tempDir string) dto.Repository
 
 type backendSetup struct {
 	name    string
@@ -217,14 +248,19 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	templatePath, removeTemplate, err := createSQLiteTemplate(context.Background())
+	if err != nil {
+		log.Fatalf("failed to create sqlite template: %v", err)
+	}
+	sqliteTemplatePath = templatePath
+
 	registeredBackends = append(registeredBackends, backendSetup{
 		name:    "sqlite",
 		setupFn: setupTestServiceBackendSQLite,
-		repoFn: func(t *testing.T, tempDir string) (dto.Repository, func()) {
-			ctx := context.Background()
-			db, err := newTestRepository(ctx, filepath.Join(tempDir, "test.db"))
+		repoFn: func(t *testing.T, tempDir string) dto.Repository {
+			db, err := newTestRepository(context.Background(), filepath.Join(tempDir, "test.db"))
 			require.NoError(t, err)
-			return db, nil // tempDir cleanup is the caller's responsibility
+			return db // tempDir cleanup is the caller's responsibility
 		},
 	})
 
@@ -249,12 +285,15 @@ func TestMain(m *testing.M) {
 			log.Fatalf("failed to get postgres connection string: %v", err)
 		}
 		pgBaseConnStr = connStr
+		if err := createPostgresTemplate(ctx); err != nil {
+			log.Fatalf("failed to create postgres template: %v", err)
+		}
 		pgContainerCancel = func() { _ = pgContainer.Terminate(context.Background()) }
 
 		registeredBackends = append(registeredBackends, backendSetup{
 			name:    "postgres",
 			setupFn: setupTestServiceBackendPostgres,
-			repoFn: func(t *testing.T, _ string) (dto.Repository, func()) {
+			repoFn: func(t *testing.T, _ string) dto.Repository {
 				return newPostgresRepo(t) // tempDir not needed; Postgres manages its own storage
 			},
 		})
@@ -262,8 +301,10 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 	if pgContainerCancel != nil {
+		pgAdmin.Close()
 		pgContainerCancel()
 	}
+	removeTemplate()
 	os.Exit(code)
 }
 
@@ -863,10 +904,7 @@ func testDumpPlans(t *testing.T, b backendSetup) {
 		sourceDir := filepath.Join(tempDir, "source")
 		require.NoError(t, os.MkdirAll(sourceDir, 0o755))
 
-		repo, repoCleanup := b.repoFn(t, tempDir)
-		if repoCleanup != nil {
-			defer repoCleanup()
-		}
+		repo := b.repoFn(t, tempDir)
 		svc, _ := newServiceFromRepo(t, tempDir, repo, []config.SyncDir{{Path: sourceDir, Label: "test"}})
 
 		createTestPlanFile(t, sourceDir, "orphan.md", sampleMarkdown)
@@ -3419,19 +3457,14 @@ func newMultiSourceTest(t *testing.T, b backendSetup) (*Service, multiSourceSetu
 	require.NoError(t, os.MkdirAll(sourceDir1, 0o755))
 	require.NoError(t, os.MkdirAll(sourceDir2, 0o755))
 
-	repo, repoCleanup := b.repoFn(t, tempDir)
+	repo := b.repoFn(t, tempDir)
 
 	svc, viewerDir := newServiceFromRepo(t, tempDir, repo, []config.SyncDir{
 		{Path: sourceDir1, Label: "dir-a"},
 		{Path: sourceDir2, Label: "dir-b"},
 	})
 
-	cleanup := func() {
-		if repoCleanup != nil {
-			repoCleanup()
-		}
-		os.RemoveAll(tempDir)
-	}
+	cleanup := func() { os.RemoveAll(tempDir) }
 	return svc, multiSourceSetup{sourceDir1: sourceDir1, sourceDir2: sourceDir2, viewerDir: viewerDir}, cleanup
 }
 
@@ -3740,10 +3773,7 @@ func testMultiDirRSyncPlans(t *testing.T, b backendSetup) {
 		sourceDir := filepath.Join(tempDir, "source")
 		require.NoError(t, os.MkdirAll(sourceDir, 0o755))
 
-		repo, repoCleanup := b.repoFn(t, tempDir)
-		if repoCleanup != nil {
-			defer repoCleanup()
-		}
+		repo := b.repoFn(t, tempDir)
 		svc, _ := newServiceFromRepo(t, tempDir, repo, []config.SyncDir{{Path: sourceDir, Label: "test"}})
 
 		createTestPlanFile(t, sourceDir, "orphan.md", sampleMarkdown)

@@ -149,7 +149,7 @@ internal/ (internal modules used on the service layer, this modules do not hold 
 - Uses gomock for connectors, mock time provider
 - Tests are parametrized via `registeredBackends` and run against both SQLite and Postgres
 - SQLite always runs; Postgres runs only when `INTEGRATION=1` (spins up a real container via testcontainers-go)
-- Each Postgres test case gets its own isolated database created/dropped inside the shared container
+- Migrations run once per backend in `TestMain` into a template (a SQLite file, a Postgres `busquets_template` DB); each test case gets its own copy/clone, never re-migrating — goose's globals aren't safe for concurrent use
 - Run integration tests: `INTEGRATION=1 go test -v ./services/busquets/...`
 
 ## Common Tasks

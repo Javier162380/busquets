@@ -55,6 +55,15 @@ func NewPostgresClient(ctx context.Context, cfg PostgresConfig) (*PostgresPool, 
 	return &PostgresPool{pool: pool}, nil
 }
 
+// NewPostgresClientWithMigrations runs migrations, then creates the connection pool.
+// A nil logger discards all goose migration output.
+func NewPostgresClientWithMigrations(ctx context.Context, cfg PostgresConfig, logger *slog.Logger) (*PostgresPool, error) {
+	if err := RunPostgresMigrations(ctx, cfg, logger); err != nil {
+		return nil, fmt.Errorf("failed to run migrations: %w", err)
+	}
+	return NewPostgresClient(ctx, cfg)
+}
+
 // Pool returns the underlying pgxpool.Pool for use with SQLC.
 func (p *PostgresPool) Pool() *pgxpool.Pool {
 	return p.pool

@@ -129,19 +129,11 @@ func initRepository(ctx context.Context, cfg *config.Config, logger *slog.Logger
 		return repo, cleanup, nil
 
 	case config.BackendPostgres:
-		// Run migrations first
-		if err := storage.RunPostgresMigrations(ctx, storage.PostgresConfig{
-			ConnectionString: cfg.Database.Postgres.ConnectionString,
-		}, logger); err != nil {
-			return nil, nil, fmt.Errorf("failed to run postgres migrations: %w", err)
-		}
-
-		// Create pool for queries
-		pool, err := storage.NewPostgresClient(ctx, storage.PostgresConfig{
+		pool, err := storage.NewPostgresClientWithMigrations(ctx, storage.PostgresConfig{
 			ConnectionString: cfg.Database.Postgres.ConnectionString,
 			MaxOpenConns:     cfg.Database.Postgres.MaxOpenConns,
 			MaxIdleConns:     cfg.Database.Postgres.MaxIdleConns,
-		})
+		}, logger)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to initialize Postgres: %w", err)
 		}
@@ -286,11 +278,13 @@ func runMigrate(cfg *config.Config, logger *slog.Logger) error {
 		fmt.Printf("✓ SQLite migrations completed: %s\n", cfg.Database.SQLite.Path)
 
 	case config.BackendPostgres:
-		if err := storage.RunPostgresMigrations(ctx, storage.PostgresConfig{
+		pool, err := storage.NewPostgresClientWithMigrations(ctx, storage.PostgresConfig{
 			ConnectionString: cfg.Database.Postgres.ConnectionString,
-		}, logger); err != nil {
+		}, logger)
+		if err != nil {
 			return fmt.Errorf("failed to run Postgres migrations: %w", err)
 		}
+		defer pool.Close()
 		fmt.Println("✓ PostgreSQL migrations completed")
 
 	default:
