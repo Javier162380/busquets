@@ -369,7 +369,7 @@ func (s *Service) syncSinglePlan(ctx context.Context, dir config.SyncDir, fileNa
 	planExists := err == nil
 
 	if planExists {
-		if !sourceInfo.ModTime().After(existingPlan.ModifiedAt) {
+		if !fileChangedSince(sourceInfo.ModTime(), existingPlan.ModifiedAt) {
 			return false, nil
 		}
 	} else if !dto.IsNotFound(err) {
@@ -524,4 +524,10 @@ func syncedVersionMilestones(dir config.SyncDir) []string {
 		return nil
 	}
 	return milestoneStrings([]VersionMilestone{MilestoneLLMGenerated})
+}
+
+// fileChangedSince reports whether a file's mtime is later than a stored timestamp, at microsecond precision:
+// the finest Postgres TIMESTAMPTZ keeps, so an untouched file never looks newer than its truncated row.
+func fileChangedSince(fileModTime, stored time.Time) bool {
+	return fileModTime.Truncate(time.Microsecond).After(stored)
 }

@@ -648,15 +648,7 @@ func (r *Repository) ListAllPlans(ctx context.Context, sortCol, sortDir string, 
 			"(SELECT plan_id, COUNT(*) AS comment_count FROM plan_comments GROUP BY plan_id) cc",
 			"cc.plan_id = p.id",
 		)
-	if sortCol == "reading_time" {
-		if sortDir == "asc" {
-			sb.OrderByAsc("reading_time")
-		} else {
-			sb.OrderByDesc("reading_time")
-		}
-	} else {
-		applyOrder(sb, "p."+sortCol, sortDir)
-	}
+	orderPlans(sb, sortCol, sortDir)
 	q, args := sb.Build()
 	return r.queryPlanSummaries(ctx, q, args...)
 }
@@ -1187,15 +1179,7 @@ func (r *Repository) ListUntaggedPlans(ctx context.Context, sortCol, sortDir str
 			"cc.plan_id = p.id",
 		).
 		Where("p.id NOT IN (SELECT DISTINCT plan_id FROM plan_tags)")
-	if sortCol == "reading_time" {
-		if sortDir == "asc" {
-			sb.OrderByAsc("reading_time")
-		} else {
-			sb.OrderByDesc("reading_time")
-		}
-	} else {
-		applyOrder(sb, "p."+sortCol, sortDir)
-	}
+	orderPlans(sb, sortCol, sortDir)
 	q, args := sb.Build()
 	return r.queryPlanSummaries(ctx, q, args...)
 }
@@ -1343,6 +1327,16 @@ func (r *Repository) RemoveTagFromPlanAndGet(ctx context.Context, planID, tagID 
 		return nil
 	})
 	return result, err
+}
+
+// orderPlans sorts by the chosen column, then by id so tied rows come back in a stable order on every backend.
+func orderPlans(sb *sqlbuilder.SelectBuilder, sortCol, sortDir string) {
+	col := "p." + sortCol
+	if sortCol == "reading_time" {
+		col = "reading_time" // computed alias, not a plans column
+	}
+	applyOrder(sb, col, sortDir)
+	sb.OrderByAsc("p.id")
 }
 
 func applyOrder(sb *sqlbuilder.SelectBuilder, col, dir string) {

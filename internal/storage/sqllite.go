@@ -17,9 +17,8 @@ type DB struct {
 	db *sql.DB
 }
 
-// NewSQLiteClientWithMigrations creates a new DB instance and runs migrations.
-// A nil logger discards all goose migration output.
-func NewSQLiteClientWithMigrations(_ context.Context, dataSourceName string, logger *slog.Logger) (*DB, error) {
+// NewSQLiteClient opens a database that is already migrated.
+func NewSQLiteClient(dataSourceName string) (*DB, error) {
 	db, err := sql.Open("sqlite3", fmt.Sprintf("file:%s?cache=shared&mode=rwc&_busy_timeout=5000&_journal_mode=WAL", dataSourceName))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
@@ -28,11 +27,22 @@ func NewSQLiteClientWithMigrations(_ context.Context, dataSourceName string, log
 	// Limit to single connection to avoid SQLite locking issues
 	db.SetMaxOpenConns(1)
 
-	if err := RunMigrations(db, config.BackendSQLite, logger); err != nil {
+	return &DB{db: db}, nil
+}
+
+// NewSQLiteClientWithMigrations creates a new DB instance and runs migrations.
+// A nil logger discards all goose migration output.
+func NewSQLiteClientWithMigrations(_ context.Context, dataSourceName string, logger *slog.Logger) (*DB, error) {
+	client, err := NewSQLiteClient(dataSourceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := RunMigrations(client.db, config.BackendSQLite, logger); err != nil {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	return &DB{db: db}, nil
+	return client, nil
 }
 
 // Close closes the database connection.

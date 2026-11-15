@@ -62,7 +62,7 @@ func (s *Service) UpdatePlan(ctx context.Context, req UpdatePlanRequest) (*Updat
 		return nil, fmt.Errorf("failed to stat source file: %w", err)
 	}
 
-	if !req.Force && sourceInfo.ModTime().After(req.LastModifiedTime) {
+	if !req.Force && fileChangedSince(sourceInfo.ModTime(), req.LastModifiedTime) {
 		return &UpdatePlanResult{
 			Success:     false,
 			HasConflict: true,
@@ -185,7 +185,7 @@ func (s *Service) SavePlanLocal(ctx context.Context, req UpdatePlanRequest) (*Up
 		return nil, fmt.Errorf("failed to stat viewer file: %w", err)
 	}
 
-	if !req.Force && err == nil && viewerInfo.ModTime().After(req.LastModifiedTime) {
+	if !req.Force && err == nil && fileChangedSince(viewerInfo.ModTime(), req.LastModifiedTime) {
 		return &UpdatePlanResult{
 			Success:     false,
 			HasConflict: true,
